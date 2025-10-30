@@ -900,8 +900,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                           field.onChange(value);
                           // Auto-fill rent amount when unit is selected
                           const selectedUnit = units.find(u => u.id === value);
-                          if (selectedUnit) {
-                            setValue("monthly_rent", String(selectedUnit.rent_amount ?? ""));
+                          if (selectedUnit && selectedUnit.rent_amount) {
+                            setValue("monthly_rent", Number(selectedUnit.rent_amount));
                           }
                         }}
                         value={(field.value as any) ?? ""}

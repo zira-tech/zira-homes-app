@@ -543,12 +543,14 @@ const handler = async (req: Request): Promise<Response> => {
           // Enhanced SMS message template
           const smsMessage = `Welcome to Zira Homes!\n\nYour login details:\nEmail: ${tenantData.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}\n\nPlease change your password after first login.\n\nSupport: +254 757 878 023`;
 
-          const { data: smsData, error: smsError } = await supabaseAdmin.functions.invoke('send-sms', {
+          const { data: smsData, error: smsError } = await supabaseAdmin.functions.invoke('send-sms-with-logging', {
             body: {
-              provider_name: smsConfig.provider_name || 'InHouse SMS',
               phone_number: tenantData.phone,
               message: smsMessage,
+              message_type: 'credentials',
+              user_id: userId,
               landlord_id: user?.id || null,
+              provider_name: smsConfig.provider_name || 'InHouse SMS',
               provider_config: {
                 base_url: smsConfig.base_url,
                 username: smsConfig.username,

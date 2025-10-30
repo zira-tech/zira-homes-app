@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Crown, Zap, ArrowRight } from "lucide-react";
+import { Calendar, Crown, Zap, ArrowRight, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { format, differenceInDays } from "date-fns";
@@ -86,22 +86,22 @@ export function TrialBanner() {
       {statusBannerComponent}
       
       {trialInfo.isTrialActive && (
-        <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+        <Card className="mb-6 border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="p-2 bg-primary/10 rounded-full">
-                  <Crown className="h-6 w-6 text-primary" />
+                <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-full">
+                  <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-primary">Free Trial Active</h3>
-                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                    <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">🎉 Enjoying Full Enterprise Access</h3>
+                    <Badge variant="secondary" className="bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100">
                       {trialInfo.daysRemaining} days left
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    You're on a free trial with limited features. Upgrade to unlock the full platform.
+                  <p className="text-sm text-purple-800 dark:text-purple-200 mb-3">
+                    You're experiencing all premium features with no limits. Keep this access after your trial ends!
                   </p>
                   
                   <div className="flex items-center gap-4 mb-3">
@@ -119,24 +119,31 @@ export function TrialBanner() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <div className="text-xs text-muted-foreground">Trial includes:</div>
-                    {Object.entries(trialInfo.limitations).map(([key, value]) => (
-                      <Badge key={key} variant="outline" className="text-xs">
-                        {key.replace('max_', '').replace('_', ' ')}: {value}
-                      </Badge>
-                    ))}
+                    <div className="text-xs text-purple-700 dark:text-purple-300 font-semibold">Premium features you're enjoying:</div>
+                    <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100">
+                      Unlimited Units
+                    </Badge>
+                    <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100">
+                      Advanced Reports
+                    </Badge>
+                    <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100">
+                      Team Management
+                    </Badge>
+                    <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100">
+                      API Access
+                    </Badge>
                   </div>
                 </div>
               </div>
               
               <div className="flex flex-col gap-2">
-                <Button onClick={handleUpgrade} className="bg-primary hover:bg-primary/90">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Upgrade Now
+                <Button onClick={handleUpgrade} className="bg-purple-600 hover:bg-purple-700 text-white">
+                  <Crown className="h-4 w-4 mr-2" />
+                  Keep Premium Access
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
-                <div className="text-xs text-center text-muted-foreground">
-                  Starting at $29/month
+                <div className="text-xs text-center text-purple-700 dark:text-purple-300">
+                  Continue with all features
                 </div>
               </div>
             </div>

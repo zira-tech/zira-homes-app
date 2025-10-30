@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,9 +60,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       try {
         // Use the new encrypted table - only check if config exists
+        // Note: We can't read the encrypted credentials back, only check if they exist
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active')
+          .select('id, callback_url, environment, is_active, consumer_key_encrypted')
           .eq('landlord_id', user.id)
           .maybeSingle();
 

@@ -5,6 +5,9 @@ import { RoleBasedRoute } from "@/components/RoleBasedRoute";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PlanAccessProvider } from "@/context/PlanAccessContext";
 import { LandlordOnlyRoute } from "@/components/LandlordOnlyRoute";
+import { AdminOnlyRoute } from "@/components/AdminOnlyRoute";
+import { SubUserBlockedRoute } from "@/components/SubUserBlockedRoute";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import NotFound from "@/pages/NotFound";
 
 // Import existing pages
@@ -20,6 +23,7 @@ const TenantPayments = React.lazy(() => import("@/pages/tenant/TenantPayments"))
 const TenantProfile = React.lazy(() => import("@/pages/tenant/TenantProfile"));
 const TenantSupport = React.lazy(() => import("@/pages/tenant/TenantSupport"));
 const FeatureDemo = React.lazy(() => import("@/pages/FeatureDemo"));
+const TestSMS = React.lazy(() => import("@/pages/TestSMS"));
 
 // Existing landlord pages
 import Properties from "@/pages/Properties";
@@ -72,6 +76,7 @@ import TrialManagement from "@/pages/admin/TrialManagement";
 import AdminUserManagement from "@/pages/admin/UserManagement";
 import SelfHostedMonitoring from "@/pages/admin/SelfHostedMonitoring";
 import BillingPlanManager from "@/pages/admin/BillingPlanManager";
+import { MpesaTest } from "@/pages/MpesaTest";
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -84,6 +89,11 @@ export const AppRoutes = () => {
     <Routes>
       {/* Public routes */}
       <Route path="/auth" element={<Auth />} />
+      <Route path="/test-sms" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <TestSMS />
+        </React.Suspense>
+      } />
       
       {/* Tenant routes with lazy loading */}
       <Route
@@ -119,24 +129,70 @@ export const AppRoutes = () => {
                 <Route path="/" element={<Index />} />
                 {/* Redirect from /agent/dashboard to main dashboard */}
                 <Route path="/agent/dashboard" element={<Navigate to="/" replace />} />
-                <Route path="/properties" element={<Properties />} />
-                <Route path="/units" element={<Units />} />
-                <Route path="/tenants" element={<Tenants />} />
-                <Route path="/invoices" element={<Invoices />} />
-                <Route path="/payments" element={<Payments />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/expenses" element={<Expenses />} />
-                <Route path="/maintenance" element={<MaintenanceRequestsLandlord />} />
+                <Route path="/properties" element={
+                  <PermissionGuard permission="manage_properties">
+                    <Properties />
+                  </PermissionGuard>
+                } />
+                <Route path="/units" element={
+                  <PermissionGuard permission="manage_properties">
+                    <Units />
+                  </PermissionGuard>
+                } />
+                <Route path="/tenants" element={
+                  <PermissionGuard permission="manage_tenants">
+                    <Tenants />
+                  </PermissionGuard>
+                } />
+                <Route path="/invoices" element={
+                  <PermissionGuard permission="manage_payments">
+                    <Invoices />
+                  </PermissionGuard>
+                } />
+                <Route path="/payments" element={
+                  <PermissionGuard permission="manage_payments">
+                    <Payments />
+                  </PermissionGuard>
+                } />
+                <Route path="/reports" element={
+                  <PermissionGuard permission="view_reports">
+                    <Reports />
+                  </PermissionGuard>
+                } />
+                <Route path="/expenses" element={
+                  <PermissionGuard permission="manage_expenses">
+                    <Expenses />
+                  </PermissionGuard>
+                } />
+                <Route path="/maintenance" element={
+                  <PermissionGuard permission="manage_maintenance">
+                    <MaintenanceRequestsLandlord />
+                  </PermissionGuard>
+                } />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/support" element={<Support />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/leases" element={<Leases />} />
-                <Route path="/sub-users" element={
-                  <LandlordOnlyRoute>
-                    <SubUsers />
-                  </LandlordOnlyRoute>
+                <Route path="/notifications" element={
+                  <PermissionGuard permission="view_reports">
+                    <Notifications />
+                  </PermissionGuard>
                 } />
-                <Route path="/upgrade" element={<Upgrade />} />
+                <Route path="/leases" element={
+                  <PermissionGuard permission="manage_leases">
+                    <Leases />
+                  </PermissionGuard>
+                } />
+                <Route path="/sub-users" element={
+                  <SubUserBlockedRoute>
+                    <LandlordOnlyRoute>
+                      <SubUsers />
+                    </LandlordOnlyRoute>
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/upgrade" element={
+                  <SubUserBlockedRoute>
+                    <Upgrade />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/upgrade-success" element={<UpgradeSuccess />} />
                 <Route path="/knowledge-base" element={<KnowledgeBase />} />
                 <Route path="/feature-demo" element={
@@ -146,25 +202,52 @@ export const AppRoutes = () => {
                 } />
                 
                 {/* Payment Settings Route (primary) */}
-                <Route path="/payment-settings" element={<PaymentSettings />} />
+                <Route path="/payment-settings" element={
+                  <SubUserBlockedRoute>
+                    <PaymentSettings />
+                  </SubUserBlockedRoute>
+                } />
                 
                 {/* Legacy Payment Settings Routes (redirects) */}
                 <Route path="/billing/payment-settings" element={<Navigate to="/payment-settings" replace />} />
                 <Route path="/landlord/payment-settings" element={<Navigate to="/payment-settings" replace />} />
+                
+                {/* Legacy Sub-Users Route (redirect) */}
+                <Route path="/landlord/sub-users" element={<Navigate to="/sub-users" replace />} />
                 
                 {/* Legacy Template Routes (redirects) */}
                 <Route path="/email-templates" element={<Navigate to="/billing/email-templates" replace />} />
                 <Route path="/message-templates" element={<Navigate to="/billing/message-templates" replace />} />
                 
                 {/* Unified Billing Route */}
-                <Route path="/billing" element={<Billing />} />
-                <Route path="/billing/email-templates" element={<EmailTemplates />} />
-                <Route path="/billing/message-templates" element={<MessageTemplates />} />
+                <Route path="/billing" element={
+                  <SubUserBlockedRoute>
+                    <Billing />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/billing/email-templates" element={
+                  <PermissionGuard permission="send_messages">
+                    <EmailTemplates />
+                  </PermissionGuard>
+                } />
+                <Route path="/billing/message-templates" element={
+                  <PermissionGuard permission="send_messages">
+                    <MessageTemplates />
+                  </PermissionGuard>
+                } />
                 
                 {/* Legacy routes for backward compatibility */}
                 <Route path="/billing/details" element={<Navigate to="/billing" replace />} />
-                <Route path="/billing/panel" element={<BillingPanel />} />
-                <Route path="/billing/settings" element={<BillingSettings />} />
+                <Route path="/billing/panel" element={
+                  <SubUserBlockedRoute>
+                    <BillingPanel />
+                  </SubUserBlockedRoute>
+                } />
+                <Route path="/billing/settings" element={
+                  <SubUserBlockedRoute>
+                    <BillingSettings />
+                  </SubUserBlockedRoute>
+                } />
                 <Route path="/billing/landlord-billing" element={<LandlordBillingPage />} />
                 
                 {/* Settings routes */}
@@ -185,7 +268,8 @@ export const AppRoutes = () => {
         element={
           <RequireAuth>
             <RoleBasedRoute>
-              <Routes>
+              <AdminOnlyRoute>
+                <Routes>
                 <Route path="/" element={<AdminDashboard />} />
                 <Route path="/invoices" element={<AdminInvoicesManagement />} />
                 <Route path="/audit-logs" element={<AuditLogs />} />
@@ -205,8 +289,10 @@ export const AppRoutes = () => {
                 <Route path="/users" element={<AdminUserManagement />} />
                 <Route path="/self-hosted" element={<SelfHostedMonitoring />} />
                 <Route path="/billing-plans" element={<BillingPlanManager />} />
+                <Route path="/mpesa-test" element={<MpesaTest />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </AdminOnlyRoute>
             </RoleBasedRoute>
           </RequireAuth>
         }

@@ -65,6 +65,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
           accountReference: invoice.invoice_number,
           transactionDesc: `Service charge payment - ${invoice.invoice_number}`,
           invoiceId: invoice.id,
+          paymentType: 'service-charge'
         },
       });
 
@@ -86,7 +87,7 @@ export const ServiceChargeMpesaDialog: React.FC<ServiceChargeMpesaDialogProps> =
 
         toast({
           title: "Payment Request Sent",
-          description: "Please check your phone and enter your M-Pesa PIN",
+          description: "Please check your phone and enter your M-Pesa PIN to complete the payment",
         });
       } else {
         throw new Error(data.error || 'STK push failed');

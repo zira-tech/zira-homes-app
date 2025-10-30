@@ -80,9 +80,8 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
         status: 'pending',
         submitted_date: new Date().toISOString(),
         tenant_id: lease.tenant_id,
-        lease_id: lease.id,
-        property_id: lease.property_id || lease.unit?.property_id || null,
-        unit_id: lease.unit_id || null
+        property_id: lease.property_id ?? lease.unit?.property_id ?? null,
+        unit_id: lease.unit_id ?? null
       };
 
       const { error } = await supabase.from('maintenance_requests').insert(insertPayload);
@@ -120,7 +119,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
 
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium">Lease</label>
+            <label className="text-sm font-medium">Lease <span className="text-destructive ml-1">*</span></label>
             <Select value={selectedLeaseId || ''} onValueChange={(v) => setSelectedLeaseId(v || null)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select lease" />
@@ -136,7 +135,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
           </div>
 
           <div>
-            <label className="text-sm font-medium">Title</label>
+            <label className="text-sm font-medium">Title <span className="text-destructive ml-1">*</span></label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Leaking faucet in kitchen" />
           </div>
 

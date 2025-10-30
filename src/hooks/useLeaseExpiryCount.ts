@@ -63,7 +63,7 @@ export function useLeaseExpiryCount() {
             setExpiringCount(0);
           }
         } else {
-          const kpis = rpcData?.kpis || null;
+          const kpis = (rpcData as any)?.kpis || null;
           const count = kpis?.expiring_leases ?? 0;
           setExpiringCount(Number(count) || 0);
         }

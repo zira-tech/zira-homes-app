@@ -191,29 +191,51 @@ export function Upgrade() {
         return;
       }
 
-      // For regular plans, create Stripe checkout session
-      console.log('💳 Creating Stripe checkout session...');
-      
-      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-        'create-billing-checkout',
+      // For regular plans, initiate M-Pesa STK push
+      console.log('💳 Initiating M-Pesa payment...');
+
+      // Fetch user profile to get phone number
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.phone) {
+        throw new Error('Phone number not found. Please update your profile with a valid phone number.');
+      }
+
+      const { data: mpesaData, error: mpesaError } = await supabase.functions.invoke(
+        'mpesa-stk-push',
         {
-          body: { planId: selectedPlan }
+          body: {
+            phone: profile.phone,
+            amount: selectedPlanData.price,
+            accountReference: `PLAN-${selectedPlan}`,
+            transactionDesc: `Subscription upgrade to ${selectedPlanData.name}`,
+            paymentType: 'subscription'
+          }
         }
       );
 
-      if (checkoutError) throw checkoutError;
+      if (mpesaError) throw mpesaError;
 
-      if (checkoutData?.url) {
+      if (mpesaData?.success) {
         setConfirmModalOpen(false);
-        // Open Stripe checkout in a new tab
-        window.open(checkoutData.url, '_blank');
+        toast.info('💳 M-Pesa payment prompt sent to your phone. Please enter your PIN to complete payment.');
+
+        // Wait for payment confirmation
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 3000);
       } else {
-        throw new Error('No checkout URL returned');
+        throw new Error(mpesaData?.message || 'Failed to initiate M-Pesa payment');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Upgrade error:', error);
-      toast.error("Upgrade failed. Please try again.");
+      const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
+      toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

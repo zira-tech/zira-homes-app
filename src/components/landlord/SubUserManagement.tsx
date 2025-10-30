@@ -8,13 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, UserPlus, Settings, UserX, Shield, Users } from "lucide-react";
 import { TablePaginator } from "@/components/ui/table-paginator";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useSubUsers } from "@/hooks/useSubUsers";
 import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { useTrialManagement } from "@/hooks/useTrialManagement";
 
 interface CreateSubUserFormData {
   email: string;
@@ -22,14 +24,33 @@ interface CreateSubUserFormData {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
+  confirm_password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
 }
+
+// Helper to normalize permissions - ensures all 8 permission keys exist
+const normalizePermissions = (permissions: Record<string, boolean>): CreateSubUserFormData['permissions'] => {
+  return {
+    manage_properties: permissions.manage_properties === true,
+    manage_tenants: permissions.manage_tenants === true,
+    manage_leases: permissions.manage_leases === true,
+    manage_maintenance: permissions.manage_maintenance === true,
+    manage_payments: permissions.manage_payments === true,
+    view_reports: permissions.view_reports === true,
+    manage_expenses: permissions.manage_expenses === true,
+    send_messages: permissions.send_messages === true,
+  };
+};
 
 const SubUserManagement = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -37,23 +58,33 @@ const SubUserManagement = () => {
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<CreateSubUserFormData>({
+  const { trialStatus } = useTrialManagement();
+  const { register, handleSubmit, reset, watch, setValue, getValues, control, formState: { errors } } = useForm<CreateSubUserFormData>({
     defaultValues: {
       permissions: {
-        manage_properties: false,
-        manage_tenants: false,
-        manage_leases: false,
-        manage_maintenance: false,
+        manage_properties: true,
+        manage_tenants: true,
+        manage_leases: true,
+        manage_maintenance: true,
+        manage_payments: true,
         view_reports: true,
+        manage_expenses: true,
+        send_messages: true,
       }
     }
   });
 
   const permissions = watch('permissions');
+  const passwordValue = useWatch({ control, name: "password" });
 
   const onCreateSubUser = async (data: CreateSubUserFormData) => {
     try {
-      await createSubUser(data);
+      // Normalize permissions before sending
+      const normalizedData = {
+        ...data,
+        permissions: normalizePermissions(data.permissions as any)
+      };
+      await createSubUser(normalizedData);
       setCreateDialogOpen(false);
       reset();
     } catch (error) {
@@ -74,7 +105,9 @@ const SubUserManagement = () => {
     if (!selectedSubUser) return;
     
     try {
-      await updateSubUserPermissions(selectedSubUser.id, newPermissions);
+      // Normalize permissions before updating
+      const normalizedPermissions = normalizePermissions(newPermissions);
+      await updateSubUserPermissions(selectedSubUser.id, normalizedPermissions);
       setPermissionsDialogOpen(false);
       setSelectedSubUser(null);
     } catch (error) {
@@ -121,85 +154,169 @@ const SubUserManagement = () => {
           <DialogHeader>
             <DialogTitle className="text-primary">Create New Sub-User</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onCreateSubUser)} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="first_name" className="text-primary">First Name *</Label>
-                <Input
-                  id="first_name"
-                  className="border-border bg-card"
-                  {...register("first_name", { required: "First name is required" })}
-                  placeholder="John"
-                />
-                {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
-                <Input
-                  id="last_name"
-                  className="border-border bg-card"
-                  {...register("last_name", { required: "Last name is required" })}
-                  placeholder="Doe"
-                />
-                {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-primary">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                className="border-border bg-card"
-                {...register("email", { required: "Email is required" })}
-                placeholder="john.doe@example.com"
-              />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-              <p className="text-xs text-muted-foreground">
-                If this email is already registered, we'll link them to your organization instead of creating a new account.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-primary">Phone</Label>
-                <Input
-                  id="phone"
-                  className="border-border bg-card"
-                  {...register("phone")}
-                  placeholder="+254 700 000 000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-primary">Title</Label>
-                <Input
-                  id="title"
-                  className="border-border bg-card"
-                  {...register("title")}
-                  placeholder="Manager, Agent, Partner"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <Label className="text-primary font-semibold">Permissions</Label>
+          
+          <form onSubmit={handleSubmit(onCreateSubUser)} className="flex flex-col gap-4">
+            <ScrollArea className="h-[60vh] pr-4">
+              <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {Object.entries(permissions).map(([key, value]) => (
-                  <div key={key} className="flex items-center space-x-2">
-                    <Switch
-                      id={key}
-                      checked={value}
-                      onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
-                    />
-                    <Label htmlFor={key} className="text-sm capitalize">
-                      {key.replace('_', ' ')}
-                    </Label>
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  <Label htmlFor="first_name" className="text-primary">First Name *</Label>
+                  <Input
+                    id="first_name"
+                    className="border-border bg-card"
+                    {...register("first_name", { required: "First name is required" })}
+                    placeholder="John"
+                  />
+                  {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last_name" className="text-primary">Last Name *</Label>
+                  <Input
+                    id="last_name"
+                    className="border-border bg-card"
+                    {...register("last_name", { required: "Last name is required" })}
+                    placeholder="Doe"
+                  />
+                  {errors.last_name && <p className="text-xs text-destructive">{errors.last_name.message}</p>}
+                </div>
               </div>
-            </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-primary">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  className="border-border bg-card"
+                  {...register("email", { required: "Email is required" })}
+                  placeholder="john.doe@example.com"
+                />
+                {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  If this email exists, we'll reset their password and link them to your organization. You'll receive new credentials to share with them.
+                </p>
+              </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-primary">Phone</Label>
+                  <Input
+                    id="phone"
+                    className="border-border bg-card"
+                    {...register("phone")}
+                    placeholder="+254 700 000 000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-primary">Title</Label>
+                  <Input
+                    id="title"
+                    className="border-border bg-card"
+                    {...register("title")}
+                    placeholder="Manager, Agent, Partner"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-primary">Password (Optional)</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  className="border-border bg-card"
+                  {...register("password", {
+                    minLength: { value: 8, message: "Password must be at least 8 characters" }
+                  })}
+                  placeholder="Leave empty to auto-generate"
+                />
+                {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to auto-generate a secure password. Min 8 characters if provided.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm_password" className="text-primary">Confirm Password</Label>
+                <Input
+                  id="confirm_password"
+                  type="password"
+                  className="border-border bg-card"
+                  {...register("confirm_password", {
+                    validate: (value) => {
+                      const password = getValues("password");
+                      if (!password || password.length === 0) return true;
+                      return value === password || "Passwords do not match";
+                    }
+                  })}
+                  placeholder="Re-enter password to confirm"
+                />
+                {errors.confirm_password && <p className="text-xs text-destructive">{errors.confirm_password.message}</p>}
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <Label className="text-primary font-semibold">Permissions</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        Object.keys(permissions).forEach(key => {
+                          handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], true);
+                        });
+                      }}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        Object.keys(permissions).forEach(key => {
+                          handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], false);
+                        });
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {Object.entries({
+                    manage_properties: { label: "Manage Properties", description: "Create, edit, and delete properties" },
+                    manage_tenants: { label: "Manage Tenants", description: "Add, edit, and view tenant information" },
+                    manage_leases: { label: "Manage Leases", description: "Create and modify lease agreements" },
+                    manage_maintenance: { label: "Manage Maintenance", description: "View and respond to maintenance requests" },
+                    manage_payments: { label: "Manage Payments", description: "Record and track rent payments" },
+                    view_reports: { label: "View Reports", description: "Access analytics and financial reports" },
+                    manage_expenses: { label: "Manage Expenses", description: "Add and track property expenses" },
+                    send_messages: { label: "Send Messages", description: "Send emails and SMS to tenants" },
+                  }).map(([key, { label, description }]) => (
+                    <div key={key} className="flex items-start space-x-3 p-3 rounded-lg border border-border bg-card/50">
+                      <Switch
+                        id={key}
+                        checked={permissions[key as keyof typeof permissions]}
+                        onCheckedChange={(checked) => handlePermissionChange(key as keyof CreateSubUserFormData['permissions'], checked)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor={key} className="text-sm font-medium cursor-pointer">
+                          {label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </div>
+            </ScrollArea>
+
+            {/* Action Buttons - Outside ScrollArea but inside form */}
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
               <Button 
                 type="button" 
                 variant="outline" 
@@ -292,7 +409,7 @@ const SubUserManagement = () => {
                   </TableRow>
                 ) : subUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
+                    <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
                       No sub-users found. Create your first sub-user to delegate access.
                     </TableCell>
                   </TableRow>
@@ -302,12 +419,16 @@ const SubUserManagement = () => {
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            {subUser.profiles?.first_name} {subUser.profiles?.last_name}
+                            {subUser.profiles?.first_name && subUser.profiles?.last_name
+                              ? `${subUser.profiles.first_name} ${subUser.profiles.last_name}`
+                              : <span className="text-muted-foreground italic">Pending...</span>}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>{subUser.profiles?.email}</TableCell>
-                      <TableCell>-</TableCell>
+                      <TableCell>
+                        {subUser.profiles?.email || <span className="text-muted-foreground italic">Setting up...</span>}
+                      </TableCell>
+                      <TableCell>{subUser.title || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
                           <Badge variant="outline" className="text-xs">
@@ -379,26 +500,82 @@ const SubUserManagement = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {Object.entries(selectedSubUser.permissions).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <Label className="text-sm capitalize">
-                    {key.replace('_', ' ')}
-                  </Label>
-                  <Switch
-                    checked={value as boolean}
-                    onCheckedChange={(checked) => {
-                      const updatedPermissions = {
-                        ...selectedSubUser.permissions,
-                        [key]: checked
-                      };
-                      setSelectedSubUser({
-                        ...selectedSubUser,
-                        permissions: updatedPermissions
-                      });
-                    }}
-                  />
-                </div>
-              ))}
+              <div className="flex justify-end gap-2 pb-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const updatedPermissions = Object.keys(selectedSubUser.permissions).reduce((acc, key) => ({
+                      ...acc,
+                      [key]: true
+                    }), {});
+                    setSelectedSubUser({
+                      ...selectedSubUser,
+                      permissions: updatedPermissions
+                    });
+                  }}
+                >
+                  Select All
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const updatedPermissions = Object.keys(selectedSubUser.permissions).reduce((acc, key) => ({
+                      ...acc,
+                      [key]: false
+                    }), {});
+                    setSelectedSubUser({
+                      ...selectedSubUser,
+                      permissions: updatedPermissions
+                    });
+                  }}
+                >
+                  Clear All
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {Object.entries({
+                  manage_properties: { label: "Manage Properties", description: "Create, edit, and delete properties" },
+                  manage_tenants: { label: "Manage Tenants", description: "Add, edit, and view tenant information" },
+                  manage_leases: { label: "Manage Leases", description: "Create and modify lease agreements" },
+                  manage_maintenance: { label: "Manage Maintenance", description: "View and respond to maintenance requests" },
+                  manage_payments: { label: "Manage Payments", description: "Record and track rent payments" },
+                  view_reports: { label: "View Reports", description: "Access analytics and financial reports" },
+                  manage_expenses: { label: "Manage Expenses", description: "Add and track property expenses" },
+                  send_messages: { label: "Send Messages", description: "Send emails and SMS to tenants" },
+                }).map(([key, { label, description }]) => {
+                  const hasPermission = selectedSubUser.permissions[key as keyof typeof selectedSubUser.permissions];
+                  return (
+                    <div key={key} className="flex items-start space-x-3 p-3 rounded-lg border border-border bg-card/50">
+                      <Switch
+                        checked={hasPermission as boolean}
+                        onCheckedChange={(checked) => {
+                          const updatedPermissions = {
+                            ...selectedSubUser.permissions,
+                            [key]: checked
+                          };
+                          setSelectedSubUser({
+                            ...selectedSubUser,
+                            permissions: updatedPermissions
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <Label className="text-sm font-medium cursor-pointer">
+                          {label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button 

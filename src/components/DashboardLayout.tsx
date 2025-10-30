@@ -24,7 +24,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {children}
             </div>
           </main>
-          <RpcDebugPanel />
+          {process.env.NODE_ENV !== 'production' && <RpcDebugPanel />}
         </SidebarInset>
       </div>
     </SidebarProvider>

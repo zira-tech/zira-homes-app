@@ -197,15 +197,16 @@ export const useRoleManagement = () => {
   }, []);
 
   const validateRoleHierarchy = useCallback((userRole: AppRole, targetRole: AppRole): boolean => {
-    const hierarchy: Record<AppRole, number> = {
+    const hierarchy: Record<string, number> = {
       'Admin': 5,
       'Landlord': 4,
       'Manager': 3,
       'Agent': 2,
-      'Tenant': 1
+      'Tenant': 1,
+      'SubUser': 0  // SubUser has lowest priority, cannot override other roles
     };
 
-    return hierarchy[userRole] >= hierarchy[targetRole];
+    return (hierarchy[userRole] || 0) >= (hierarchy[targetRole] || 0);
   }, []);
 
   return {

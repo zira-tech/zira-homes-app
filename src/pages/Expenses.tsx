@@ -14,6 +14,9 @@ import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface Property {
   id: string;
@@ -65,10 +68,7 @@ const Expenses = () => {
   }
 
   // Surface fetch errors prominently so we can see RLS/permission failures
-
-  if ((errorsExists => false) && false) {
-    /* placeholder */
-  }
+  // (Error handling is done in the individual queries)
 
   const getPeriodDates = (period: string) => {
     const now = new Date();
@@ -141,24 +141,36 @@ const Expenses = () => {
 
   return (
     <DashboardLayout>
-      <div className="bg-tint-gray p-6 space-y-8">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-primary">Expense Management</h1>
-            <p className="text-muted-foreground">
-              Track one-time expenses, metered utilities, and recurring costs
-            </p>
+      <FeatureGate
+        feature={FEATURES.EXPENSE_TRACKING}
+        fallbackTitle="Expense Tracking"
+        fallbackDescription="Track and manage expenses across your properties with detailed categorization."
+        showUpgradePrompt={true}
+      >
+        <div className="bg-tint-gray p-6 space-y-8">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Expense Management</h1>
+              <p className="text-muted-foreground">
+                Track one-time expenses, metered utilities, and recurring costs
+              </p>
+            </div>
+            
+            <DisabledActionWrapper
+              feature={FEATURES.EXPENSE_TRACKING}
+              fallbackTitle="Expense Tracking Required"
+              fallbackDescription="Upgrade to add expenses"
+            >
+              <Button 
+                onClick={() => setDialogOpen(true)}
+                className="bg-accent hover:bg-accent/90 text-accent-foreground"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Expense
+              </Button>
+            </DisabledActionWrapper>
           </div>
-          
-          <Button 
-            onClick={() => setDialogOpen(true)}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Expense
-          </Button>
-        </div>
 
         {/* If fetching expenses failed, show error only in non-production for safety */}
         {fetchError && process.env.NODE_ENV !== 'production' && (
@@ -327,13 +339,14 @@ const Expenses = () => {
         <ExpensesList expenses={filteredExpenses} loading={loading} />
 
         {/* Add Expense Dialog */}
-        <AddExpenseDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          properties={properties}
-          onSuccess={refetch}
-        />
-      </div>
+          <AddExpenseDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            properties={properties}
+            onSuccess={refetch}
+          />
+        </div>
+      </FeatureGate>
     </DashboardLayout>
   );
 };

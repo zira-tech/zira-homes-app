@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -18,13 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    logStep("Function started");
-
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) {
-      throw new Error("STRIPE_SECRET_KEY is not configured. Please add it in the Supabase dashboard.");
-    }
-    logStep("Stripe key verified");
+    logStep("Function started - M-Pesa integration");
 
     // Create Supabase client using anon key for authentication
     const supabaseClient = createClient(
@@ -61,41 +54,18 @@ serve(async (req) => {
     }
     logStep("Billing plan retrieved", { planName: plan.name, billingModel: plan.billing_model });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-
-    // Check if customer exists
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-      logStep("Existing customer found", { customerId });
-    }
-
-    const origin = req.headers.get("origin") || "http://localhost:3000";
-
-    // For commission-based billing, create a setup session to capture payment method
-    // and create a subscription with $0 amount (commission will be charged later)
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      mode: 'setup',
-      payment_method_types: ['card'],
-      success_url: `${origin}/upgrade-success?session_id={CHECKOUT_SESSION_ID}&plan_id=${planId}`,
-      cancel_url: `${origin}/`,
-      metadata: {
-        user_id: user.id,
-        plan_id: planId,
-        plan_name: plan.name,
-        billing_model: plan.billing_model,
-        percentage_rate: plan.percentage_rate?.toString() || '0'
-      }
-    });
-
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
-
+    // For M-Pesa payment, return payment details instead of a checkout URL
+    // The frontend will handle M-Pesa STK push through mpesa-stk-push function
     return new Response(JSON.stringify({ 
-      url: session.url,
-      sessionId: session.id 
+      paymentMethod: "mpesa",
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        amount: plan.price,
+        currency: plan.currency,
+        billingModel: plan.billing_model
+      },
+      message: "Use mpesa-stk-push function to initiate payment"
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

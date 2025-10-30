@@ -179,12 +179,15 @@ export function FlowTester() {
       .limit(1);
 
     if (error) throw new Error(`M-Pesa config test failed: ${error.message}`);
-    
+
     // If no config exists, that's also a valid state for testing
     if (data && data.length > 0) {
       const config = data[0];
-      if (!config.consumer_key || !config.business_shortcode) {
-        throw new Error('M-Pesa configuration is incomplete');
+      if (!config.consumer_key_encrypted || !config.shortcode_encrypted) {
+        throw new Error('M-Pesa configuration is incomplete or not encrypted');
+      }
+      if (!config.environment) {
+        throw new Error('M-Pesa environment not configured');
       }
     }
   };
@@ -198,9 +201,10 @@ export function FlowTester() {
       body: {
         phone: '254712345678',
         amount: 1, // Minimal amount for testing
-        invoice_id: invoiceId,
-        account_reference: 'TEST-INV-001',
-        transaction_desc: 'Test payment',
+        invoiceId: invoiceId,
+        accountReference: 'TEST-INV-001',
+        transactionDesc: 'Test payment',
+        paymentType: 'rent',
         dryRun: true // This should prevent actual payment initiation
       }
     });

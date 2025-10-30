@@ -90,7 +90,7 @@ const onSubmit = async (data: PaymentFormData) => {
       // RLS-safe insert: do not require returning row
       const { error: insertError } = await supabase
         .from("payments")
-        .insert([paymentData], { returning: 'minimal' as const });
+        .insert([paymentData]);
 
       if (insertError) {
         const msg = getErrorMessage(insertError);

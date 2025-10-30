@@ -42,6 +42,7 @@ export function UnitCapGate({
   return (
     <FeatureGate
       feature={FEATURES.UNITS_MAX}
+      variant="compact"
       currentCount={currentCount}
       fallbackTitle={fallbackTitle}
       fallbackDescription={fallbackDescription}

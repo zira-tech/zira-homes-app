@@ -36,6 +36,17 @@ export function useFeatureAccess(featureName: string, currentCount: number = 1) 
           return;
         }
 
+        // CRITICAL: Trial users get FULL PREMIUM ACCESS
+        if (trialStatus.isActive) {
+          setAccess({
+            canAccess: true,
+            isLimited: false,
+            limitExceeded: false,
+            currentUsage: currentCount
+          });
+          return;
+        }
+
         // Block all access for suspended accounts
         if (trialStatus.isSuspended) {
           setAccess({
@@ -46,8 +57,8 @@ export function useFeatureAccess(featureName: string, currentCount: number = 1) 
           return;
         }
 
-        // Check trial limitations for active trials and grace period
-        if (trialStatus.isActive || (trialStatus.isExpired && trialStatus.hasGracePeriod)) {
+        // For expired trials with grace period, check actual plan features
+        if (trialStatus.isExpired && trialStatus.hasGracePeriod) {
           const canAccess = await checkFeatureAccess(featureName, currentCount);
           
           setAccess({
@@ -57,6 +68,7 @@ export function useFeatureAccess(featureName: string, currentCount: number = 1) 
             currentUsage: currentCount
           });
         } else {
+          // Trial expired, no grace period
           setAccess({
             canAccess: false,
             isLimited: true,

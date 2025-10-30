@@ -31,17 +31,17 @@ export function FloatingTrialCountdown() {
   const isOnBillingPage = currentPath.includes('/billing') || currentPath.includes('/upgrade');
   const isOnOnboardingPage = currentPath.includes('/onboarding');
   
-  // Show for trial users with more robust conditions
+  // Show for trial users with more robust conditions - ANY plan can have trial status
   const shouldShow = !loading && 
     !isDismissed && 
     !isOnBillingPage &&
     !isOnOnboardingPage &&
     trialStatus && 
     (trialStatus.status === 'trial' || trialStatus.status === 'trial_expired') &&
-    (trialStatus.planName === 'Free Trial' || !trialStatus.planName) && // Allow missing plan name
     trialDaysRemaining >= 0; // Show even on last day (0 days remaining)
 
   console.log('🎯 FloatingTrialCountdown shouldShow logic:', {
+    timestamp: new Date().toISOString(),
     shouldShow,
     conditions: {
       notLoading: !loading,
@@ -49,8 +49,8 @@ export function FloatingTrialCountdown() {
       notOnBillingPage: !isOnBillingPage,
       notOnOnboardingPage: !isOnOnboardingPage,
       statusIsTrial: trialStatus?.status === 'trial',
-      planIsFree: trialStatus?.planName === 'Free Trial',
-      daysRemaining: trialDaysRemaining > 0
+      planName: trialStatus?.planName,
+      daysRemaining: trialDaysRemaining
     }
   });
 

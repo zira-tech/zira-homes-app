@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -56,7 +56,7 @@ export function useNotifications() {
         ...item,
         type: item.type as Notification["type"]
       })) as Notification[];
-      
+
       setNotifications(typedData);
       updateUnreadCount(typedData);
     } catch (error) {
@@ -68,8 +68,41 @@ export function useNotifications() {
         serialized = String(error);
       }
 
-      if (typeof (error as any)?.message === 'string' && (error as any).message.toLowerCase().includes('failed to fetch')) {
-        console.error('Error fetching notifications: network/fetch failed. Check Supabase URL, CORS, and connectivity.', serialized);
+      const message = String((error as any)?.message || serialized).toLowerCase();
+      if (message.includes('failed to fetch')) {
+        console.error('Error fetching notifications: network/fetch failed. Falling back to server proxy...', serialized);
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          const access = session?.session?.access_token;
+          // Build PostgREST URL with filters
+          const params: string[] = [
+            'select=*',
+            `user_id=eq.${encodeURIComponent(user.id)}`,
+            'order=created_at.desc'
+          ];
+          if (filters.unreadOnly) params.push('read=eq.false');
+          if (filters.types && filters.types.length > 0) {
+            const inList = filters.types.map(t => `'${t}'`).join(',');
+            params.push(`type=in.(${encodeURIComponent(inList)})`);
+          }
+          if (filters.limit) params.push(`limit=${filters.limit}`);
+
+          const targetUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/notifications?${params.join('&')}`;
+          const res = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+            body: JSON.stringify({ url: targetUrl, method: 'GET' })
+          });
+          const proxyData = await res.json();
+          if (res.ok && Array.isArray(proxyData)) {
+            const typedData = proxyData.map((item: any) => ({ ...item, type: item.type as Notification["type"] })) as Notification[];
+            setNotifications(typedData);
+            updateUnreadCount(typedData);
+            return;
+          }
+        } catch (proxyErr) {
+          console.error('Proxy fallback for notifications failed:', proxyErr);
+        }
       } else {
         console.error('Error fetching notifications:', serialized);
       }

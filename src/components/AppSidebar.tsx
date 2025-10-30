@@ -25,7 +25,7 @@ import { useTrialManagement } from "@/hooks/useTrialManagement";
 export function AppSidebar() {
   const { signOut } = useAuth();
   const { open } = useSidebar();
-  const { isAdmin, isLandlord, isManager, isAgent, loading } = useRole();
+  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, isOnLandlordTrial, loading } = useRole();
   const { trialStatus } = useTrialManagement();
 
   // Feature access hooks
@@ -34,9 +34,10 @@ export function AppSidebar() {
   const { allowed: hasCustomTemplates } = usePlanFeatureAccess(FEATURES.CUSTOM_EMAIL_TEMPLATES);
   const { allowed: hasAdvancedReports } = usePlanFeatureAccess(FEATURES.ADVANCED_REPORTING);
 
-  // Check if user has Professional, Enterprise, or Admin plan - these should not have locks
-  const isPremiumPlan = trialStatus?.planName && 
-    ['Professional', 'Enterprise', 'Admin', 'Pro'].includes(trialStatus.planName) ||
+  // Check if user has Professional, Enterprise, Admin plan, OR is on trial - no locks for these
+  const isPremiumPlan = (trialStatus?.planName && 
+    ['Professional', 'Enterprise', 'Admin', 'Pro'].includes(trialStatus.planName)) ||
+    trialStatus?.isActive || // TRIAL USERS GET FULL ACCESS
     isAdmin;
 
   // Show skeleton while role is loading
@@ -130,12 +131,69 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {(isLandlord || isManager || isAgent) && !isAdmin && landlordNav.map((group) => (
+        {(isLandlord || isManager || isAgent || isSubUser) && !isAdmin && landlordNav.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel className="text-orange-500 h-8 py-1">{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
-                {group.items.map((item) => {
+                {group.items.filter((item) => {
+                  // Always hide administrative items from sub-users
+                  if (isSubUser) {
+                    const subUserBlockedItems = [
+                      "Sub Users",
+                      "Billing Panel", 
+                      "Payment Settings"
+                    ];
+                    
+                    if (subUserBlockedItems.includes(item.title)) {
+                      return false;
+                    }
+                  }
+
+                  // Filter navigation for sub-users based on permissions (SECURE BY DEFAULT)
+                  if (isSubUser) {
+                    // Whitelist of always-visible items for sub-users
+                    const alwaysVisibleForSubUsers = ["Dashboard", "Settings", "Support", "Knowledge Base"];
+                    
+                    // Always show whitelisted items
+                    if (alwaysVisibleForSubUsers.includes(item.title)) {
+                      return true;
+                    }
+                    
+                    // Map menu items to required permissions
+                    const permissionMap: Record<string, string> = {
+                      "Properties": "manage_properties",
+                      "Units": "manage_properties",
+                      "Tenants": "manage_tenants",
+                      "Leases": "manage_leases",
+                      "Payments": "manage_payments",
+                      "Invoices": "manage_payments",
+                      "Reports": "view_reports",
+                      "Maintenance": "manage_maintenance",
+                      "Expenses": "manage_expenses",
+                      "Email Templates": "send_messages",
+                      "Message Templates": "send_messages",
+                      "Notifications": "view_reports",
+                      "Sub Users": "never", // Never show this to sub-users
+                      "Billing Panel": "never",
+                      "Payment Settings": "never",
+                      "Upgrade": "never",
+                    };
+                    
+                    const requiredPermission = permissionMap[item.title];
+                    
+                    // SECURE BY DEFAULT: If item has no permission mapping or marked as "never", hide it
+                    if (!requiredPermission || requiredPermission === "never") {
+                      return false;
+                    }
+                    
+                    // FAIL CLOSED: If permissions not loaded yet or permission is false, hide item
+                    if (!subUserPermissions || subUserPermissions[requiredPermission] !== true) {
+                      return false;
+                    }
+                  }
+                  return true;
+                }).map((item) => {
                   // Check feature access for specific items
                   const isReportsItem = item.title === "Reports";
                   const isSubUsersItem = item.title === "Sub Users";
@@ -193,8 +251,8 @@ export function AppSidebar() {
             <SidebarMenu className="gap-0.5">
               {accountNav.items
                 .filter((item) => {
-                  // Hide upgrade for admins only
-                  if (isAdmin && item.title === "Upgrade") {
+                  // Hide upgrade for admins and sub-users
+                  if ((isAdmin || isSubUser) && item.title === "Upgrade") {
                     return false;
                   }
                   return true;

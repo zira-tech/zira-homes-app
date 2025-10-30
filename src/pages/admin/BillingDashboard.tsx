@@ -481,54 +481,31 @@ const BillingDashboard = () => {
 
   const assignPlanToLandlord = async (landlordId: string, planId: string) => {
     try {
-      console.log('🔄 Assigning plan to landlord:', { landlordId, planId });
+      console.log('🔄 Admin assigning plan:', { landlordId, planId });
       
-      // Get the plan details to determine the correct status
-      const { data: planData, error: planError } = await supabase
-        .from("billing_plans")
-        .select("name")
-        .eq("id", planId)
-        .single();
-
-      if (planError) throw planError;
-
-      // Determine status based on plan type
-      let status = "active";
-      if (planData.name === "Free Trial") {
-        status = "trial";
-      } else if (planData.name === "Demo Plan" || planData.name === "Professional") {
-        status = "active";
-      }
-
-      const { data, error } = await supabase
-        .from("landlord_subscriptions")
-        .upsert({
-          landlord_id: landlordId,
-          billing_plan_id: planId,
-          status: status,
-          subscription_start_date: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'landlord_id' })
-        .select();
-
-      if (error) {
-        console.error('❌ Database error during plan assignment:', error);
-        throw error;
-      }
-
-      console.log('✅ Plan assigned successfully:', data);
-
-      toast({
-        title: "Success",
-        description: "Billing plan assigned successfully",
+      // Use edge function for proper admin override with logging
+      const { data, error } = await supabase.functions.invoke('admin-assign-plan', {
+        body: { landlordId, planId }
       });
-      
-      await fetchBillingData();
+
+      if (error) throw error;
+
+      if (data?.success) {
+        console.log('✅ Plan assigned successfully');
+        toast({
+          title: "Success",
+          description: "Billing plan assigned successfully",
+        });
+        
+        await fetchBillingData(); // Refresh data
+      } else {
+        throw new Error(data?.error || 'Failed to assign plan');
+      }
     } catch (error) {
-      console.error("❌ Error assigning plan:", error);
+      console.error('❌ Error assigning plan:', error);
       toast({
         title: "Error",
-        description: "Failed to assign billing plan",
+        description: error instanceof Error ? error.message : "Failed to assign billing plan",
         variant: "destructive",
       });
     }

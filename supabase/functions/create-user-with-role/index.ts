@@ -313,11 +313,13 @@ Please log in and change your password immediately.
 
 - ZIRA Property Management`;
 
-            const { error: smsError } = await supabaseAdmin.functions.invoke('send-sms', {
+            const { error: smsError } = await supabaseAdmin.functions.invoke('send-sms-with-logging', {
               body: {
-                provider_name: providerResponse.provider.provider_name,
                 phone_number: phone,
                 message: smsMessage,
+                message_type: 'credentials',
+                user_id: authData.user.id,
+                provider_name: providerResponse.provider.provider_name,
                 provider_config: providerResponse.provider.config_data
               }
             });

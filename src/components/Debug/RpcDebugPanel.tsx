@@ -56,7 +56,7 @@ export const RpcDebugPanel: React.FC = () => {
     try {
       const promises = RPCS.map(rpc => {
         const params = (rpc as any).params ?? undefined;
-        return supabase.rpc(rpc.key, params).then(res => ({ key: rpc.key, res })).catch(err => ({ key: rpc.key, res: { error: err } }));
+        return (supabase as any).rpc(rpc.key, params).then((res: any) => ({ key: rpc.key, res })).catch((err: any) => ({ key: rpc.key, res: { error: err } }));
       });
 
       const results = await Promise.all(promises);

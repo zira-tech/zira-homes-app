@@ -13,6 +13,8 @@ interface TrialStatus {
   totalTrialDays?: number;
   planName?: string;
   planId?: string;
+  isSubUserOnLandlordTrial?: boolean;
+  landlordName?: string;
 }
 
 export function useTrialManagement() {
@@ -27,11 +29,18 @@ export function useTrialManagement() {
   useEffect(() => {
     if (user) {
       checkTrialStatus();
+    } else {
+      // Reset state when no user
+      setTrialStatus(null);
+      setIsTrialUser(false);
+      setTrialDaysRemaining(0);
+      setShowOnboarding(false);
     }
   }, [user]);
 
   const checkTrialStatus = async () => {
-    console.log('🔄 useTrialManagement: Starting checkTrialStatus for user:', user?.id);
+    const timestamp = new Date().toISOString();
+    console.log(`🔄 [${timestamp}] useTrialManagement: Starting checkTrialStatus for user:`, user?.id);
     
     if (!user) {
       console.log('❌ useTrialManagement: No user found');
@@ -40,6 +49,19 @@ export function useTrialManagement() {
     }
 
     try {
+      // Try to load cached trial status for immediate display
+      const cachedStatus = localStorage.getItem(`trial-status-${user.id}`);
+      if (cachedStatus) {
+        try {
+          const parsed = JSON.parse(cachedStatus);
+          console.log('📦 useTrialManagement: Loaded cached status:', parsed);
+          setTrialStatus(parsed.trialStatus);
+          setTrialDaysRemaining(parsed.trialDaysRemaining);
+          setIsTrialUser(parsed.isTrialUser);
+        } catch (e) {
+          console.error('❌ Failed to parse cached trial status:', e);
+        }
+      }
       console.log('🔍 useTrialManagement: Checking user role...');
       // Check user role first
       const { data: userRoles } = await supabase
@@ -53,12 +75,72 @@ export function useTrialManagement() {
       setUserRole(currentUserRole);
       
       console.log('👤 useTrialManagement: Current user role:', currentUserRole);
-      
-      // Only check trial status for property-related roles
-      if (!currentUserRole || !['Landlord', 'Manager', 'Agent'].includes(currentUserRole)) {
-        console.log('❌ useTrialManagement: User role not property-related, exiting');
-        setLoading(false);
-        return;
+
+      // Check if user is a sub-user and fetch landlord's trial status
+      const { data: subUserData } = await supabase
+        .from('sub_users')
+        .select('landlord_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      let landlordTrialStatus = null;
+      let landlordName = null;
+
+      if (subUserData?.landlord_id) {
+        console.log('👥 useTrialManagement: User is a sub-user, fetching landlord trial status...');
+        
+        // Fetch landlord's subscription status
+        const { data: landlordSubscription } = await supabase
+          .from('landlord_subscriptions')
+          .select(`
+            *,
+            billing_plan:billing_plans(*)
+          `)
+          .eq('landlord_id', subUserData.landlord_id)
+          .in('status', ['active', 'trial'])
+          .maybeSingle();
+
+        // Fetch landlord's name
+        const { data: landlordProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', subUserData.landlord_id)
+          .maybeSingle();
+
+        if (landlordProfile) {
+          landlordName = `${landlordProfile.first_name} ${landlordProfile.last_name}`;
+        }
+
+        if (landlordSubscription && landlordSubscription.status === 'trial') {
+          console.log('🎯 useTrialManagement: Sub-user landlord is on trial!');
+          const trialEndDate = new Date(landlordSubscription.trial_end_date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          trialEndDate.setHours(23, 59, 59, 999);
+          
+          const daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          landlordTrialStatus = {
+            status: 'trial',
+            isActive: daysRemaining > 0,
+            isExpired: false,
+            isSuspended: false,
+            hasGracePeriod: false,
+            daysRemaining: Math.max(0, daysRemaining),
+            planName: (landlordSubscription.billing_plan as any)?.name || 'Enterprise',
+            planId: (landlordSubscription.billing_plan as any)?.id,
+            isSubUserOnLandlordTrial: true,
+            landlordName: landlordName
+          };
+
+          // For sub-users, use landlord's trial status
+          setTrialStatus(landlordTrialStatus);
+          setTrialDaysRemaining(Math.max(0, daysRemaining));
+          setIsTrialUser(true);
+          setLoading(false);
+          return; // Exit early for sub-users on landlord trial
+        }
       }
 
       console.log('🎯 useTrialManagement: Getting trial status via RPC...');
@@ -68,7 +150,7 @@ export function useTrialManagement() {
 
       console.log('📊 useTrialManagement: RPC status result:', statusResult);
 
-      // Try to fetch subscription with robust error handling
+      // Always try to fetch subscription data directly (with fallback if RPC fails)
       console.log('🔍 useTrialManagement: Fetching subscription data with maybeSingle...');
       const { data: subscription, error: subscriptionError } = await supabase
         .from('landlord_subscriptions')
@@ -77,107 +159,74 @@ export function useTrialManagement() {
           billing_plan:billing_plans(*)
         `)
         .eq('landlord_id', user.id)
-        .maybeSingle(); // Use maybeSingle instead of single to handle zero results
+        .maybeSingle();
 
       console.log('💳 useTrialManagement: Subscription data:', subscription);
       console.log('❗ useTrialManagement: Subscription error:', subscriptionError);
 
-      // Fallback: If subscription query fails but we have RPC status, create synthetic trial status
-      if (!subscription && statusResult) {
-        console.log('🔄 useTrialManagement: No subscription found, using RPC fallback...');
-        
-        // Try to get basic subscription data without billing plan join
-        const { data: basicSubscription } = await supabase
+      // Fallback: Always try to fetch basic subscription data if joined query failed
+      let basicSubscription = null;
+      if (!subscription && subscriptionError) {
+        console.log('🔄 useTrialManagement: Joined query failed, fetching basic data...');
+        const { data: basic } = await supabase
           .from('landlord_subscriptions')
           .select('*')
           .eq('landlord_id', user.id)
           .maybeSingle();
-
+        basicSubscription = basic;
         console.log('🔧 useTrialManagement: Basic subscription fallback:', basicSubscription);
+      }
 
-        if (basicSubscription || statusResult === 'trial') {
-          const isTrialRelated = ['trial', 'trial_expired', 'suspended'].includes(statusResult);
-          setIsTrialUser(isTrialRelated);
+      // Use subscription or fallback to basic subscription
+      const effectiveSubscription = subscription || basicSubscription;
 
-          let daysRemaining = 0;
-          let totalTrialDays = 30;
-
-          if (basicSubscription?.trial_end_date) {
-            const trialEndDate = new Date(basicSubscription.trial_end_date);
-            const today = new Date();
-            daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (basicSubscription.trial_start_date) {
-              totalTrialDays = Math.ceil((trialEndDate.getTime() - new Date(basicSubscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24));
-            }
-          }
-
-          setTrialDaysRemaining(Math.max(0, daysRemaining));
-
-          const fallbackTrialStatus = {
-            status: statusResult,
-            isActive: statusResult === 'trial' && daysRemaining > 0,
-            isExpired: statusResult === 'trial_expired',
-            isSuspended: statusResult === 'suspended',
-            hasGracePeriod: statusResult === 'trial_expired',
-            daysRemaining: Math.max(0, daysRemaining),
-            gracePeriodDays: 0,
-            totalTrialDays: totalTrialDays,
-            planName: 'Free Trial', // Default fallback
-            planId: undefined
-          };
-
-          console.log('🎯 useTrialManagement: Setting fallback trial status:', fallbackTrialStatus);
-          setTrialStatus(fallbackTrialStatus);
-
-          if (basicSubscription && !basicSubscription.onboarding_completed) {
-            setShowOnboarding(true);
-          }
-        }
-      } else if (subscription) {
+      if (!effectiveSubscription) {
+        console.log('❌ useTrialManagement: No subscription found at all');
+      } else {
         console.log('✅ useTrialManagement: Processing subscription data...');
-        const actualStatus = statusResult || subscription.status;
+        const actualStatus = statusResult || effectiveSubscription.status;
         const isTrialRelated = ['trial', 'trial_expired', 'suspended'].includes(actualStatus);
         
         console.log('🏷️ useTrialManagement: Processed status info:', {
           actualStatus,
           isTrialRelated,
-          planName: subscription.billing_plan?.name
+          hasRpcStatus: !!statusResult,
+          subscriptionStatus: effectiveSubscription.status
         });
         
         setIsTrialUser(isTrialRelated);
         
         let daysRemaining = 0;
         let gracePeriodDays = 0;
+        let totalTrialDays = 30;
         
-        if (subscription.trial_end_date) {
-          const trialEndDate = new Date(subscription.trial_end_date);
+        if (effectiveSubscription.trial_end_date) {
+          const trialEndDate = new Date(effectiveSubscription.trial_end_date);
           const today = new Date();
-          today.setHours(0, 0, 0, 0); // Reset to midnight for accurate day calculation
-          trialEndDate.setHours(23, 59, 59, 999); // Set to end of day
+          today.setHours(0, 0, 0, 0);
+          trialEndDate.setHours(23, 59, 59, 999);
           
           daysRemaining = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
           console.log('📅 useTrialManagement: Date calculations:', {
             trialEndDate: trialEndDate.toISOString(),
             today: today.toISOString(),
-            daysRemaining,
-            rawCalculation: (trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            daysRemaining
           });
           
-          // Calculate grace period days remaining if in grace period
+          // Calculate grace period
           if (actualStatus === 'trial_expired') {
             const gracePeriodEnd = new Date(trialEndDate.getTime() + (7 * 24 * 60 * 60 * 1000));
             gracePeriodDays = Math.max(0, Math.ceil((gracePeriodEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
           }
+
+          // Calculate total trial days
+          if (effectiveSubscription.trial_start_date) {
+            totalTrialDays = Math.ceil((trialEndDate.getTime() - new Date(effectiveSubscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24));
+          }
         }
         
         setTrialDaysRemaining(Math.max(0, daysRemaining));
-        
-        // Calculate total trial days from subscription data
-        const totalTrialDays = subscription.trial_start_date && subscription.trial_end_date
-          ? Math.ceil((new Date(subscription.trial_end_date).getTime() - new Date(subscription.trial_start_date).getTime()) / (1000 * 60 * 60 * 24))
-          : 30; // Default fallback
 
         const finalTrialStatus = {
           status: actualStatus,
@@ -188,19 +237,29 @@ export function useTrialManagement() {
           daysRemaining: Math.max(0, daysRemaining),
           gracePeriodDays: gracePeriodDays,
           totalTrialDays: totalTrialDays,
-          planName: subscription.billing_plan?.name || 'Free Trial',
-          planId: subscription.billing_plan?.id
+          planName: (subscription?.billing_plan as any)?.name || 'Free Trial',
+          planId: (subscription?.billing_plan as any)?.id
         };
 
         console.log('🎯 useTrialManagement: Setting final trial status:', finalTrialStatus);
         setTrialStatus(finalTrialStatus);
 
+        // Cache the trial status
+        try {
+          localStorage.setItem(`trial-status-${user.id}`, JSON.stringify({
+            trialStatus: finalTrialStatus,
+            trialDaysRemaining: Math.max(0, daysRemaining),
+            isTrialUser: isTrialRelated,
+            timestamp: new Date().toISOString()
+          }));
+        } catch (e) {
+          console.error('❌ Failed to cache trial status:', e);
+        }
+
         // Show onboarding if not completed
-        if (!subscription.onboarding_completed) {
+        if (!effectiveSubscription.onboarding_completed) {
           setShowOnboarding(true);
         }
-      } else {
-        console.log('❌ useTrialManagement: No subscription found and no RPC status');
       }
     } catch (error) {
       try {

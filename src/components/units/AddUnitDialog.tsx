@@ -180,7 +180,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>
-            <Label htmlFor="property_id">Property</Label>
+            <Label htmlFor="property_id">Property <span className="text-destructive ml-1">*</span></Label>
             <Select
               value={watch("property_id")}
               onValueChange={(value) => setValue("property_id", value)}
@@ -203,7 +203,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="unit_number">Unit Number</Label>
+              <Label htmlFor="unit_number">Unit Number <span className="text-destructive ml-1">*</span></Label>
               <Input
                 id="unit_number"
                 {...register('unit_number', { required: 'Unit number is required' })}
@@ -216,7 +216,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
             </div>
             
             <div>
-              <Label htmlFor="unit_type">Unit Type</Label>
+              <Label htmlFor="unit_type">Unit Type <span className="text-destructive ml-1">*</span></Label>
               <UnitTypeSelect
                 value={watch('unit_type')}
                 onValueChange={(value) => setValue('unit_type', value)}
@@ -246,7 +246,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="rent_amount">Monthly Rent</Label>
+              <Label htmlFor="rent_amount">Monthly Rent <span className="text-destructive ml-1">*</span></Label>
               <Input
                 id="rent_amount"
                 type="number"

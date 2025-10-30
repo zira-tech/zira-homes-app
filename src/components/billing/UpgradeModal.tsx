@@ -156,29 +156,53 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           window.location.reload();
         }, 1000);
       } else {
-        // For other billing models that require upfront payment, use Stripe
-        console.log('💳 Creating Stripe checkout session...');
-        
-        const { data, error } = await supabase.functions.invoke('create-billing-checkout', {
-          body: { planId: selectedPlan }
+        // For other billing models that require upfront payment, use M-Pesa
+        console.log('💳 Initiating M-Pesa payment...');
+
+        // Fetch user profile to get phone number
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('phone')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError || !profile?.phone) {
+          throw new Error('Phone number not found. Please update your profile with a valid phone number.');
+        }
+
+        const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
+          body: {
+            phone: profile.phone,
+            amount: selectedPlanData.price,
+            accountReference: `PLAN-${selectedPlan}`,
+            transactionDesc: `Subscription upgrade to ${selectedPlanData.name}`,
+            paymentType: 'subscription'
+          }
         });
 
         if (error) {
-          console.error('❌ Stripe checkout error:', error);
+          console.error('❌ M-Pesa payment error:', error);
           throw error;
         }
 
-        if (data?.url) {
-          console.log('✅ Redirecting to Stripe checkout...');
-          window.location.href = data.url;
+        if (data?.success) {
+          console.log('✅ M-Pesa STK push initiated...');
+          toast.info('💳 M-Pesa payment prompt sent to your phone. Please enter your PIN to complete payment.');
+          onClose();
+
+          // Redirect after a delay
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
           return;
         } else {
-          throw new Error("Failed to create checkout session");
+          throw new Error(data?.message || "Failed to initiate M-Pesa payment");
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Upgrade error:', error);
-      toast.error("Upgrade failed. Please try again.");
+      const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
+      toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

@@ -81,7 +81,7 @@ export function SupportTicketForm({ onSuccess }: SupportTicketFormProps) {
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Subject</FormLabel>
+              <FormLabel>Subject <span className="text-destructive ml-1">*</span></FormLabel>
               <FormControl>
                 <Input placeholder="Brief description of the issue" {...field} />
               </FormControl>
@@ -96,7 +96,7 @@ export function SupportTicketForm({ onSuccess }: SupportTicketFormProps) {
             name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Category</FormLabel>
+                <FormLabel>Category <span className="text-destructive ml-1">*</span></FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -122,7 +122,7 @@ export function SupportTicketForm({ onSuccess }: SupportTicketFormProps) {
             name="priority"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Priority</FormLabel>
+                <FormLabel>Priority <span className="text-destructive ml-1">*</span></FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -147,7 +147,7 @@ export function SupportTicketForm({ onSuccess }: SupportTicketFormProps) {
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description</FormLabel>
+              <FormLabel>Description <span className="text-destructive ml-1">*</span></FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Please provide detailed information about the issue, including steps to reproduce if applicable..."

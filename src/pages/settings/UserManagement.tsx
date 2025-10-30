@@ -50,45 +50,21 @@ const UserManagement = () => {
 
   const fetchUsers = async () => {
     try {
-      // First get total count
-      const { count } = await supabase
-        .from("profiles")
-        .select('*', { count: 'exact', head: true });
-
-      setTotalUsers(count || 0);
-
-      // Then get paginated data
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          created_at
-        `)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
+      const { data, error } = await supabase.rpc('admin_list_profiles_with_roles', {
+        p_limit: pageSize,
+        p_offset: offset
+      });
 
       if (error) throw error;
       
-      // Fetch user roles for the current page only
-      const usersWithRoles = await Promise.all(
-        (data || []).map(async (user) => {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id);
-          
-          return {
-            ...user,
-            user_roles: roles || []
-          };
-        })
-      );
+      const result = data as unknown as { success: boolean; users: UserProfile[]; total_count: number; error?: string };
       
-      setUsers(usersWithRoles as UserProfile[]);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to fetch users');
+      }
+      
+      setUsers(result.users);
+      setTotalUsers(result.total_count || 0);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({

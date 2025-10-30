@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreditCard, Eye } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TablePaginator } from "@/components/ui/table-paginator";
 
@@ -81,9 +81,42 @@ export function RecentPayments() {
 
       setPayments(transformedPayments);
     } catch (error) {
-      console.error('Error fetching payments:', error);
-      // Fallback to empty array on error
-      setPayments([]);
+      let serialized: any;
+      try { serialized = JSON.stringify(error, Object.getOwnPropertyNames(error as any)); } catch { serialized = String(error); }
+      console.error('Error fetching payments:', serialized);
+
+      // Network/CORS fallback: fetch via server proxy
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const access = session?.session?.access_token;
+        const select = encodeURIComponent(`id,amount,payment_date,status,payment_method,payment_reference,tenants!payments_tenant_id_fkey(first_name,last_name,phone),leases!payments_lease_id_fkey(units!leases_unit_id_fkey(unit_number,properties!units_property_id_fkey(name)))`);
+        const targetUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/payments?select=${select}&order=payment_date.desc&limit=50`;
+        const res = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+          body: JSON.stringify({ url: targetUrl, method: 'GET' })
+        });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data)) {
+          const transformedPayments: Payment[] = data.map((payment: any) => ({
+            id: payment.payment_reference || payment.id,
+            tenant_name: payment.tenants ? `${payment.tenants.first_name} ${payment.tenants.last_name}` : "Unknown",
+            tenant_phone: payment.tenants?.phone || "N/A",
+            property_name: payment.leases?.units?.properties?.name || "Unknown Property",
+            unit_number: payment.leases?.units?.unit_number || "N/A",
+            amount: payment.amount || 0,
+            payment_date: payment.payment_date,
+            status: payment.status,
+            payment_method: payment.payment_method || "Bank Transfer"
+          }));
+          setPayments(transformedPayments);
+        } else {
+          setPayments([]);
+        }
+      } catch (proxyErr) {
+        console.error('Payments proxy fallback failed:', proxyErr);
+        setPayments([]);
+      }
     } finally {
       setLoading(false);
     }

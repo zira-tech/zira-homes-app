@@ -18,6 +18,9 @@ import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface Invoice {
   id: string;
@@ -170,20 +173,38 @@ const Invoices = () => {
 
   return (
     <DashboardLayout>
-      <div className="bg-tint-gray p-6 space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold text-primary">Invoices</h1>
-            <p className="text-muted-foreground">
-              Manage tenant invoices and billing
-            </p>
+      <FeatureGate
+        feature={FEATURES.INVOICING}
+        fallbackTitle="Invoice Management"
+        fallbackDescription="Create, send, and track invoices for your tenants with automated billing."
+        showUpgradePrompt={true}
+      >
+        <div className="bg-tint-gray p-6 space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Invoices</h1>
+              <p className="text-muted-foreground">
+                Manage tenant invoices and billing
+              </p>
+            </div>
+            <div className="flex gap-3 self-stretch sm:self-auto">
+              <DisabledActionWrapper
+                feature={FEATURES.ADVANCED_INVOICING}
+                fallbackTitle="Bulk Invoicing Required"
+                fallbackDescription="Upgrade to generate bulk invoices"
+              >
+                <BulkInvoiceGenerationDialog onInvoicesGenerated={fetchInvoices} />
+              </DisabledActionWrapper>
+              <DisabledActionWrapper
+                feature={FEATURES.INVOICING}
+                fallbackTitle="Invoicing Required"
+                fallbackDescription="Upgrade to create invoices"
+              >
+                <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
+              </DisabledActionWrapper>
+            </div>
           </div>
-          <div className="flex gap-3 self-stretch sm:self-auto">
-            <BulkInvoiceGenerationDialog onInvoicesGenerated={fetchInvoices} />
-            <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
-          </div>
-        </div>
 
         {/* KPI Summary */}
         <KpiGrid>
@@ -368,7 +389,8 @@ const Invoices = () => {
             </CardContent>
           </Card>
         )}
-      </div>
+        </div>
+      </FeatureGate>
     </DashboardLayout>
   );
 };

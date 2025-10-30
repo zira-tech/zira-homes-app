@@ -55,7 +55,7 @@ const PlatformAnalytics = () => {
   };
 
   const safeUserGrowthData = sanitize(analytics?.userGrowthData);
-  const safePieData = sanitize(analytics?.planDistribution);
+  const safePieData = sanitize((analytics as any)?.planDistribution);
   const safeUserTypeData = sanitize(analytics?.userTypeData);
   const safeBarData = sanitize(analytics?.userGrowthData);
   const safeRevenueData = sanitize(analytics?.revenueData);
@@ -266,7 +266,7 @@ const PlatformAnalytics = () => {
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
-                        label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={(props: any) => `${props.name} ${(props.percent * 100).toFixed(0)}%`}
                       >
                         {safeUserTypeData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />

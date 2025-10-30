@@ -143,21 +143,21 @@ export function LeaseExpiryManager({
             // 4) Compose results
             const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
             leasesData = (leaseRows || []).map((l: any) => {
-              const tenant = tenantsMap.get(l.tenant_id);
-              const unit = unitsMap.get(l.unit_id);
-              const prop = unit ? propsMap.get(unit.property_id) : null;
+              const tenant = tenantsMap.get(l.tenant_id) as any;
+              const unit = unitsMap.get(l.unit_id) as any;
+              const prop = unit ? propsMap.get(unit.property_id) as any : null;
               return {
                 id: l.id,
-                property_name: prop?.name,
-                unit_number: unit?.unit_number,
+                property_name: prop?.name || '',
+                unit_number: unit?.unit_number || '',
                 tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
-                tenant_email: tenant?.email,
-                tenant_user_id: tenant?.user_id,
+                tenant_email: tenant?.email || '',
+                tenant_user_id: tenant?.user_id || undefined,
                 lease_end_date: l.lease_end_date,
                 monthly_rent: l.monthly_rent,
                 status: l.status,
-                property_owner_id: prop?.owner_id,
-                property_manager_id: prop?.manager_id
+                property_owner_id: prop?.owner_id || undefined,
+                property_manager_id: prop?.manager_id || undefined
               };
             });
           }
@@ -195,21 +195,21 @@ export function LeaseExpiryManager({
           const unitsMap = new Map(unitsData.map((u: any) => [u.id, u]));
 
           leasesData = (leaseRows || []).map((l: any) => {
-            const tenant = tenantsMap.get(l.tenant_id);
-            const unit = unitsMap.get(l.unit_id);
-            const prop = unit ? propsMap.get(unit.property_id) : null;
+            const tenant = tenantsMap.get(l.tenant_id) as any;
+            const unit = unitsMap.get(l.unit_id) as any;
+            const prop = unit ? propsMap.get(unit.property_id) as any : null;
             return {
               id: l.id,
-              property_name: prop?.name,
-              unit_number: unit?.unit_number,
+              property_name: prop?.name || '',
+              unit_number: unit?.unit_number || '',
               tenant_name: `${tenant?.first_name || ''} ${tenant?.last_name || ''}`.trim(),
-              tenant_email: tenant?.email,
-              tenant_user_id: tenant?.user_id,
+              tenant_email: tenant?.email || '',
+              tenant_user_id: tenant?.user_id || undefined,
               lease_end_date: l.lease_end_date,
               monthly_rent: l.monthly_rent,
               status: l.status,
-              property_owner_id: prop?.owner_id,
-              property_manager_id: prop?.manager_id
+              property_owner_id: prop?.owner_id || undefined,
+              property_manager_id: prop?.manager_id || undefined
             };
           });
         } catch (srvErr) {

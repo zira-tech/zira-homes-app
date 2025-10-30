@@ -93,12 +93,13 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
     setLoading(true);
 
     try {
+      // Use phoneFormatter for consistent formatting
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
         body: {
           phone: phoneNumber,
           amount: invoice.amount,
           accountReference: invoice.invoice_number,
-          transactionDesc: `Payment for ${invoice.invoice_number}`,
+          transactionDesc: `Rent payment for ${invoice.invoice_number}`,
           invoiceId: invoice.id,
           paymentType: 'rent'
         }
@@ -111,7 +112,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       if (data?.success) {
         toast({
           title: "Payment Request Sent",
-          description: `STK push sent to ${phoneNumber}. Please complete the payment on your phone.`,
+          description: "STK push sent. Please check your phone and enter your M-Pesa PIN to complete the payment.",
         });
         
         onPaymentInitiated?.();

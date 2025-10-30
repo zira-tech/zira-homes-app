@@ -77,18 +77,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!user) return false;
 
     try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', role)
-        .limit(1)
-        .maybeSingle();
+      // Use RPC with built-in server proxy fallback from our Supabase client wrapper
+      const { data, error } = await supabase.rpc('has_role_safe', { _user_id: user.id, _role: role as any });
       if (error) throw error;
       return Boolean(data);
     } catch (e: any) {
       const msg = e?.message || JSON.stringify(e);
-      console.error(`Error checking role ${role} via user_roles: ${msg}`);
+      console.error(`Error checking role ${role} via RPC: ${msg}`);
       return false;
     }
   }, [user]);

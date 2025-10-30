@@ -10,6 +10,7 @@ import { Bell, User, Sun, Moon, Monitor, Settings, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
+import { TourLauncher } from "@/components/onboarding/TourLauncher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,11 +20,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Prefetch tenant routes for faster navigation
+// Prefetch tenant routes for faster navigation (explicit paths for build compatibility)
+const routePrefetchMap: Record<string, () => Promise<any>> = {
+  TenantProfile: () => import("@/pages/tenant/TenantProfile.tsx"),
+  TenantPaymentPreferences: () => import("@/pages/tenant/TenantPaymentPreferences.tsx"),
+};
 const prefetchTenantRoute = (path: string) => {
-  import(`../pages/tenant/${path}`).catch(() => {
-    // Silently handle prefetch failures
-  });
+  const loader = routePrefetchMap[path];
+  if (loader) loader().catch(() => {});
 };
 
 export function TenantHeader() {
@@ -92,6 +96,8 @@ export function TenantHeader() {
         
         <div className="flex items-center gap-2">
           <NotificationsPopover />
+          
+          <TourLauncher />
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

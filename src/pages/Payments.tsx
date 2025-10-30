@@ -18,6 +18,9 @@ import { RecordPaymentDialog } from "@/components/payments/RecordPaymentDialog";
 import { TestPaymentButton } from "@/components/payments/TestPaymentButton";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { FeatureGate } from "@/components/ui/feature-gate";
+import { DisabledActionWrapper } from "@/components/feature-access/DisabledActionWrapper";
+import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface Payment {
   id: string;
@@ -277,24 +280,36 @@ const Payments = () => {
 
   return (
     <DashboardLayout>
-      <div className="bg-tint-gray p-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-primary">Payments</h1>
-            <p className="text-muted-foreground">
-              Track rent payments and financial transactions
-            </p>
+      <FeatureGate
+        feature={FEATURES.MANAGE_PAYMENTS}
+        fallbackTitle="Payment Management"
+        fallbackDescription="Record and track rent payments with automated reconciliation."
+        showUpgradePrompt={true}
+      >
+        <div className="bg-tint-gray p-6 space-y-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Payments</h1>
+              <p className="text-muted-foreground">
+                Track rent payments and financial transactions
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <DisabledActionWrapper
+                feature={FEATURES.MANAGE_PAYMENTS}
+                fallbackTitle="Payment Management Required"
+                fallbackDescription="Upgrade to record payments"
+              >
+                <RecordPaymentDialog
+                  tenants={tenants}
+                  leases={leases}
+                  onPaymentRecorded={fetchPayments}
+                />
+              </DisabledActionWrapper>
+              <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />
+            </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <RecordPaymentDialog
-              tenants={tenants}
-              leases={leases}
-              onPaymentRecorded={fetchPayments}
-            />
-            <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />
-          </div>
-        </div>
 
         {/* Period Filter & KPI Summary */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
@@ -430,7 +445,8 @@ const Payments = () => {
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </FeatureGate>
     </DashboardLayout>
   );
 };

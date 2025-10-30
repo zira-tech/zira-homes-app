@@ -13,7 +13,10 @@ export interface SubUser {
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
   status: string;
   created_at: string;
@@ -32,12 +35,16 @@ export interface CreateSubUserData {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
     manage_leases: boolean;
     manage_maintenance: boolean;
+    manage_payments: boolean;
     view_reports: boolean;
+    manage_expenses: boolean;
+    send_messages: boolean;
   };
 }
 
@@ -47,54 +54,75 @@ export const useSubUsers = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchSubUsers = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('No authenticated user, skipping sub-user fetch');
+      return;
+    }
     
     setLoading(true);
+    
     try {
-      // Fetch sub-users first
-      const { data: subUsersData, error: subUsersError } = await supabase
-        .from('sub_users')
-        .select('*')
-        .eq('landlord_id', user.id)
-        .eq('status', 'active');
-
-      if (subUsersError) throw subUsersError;
-
-      // Then fetch profiles for those who have user_id
-      const userIds = subUsersData?.filter(su => su.user_id).map(su => su.user_id) || [];
-      let profilesData: any[] = [];
+      console.log('Fetching sub-users for landlord:', user.id);
       
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email, phone')
-          .in('id', userIds);
+      // Use supabase client invoke for better error handling and fallbacks
+      const { data, error } = await supabase.functions.invoke('list-landlord-sub-users', {
+        body: {}
+      });
 
-        if (profilesError) throw profilesError;
-        profilesData = profiles || [];
+      if (error) {
+        console.error('Failed to fetch sub-users:', error);
+        toast.error('Error Loading Sub-Users', {
+          description: `Failed to load sub-users. ${error.message || 'Please try again.'}`
+        });
+        setSubUsers([]);
+        return;
       }
 
-      // Transform and merge the data
-      const transformedData: SubUser[] = (subUsersData || []).map(item => {
-        const profile = profilesData.find(p => p.id === item.user_id);
-        return {
-          ...item,
-          permissions: typeof item.permissions === 'string' 
-            ? JSON.parse(item.permissions) 
-            : item.permissions,
-          profiles: profile ? {
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            email: profile.email,
-            phone: profile.phone
-          } : undefined
-        };
-      });
-      
-      setSubUsers(transformedData);
-    } catch (error) {
+      console.log('Sub-users fetch result:', data);
+
+      if (data?.success && data?.data) {
+        console.log('Setting sub-users:', data.data.length);
+        
+        // Transform the data
+        const transformedData: SubUser[] = (data.data || []).map((item: any) => {
+          // Handle profiles as either a nested object or array (Supabase can return either)
+          const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+          
+          return {
+            ...item,
+            permissions: typeof item.permissions === 'string' 
+              ? JSON.parse(item.permissions) 
+              : item.permissions,
+            profiles: profile ? {
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              email: profile.email,
+              phone: profile.phone
+            } : undefined
+          };
+        });
+        
+        setSubUsers(transformedData);
+        
+        // Show info toast if no sub-users found
+        if (transformedData.length === 0) {
+          toast.info('No Sub-Users', {
+            description: 'No active sub-users found for this account'
+          });
+        }
+      } else {
+        console.error('Sub-users fetch unsuccessful:', data);
+        toast.error('Error Loading Sub-Users', {
+          description: data?.error || 'Could not load sub-users'
+        });
+        setSubUsers([]);
+      }
+    } catch (error: any) {
       console.error('Error fetching sub-users:', error);
-      toast.error('Failed to load sub-users');
+      toast.error('Error', {
+        description: error.message || 'Failed to load sub-users'
+      });
+      setSubUsers([]);
     } finally {
       setLoading(false);
     }
@@ -113,6 +141,17 @@ export const useSubUsers = () => {
     try {
       // 1) Server proxy (service-role) — richest error details
       try {
+        const payload = {
+          email: data.email,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone: data.phone || null,
+          title: data.title || null,
+          password: data.password || null,
+          permissions: data.permissions,
+          ...(user?.id ? { landlord_id: user.id } : {})
+        };
+        
         const res = await fetch('/api/edge/create-sub-user', {
           method: 'POST',
           headers: {
@@ -120,7 +159,7 @@ export const useSubUsers = () => {
             ...(access ? { Authorization: `Bearer ${access}` } : {}),
             ...(user?.id ? { 'x-landlord-id': user.id } : {}),
           },
-          body: JSON.stringify({ ...data, ...(user?.id ? { landlord_id: user.id } : {}) })
+          body: JSON.stringify(payload)
         });
         const text = await res.text().catch(() => '');
         let parsed: any; try { parsed = JSON.parse(text); } catch { parsed = null; }
@@ -130,11 +169,22 @@ export const useSubUsers = () => {
           throw new Error('server-proxy failed');
         }
 
-        if (parsed.temporary_password) {
-          toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${parsed.temporary_password}`, { duration: 10000 });
+        const wasCustomPassword = data.password && data.password.trim().length > 0;
+        const title = parsed.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
+        
+        let credentialsText: string;
+        if (wasCustomPassword) {
+          credentialsText = `Sub-user ${parsed.password_reset ? 'linked' : 'created'} successfully with your custom password.\n\nEmail: ${data.email}`;
+        } else if (parsed.temporary_password) {
+          credentialsText = `Email: ${data.email}\nPassword: ${parsed.temporary_password}\n\n${parsed.instructions || 'Share these credentials securely'}`;
         } else {
-          toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
+          credentialsText = parsed.message || "Sub-user added successfully";
         }
+        
+        toast.success(title, { 
+          description: credentialsText,
+          duration: 15000, // 15 seconds for credentials
+        });
         fetchSubUsers();
         return;
       } catch (e) {}
@@ -192,11 +242,22 @@ export const useSubUsers = () => {
         throw new Error('invoke-result failed');
       }
 
-      if (iData.temporary_password) {
-        toast.success(`Sub-user created successfully! Share these credentials: ${data.email} / ${iData.temporary_password}`, { duration: 10000 });
+      const wasCustomPassword = data.password && data.password.trim().length > 0;
+      const title = iData.password_reset ? "Sub-User Linked - Password Reset" : "Sub-User Created";
+      
+      let credentialsText: string;
+      if (wasCustomPassword) {
+        credentialsText = `Sub-user ${iData.password_reset ? 'linked' : 'created'} successfully with your custom password.\n\nEmail: ${data.email}`;
+      } else if (iData.temporary_password) {
+        credentialsText = `Email: ${data.email}\nPassword: ${iData.temporary_password}\n\n${iData.instructions || 'Share these credentials securely'}`;
       } else {
-        toast.success(`Sub-user added successfully for ${data.email}`, { duration: 6000 });
+        credentialsText = iData.message || "Sub-user added successfully";
       }
+      
+      toast.success(title, { 
+        description: credentialsText,
+        duration: 15000, // 15 seconds for credentials
+      });
       fetchSubUsers();
       return;
     } catch (primaryError: any) {
@@ -222,9 +283,33 @@ export const useSubUsers = () => {
         throw new Error(friendly);
       }
 
-      const msg = JSON.stringify({ error: primaryError?.message || 'Failed to create sub-user', diagnostics });
-      toast.error(msg);
-      throw new Error(msg);
+      // Show user-friendly error message
+      const errorMessage = primaryError?.message || 'Failed to create sub-user. Please try again.';
+      
+      // Extract the most relevant error detail for the user
+      let detailMessage = '';
+      try {
+        for (const d of diagnostics) {
+          if (d.body && typeof d.body === 'object' && d.body.error) {
+            detailMessage = d.body.error;
+            break;
+          }
+          if (d.message && typeof d.message === 'string') {
+            detailMessage = d.message;
+            break;
+          }
+        }
+      } catch {}
+      
+      toast.error("Failed to Create Sub-User", {
+        description: detailMessage || errorMessage,
+        duration: 8000,
+      });
+      
+      // Log full diagnostics for debugging
+      console.error('Full error diagnostics:', { error: primaryError, diagnostics });
+      
+      throw new Error(errorMessage);
     }
   };
 

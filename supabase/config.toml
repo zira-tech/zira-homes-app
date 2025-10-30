@@ -24,6 +24,9 @@ verify_jwt = true
 [functions.create-sub-user]
 verify_jwt = true
 
+[functions.list-landlord-sub-users]
+verify_jwt = true
+
 [functions.get-sms-provider]
 verify_jwt = true
 
@@ -82,4 +85,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.save-mpesa-credentials]
+verify_jwt = true
+
+[functions.send-sms-with-logging]
+verify_jwt = false
+
+[functions.test-sms]
+verify_jwt = false
+
+[functions.admin-assign-plan]
 verify_jwt = true

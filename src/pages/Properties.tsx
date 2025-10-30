@@ -19,6 +19,9 @@ import { ContextualUpgradePrompt } from "@/components/feature-access/ContextualU
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
+import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Property {
   id: string;
@@ -45,6 +48,7 @@ const Properties = () => {
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [isMobile, setIsMobile] = useState(false);
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
+  const { currentStep, dismissStep } = useGettingStarted();
 
   useEffect(() => {
     fetchProperties();
@@ -136,8 +140,29 @@ const Properties = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
+        {/* Getting Started Card */}
+        {currentStep === "add_property" && properties.length === 0 && (
+          <GettingStartedCard
+            stepId="add_property"
+            title="Let's add your first property"
+            description="Start by adding a property to manage your real estate portfolio. This is the foundation of your property management system."
+            icon={Building2}
+            actionLabel="Add Property"
+            onAction={() => {
+              const addButton = document.querySelector('[data-tour="add-property-btn"] button') as HTMLButtonElement;
+              addButton?.click();
+            }}
+            onDismiss={() => dismissStep("add_property")}
+            currentStep={1}
+            totalSteps={4}
+          />
+        )}
+        
+        {/* Tour Prompt */}
+        <InteractiveTour tourId="add_property_tour" showPrompt={properties.length === 0} />
+        
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-tour="properties-header">
           <div>
             <h1 className="text-3xl font-bold text-primary">Properties</h1>
             <p className="text-muted-foreground">
@@ -145,14 +170,12 @@ const Properties = () => {
             </p>
           </div>
           <div className="flex items-center gap-3 self-stretch sm:self-auto">
-            <FeatureGate 
-              feature={FEATURES.BULK_OPERATIONS}
-              fallbackTitle="Bulk Operations"
-              fallbackDescription="Upload multiple properties at once with CSV import."
-            >
+            <div data-tour="bulk-upload-btn">
               <BulkUploadDropdown type="properties" onSuccess={fetchProperties} />
-            </FeatureGate>
-            <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
+            </div>
+            <div data-tour="add-property-btn">
+              <PropertyUnitsWizard onPropertyAdded={fetchProperties} />
+            </div>
           </div>
         </div>
 
@@ -191,7 +214,7 @@ const Properties = () => {
         {/* Search, Filters & View Toggle */}
         <Card className="bg-card p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+            <div className="flex flex-col sm:flex-row gap-4 flex-1" data-tour="search-filter">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -216,7 +239,7 @@ const Properties = () => {
             </div>
             
             {/* View Toggle */}
-            <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1">
+            <div className="flex items-center space-x-2 bg-secondary rounded-lg p-1" data-tour="view-toggle">
               <Button
                 variant={viewMode === "kanban" ? "default" : "ghost"}
                 size="sm"

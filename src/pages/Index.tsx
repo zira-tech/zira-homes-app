@@ -8,6 +8,7 @@ import { OptimizedChartsSection } from "@/components/optimized/OptimizedChartsSe
 import { GatedOptimizedStatsCards } from "@/components/optimized/GatedOptimizedStatsCards";
 import { GatedOptimizedChartsSection } from "@/components/optimized/GatedOptimizedChartsSection";
 import { GatedFloatingActionMenu } from "@/components/dashboard/GatedFloatingActionMenu";
+import { GettingStartedWidget } from "@/components/onboarding/GettingStartedWidget";
 import { useLandlordDashboard } from "@/hooks/useLandlordDashboard";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useRouteTitle } from "@/hooks/useRouteTitle";
@@ -17,6 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { SubUserBanner } from "@/components/SubUserBanner";
 
 export default function Index() {
   useRouteTitle();
@@ -36,7 +38,7 @@ export default function Index() {
       : 0,
     totalExpenses: 0, // Will be fetched separately
     netIncome: data.property_stats.monthly_revenue,
-    activeTenants: data.property_stats.active_tenants ?? data.property_stats.occupied_units, // Prefer tenants RPC count, fallback to occupied units
+    activeTenants: (data.property_stats as any).active_tenants ?? data.property_stats.occupied_units, // Prefer tenants RPC count, fallback to occupied units
     maintenanceRequests: data?.pending_maintenance?.length || 0
   } : null;
 
@@ -80,6 +82,9 @@ export default function Index() {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-3 sm:p-4 lg:p-6 space-y-6 sm:space-y-8">
+        {/* Sub-User Banner */}
+        <SubUserBanner />
+        
         {/* Health Check Banner */}
         <HealthCheckBanner />
         
@@ -113,6 +118,8 @@ export default function Index() {
         )}
 
         {/* KPI Summary Cards - Using optimized version with actual data */}
+        <GettingStartedWidget />
+        
         <Suspense fallback={<LoadingSkeleton type="card" count={4} />}>
           <GatedOptimizedStatsCards stats={stats} isLoading={loading} />
         </Suspense>

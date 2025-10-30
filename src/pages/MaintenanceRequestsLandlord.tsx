@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/context/RoleContext";
 import { toast } from "sonner";
 import { sendMaintenanceNotification } from "@/utils/notifications";
 import { FeatureGate } from "@/components/ui/feature-gate";
@@ -102,6 +103,8 @@ interface MaintenanceRequest {
 
 const MaintenanceRequestsLandlord = () => {
   const { user } = useAuth();
+  const { isSubUser, landlordId } = useRole();
+  const targetId = (isSubUser && landlordId) ? landlordId : user?.id;
   const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
   const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -133,7 +136,7 @@ const MaintenanceRequestsLandlord = () => {
       const { data: userProperties, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name")
-        .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+        .or(`owner_id.eq.${targetId},manager_id.eq.${targetId}`);
 
       if (propertiesError) throw propertiesError;
       

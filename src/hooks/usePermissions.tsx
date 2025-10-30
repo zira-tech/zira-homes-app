@@ -1,58 +1,76 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/context/RoleContext';
 
-interface Permission {
-  permission_name: string;
-  category: string;
-  description: string;
+export interface SubUserPermissions {
+  manage_properties: boolean;
+  manage_tenants: boolean;
+  manage_leases: boolean;
+  manage_maintenance: boolean;
+  manage_payments: boolean;
+  view_reports: boolean;
+  manage_expenses: boolean;
+  send_messages: boolean;
 }
 
 export const usePermissions = () => {
   const { user } = useAuth();
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const { isSubUser, subUserPermissions } = useRole();
+  const [permissions, setPermissions] = useState<SubUserPermissions | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserPermissions = useCallback(async () => {
     if (!user) {
-      setPermissions([]);
+      setPermissions(null);
       setLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .rpc('get_user_permissions', { _user_id: user.id });
+      // If user is a sub-user, use their assigned permissions
+      if (isSubUser && subUserPermissions) {
+        setPermissions(subUserPermissions as any as SubUserPermissions);
+        setLoading(false);
+        return;
+      }
 
-      if (error) throw error;
-      
-      // Map the RPC response to match the Permission interface
-      const mappedPermissions: Permission[] = (data || []).map(item => ({
-        permission_name: item.permission_name,
-        category: 'general', // Default category since RPC doesn't return this
-        description: item.permission_name // Use permission name as description
-      }));
-      
-      setPermissions(mappedPermissions);
+      // For non-sub-users, grant all permissions
+      setPermissions({
+        manage_properties: true,
+        manage_tenants: true,
+        manage_leases: true,
+        manage_maintenance: true,
+        manage_payments: true,
+        view_reports: true,
+        manage_expenses: true,
+        send_messages: true,
+      });
     } catch (error) {
       console.error('Error fetching user permissions:', error);
-      setPermissions([]);
+      setPermissions(null);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isSubUser, subUserPermissions]);
 
-  const hasPermission = useCallback((permission: string) => {
-    return permissions.some(p => p.permission_name === permission);
-  }, [permissions]);
+  const hasPermission = useCallback((permission: keyof SubUserPermissions | string) => {
+    if (!permissions) return false;
+    
+    // For sub-user permissions
+    if (permission in permissions) {
+      const value = permissions[permission as keyof SubUserPermissions];
+      // Explicitly treat undefined/null as false
+      return value === true;
+    }
+    
+    // For admin/other permissions, always return true for non-sub-users
+    return !isSubUser;
+  }, [permissions, isSubUser]);
 
-  const hasAnyPermission = useCallback((permissionList: string[]) => {
+  const hasAnyPermission = useCallback((permissionList: (keyof SubUserPermissions | string)[]) => {
     return permissionList.some(permission => hasPermission(permission));
   }, [hasPermission]);
-
-  const getPermissionsByCategory = useCallback((category: string) => {
-    return permissions.filter(p => p.category === category);
-  }, [permissions]);
 
   useEffect(() => {
     fetchUserPermissions();
@@ -63,7 +81,6 @@ export const usePermissions = () => {
     loading,
     hasPermission,
     hasAnyPermission,
-    getPermissionsByCategory,
     refetch: fetchUserPermissions
   };
 };

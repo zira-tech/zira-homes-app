@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -158,16 +157,16 @@ serve(async (req) => {
     // Authorization checks based on payment type
     let authorized = false;
     let landlordConfigId = landlordId;
-    
+
     if (paymentType === 'service-charge') {
       // Service charge: Only landlords can pay their own service charges or admins
       const { data: userRoles } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id);
-      
+
       const isAdmin = userRoles?.some(r => r.role === 'Admin');
-      
+
       if (isAdmin) {
         authorized = true;
       } else if (invoiceId) {
@@ -178,12 +177,16 @@ serve(async (req) => {
           .eq('id', invoiceId)
           .eq('landlord_id', user.id)
           .single();
-        
+
         if (serviceInvoice) {
           authorized = true;
           landlordConfigId = serviceInvoice.landlord_id;
         }
       }
+    } else if (paymentType === 'subscription') {
+      // Subscription payment: Any authenticated user can pay for their own subscription
+      authorized = true;
+      landlordConfigId = user.id;
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
       if (invoiceId) {
@@ -208,13 +211,13 @@ serve(async (req) => {
           const isTenant = invoiceAuth.tenants.user_id === user.id;
           const isOwner = invoiceAuth.leases.units.properties.owner_id === user.id;
           const isManager = invoiceAuth.leases.units.properties.manager_id === user.id;
-          
+
           const { data: userRoles } = await supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id);
           const isAdmin = userRoles?.some(r => r.role === 'Admin');
-          
+
           if (isTenant || isOwner || isManager || isAdmin) {
             authorized = true;
             landlordConfigId = invoiceAuth.leases.units.properties.owner_id;
@@ -264,35 +267,79 @@ serve(async (req) => {
         .eq('landlord_id', landlordConfigId)
         .eq('is_active', true)
         .maybeSingle();
-      
+
       mpesaConfig = config;
       console.log('Landlord M-Pesa config found:', !!mpesaConfig);
+    }
+
+    // Helper function to decrypt credentials
+    async function decryptCredential(encrypted: string, key: string): Promise<string> {
+      try {
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          keyData,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt']
+        );
+
+        // Decode from base64
+        const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const ciphertext = combined.slice(12);
+
+        const decrypted = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv },
+          cryptoKey,
+          ciphertext
+        );
+
+        return new TextDecoder().decode(decrypted);
+      } catch (e) {
+        console.error('Decryption error:', e);
+        throw new Error('Failed to decrypt credential');
+      }
     }
 
     // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
     let consumerKey, consumerSecret, shortcode, passkey;
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
-    
+
     if (mpesaConfig && mpesaConfig.consumer_key_encrypted) {
       // Decrypt landlord-specific encrypted credentials
       const encryptionKey = Deno.env.get('DATA_ENCRYPTION_KEY');
       if (!encryptionKey) {
-        throw new Error('Encryption key not configured');
-      }
-      
-      try {
-        // Note: In production, implement proper decryption using the database decrypt function
-        consumerKey = mpesaConfig.consumer_key;
-        consumerSecret = mpesaConfig.consumer_secret;
-        shortcode = mpesaConfig.business_shortcode;
-        passkey = mpesaConfig.passkey;
-      } catch (decryptError) {
-        console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
+        console.error('Encryption key not configured');
         // Fallback to environment variables
         consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
         consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
         shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
         passkey = Deno.env.get('MPESA_PASSKEY');
+      } else {
+        try {
+          // Decrypt all credentials in parallel
+          const [decryptedKey, decryptedSecret, decryptedShortcode, decryptedPasskey] = await Promise.all([
+            decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.shortcode_encrypted, encryptionKey),
+            decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey)
+          ]);
+
+          consumerKey = decryptedKey;
+          consumerSecret = decryptedSecret;
+          shortcode = decryptedShortcode;
+          passkey = decryptedPasskey;
+          console.log('Successfully decrypted landlord M-Pesa credentials');
+        } catch (decryptError) {
+          console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
+          // Fallback to environment variables
+          consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
+          consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
+          shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
+          passkey = Deno.env.get('MPESA_PASSKEY');
+        }
       }
     } else {
       // Use secure environment variables
@@ -456,7 +503,7 @@ serve(async (req) => {
       // For service charge payments, store additional metadata
       if (paymentType === 'service-charge') {
         console.log('Processing service charge payment, validating invoice:', invoiceId);
-        
+
         // Validate that the service charge invoice exists before processing
         if (invoiceId) {
           // Use admin client to bypass RLS for invoice validation
@@ -480,9 +527,9 @@ serve(async (req) => {
                 invoiceId: invoiceId,
                 details: invoiceCheckError?.message
               }),
-              { 
-                status: 400, 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
               }
             )
           }
@@ -503,9 +550,9 @@ serve(async (req) => {
                 error: 'Service charge invoice already paid',
                 invoiceId: invoiceId
               }),
-              { 
-                status: 400, 
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
               }
             )
           }
@@ -517,6 +564,15 @@ serve(async (req) => {
           landlord_id: landlordConfigId
         }
         console.log('Service charge metadata added to transaction:', transactionData.metadata);
+      } else if (paymentType === 'subscription') {
+        // For subscription payments, store subscription metadata
+        console.log('Processing subscription payment for user:', user.id);
+        transactionData.metadata = {
+          payment_type: 'subscription',
+          landlord_id: user.id,
+          account_reference: accountReference
+        }
+        console.log('Subscription metadata added to transaction:', transactionData.metadata);
       }
 
       console.log('Creating M-Pesa transaction record:', {
@@ -577,14 +633,18 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in STK push:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Internal server error',
-        details: error.message 
+        details: errorMessage,
+        stack: errorStack,
+        timestamp: new Date().toISOString()
       }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
   }

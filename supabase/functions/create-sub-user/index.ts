@@ -12,6 +12,7 @@ interface CreateSubUserRequest {
   last_name: string;
   phone?: string;
   title?: string;
+  password?: string;
   permissions: {
     manage_properties: boolean;
     manage_tenants: boolean;
@@ -86,7 +87,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestData: CreateSubUserRequest = await req.json();
-    const { email, first_name, last_name, phone, title, permissions } = requestData;
+    const { email, first_name, last_name, phone, title, password, permissions } = requestData;
 
     if (!email || !first_name || !last_name) {
       return new Response(
@@ -95,7 +96,15 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log('Creating sub-user:', { email, first_name, last_name, landlord_id: landlord.id });
+    // Validate custom password if provided
+    if (password && password.trim().length > 0 && password.trim().length < 8) {
+      return new Response(
+        JSON.stringify({ error: 'Password must be at least 8 characters', success: false }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Creating sub-user:', { email, first_name, last_name, landlord_id: landlord.id, custom_password: !!password });
 
     // Find existing user via profiles table by unique email
     const { data: existingProfile, error: profileLookupErr } = await supabase
@@ -111,7 +120,17 @@ const handler = async (req: Request): Promise<Response> => {
 
     let userId: string;
     let isNewUser = false;
-    let tempPassword: string | null = null;
+    let isPasswordReset = false;
+    let isCustomPassword = false;
+    // Use custom password if provided, otherwise generate one
+    const tempPassword = password && password.trim().length > 0 
+      ? password.trim() 
+      : `SubUser${Math.floor(Math.random() * 100000)}!${Date.now().toString(36).slice(-4)}`;
+    
+    if (password && password.trim().length > 0) {
+      isCustomPassword = true;
+      console.log('Using custom password provided by landlord');
+    }
 
     if (existingProfile?.id) {
       userId = existingProfile.id;
@@ -132,7 +151,30 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      // Optionally update profile fields if provided
+      // Reset password for existing user to allow landlord to share new credentials
+      console.log('Resetting password for existing user:', userId);
+      const { error: passwordResetError } = await supabase.auth.admin.updateUserById(userId, {
+        password: tempPassword,
+        user_metadata: {
+          ...existingProfile,
+          first_name: first_name || existingProfile.first_name,
+          last_name: last_name || existingProfile.last_name,
+          phone: phone || existingProfile.phone,
+          role: 'SubUser',
+        }
+      });
+
+      if (passwordResetError) {
+        console.error('Error resetting password for existing user:', passwordResetError);
+        return new Response(
+          JSON.stringify({ error: `Failed to reset password: ${passwordResetError.message}`, success: false }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      isPasswordReset = true;
+
+      // Update profile fields if provided
       const shouldUpdate = Boolean(first_name || last_name || phone);
       if (shouldUpdate) {
         const { error: profileUpdateError } = await supabase
@@ -148,8 +190,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
       }
     } else {
-      // Create new auth user via Admin API
-      tempPassword = `TempPass${Math.floor(Math.random() * 10000)}!`;
+      // Create new auth user via Admin API with generated password
       const { data: newUser, error: createUserError } = await supabase.auth.admin.createUser({
         email,
         password: tempPassword,
@@ -159,7 +200,7 @@ const handler = async (req: Request): Promise<Response> => {
           last_name,
           phone,
           created_by: landlord.id,
-          role: 'sub_user',
+          role: 'SubUser',
         },
       });
 
@@ -174,18 +215,30 @@ const handler = async (req: Request): Promise<Response> => {
       userId = newUser.user.id;
       isNewUser = true;
 
-      // Create profile record
-      const { error: profileError } = await supabase
+      // Check if profile already exists (auth trigger may have created it)
+      const { data: existingProfileCheck } = await supabase
         .from('profiles')
-        .insert({ id: userId, first_name, last_name, email, phone: phone || null });
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
 
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-        await supabase.auth.admin.deleteUser(userId);
-        return new Response(
-          JSON.stringify({ error: `Failed to create user profile: ${profileError.message}`, success: false }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Create profile record only if it doesn't exist
+      if (!existingProfileCheck) {
+        console.log('Creating profile for new user:', userId);
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({ id: userId, first_name, last_name, email, phone: phone || null });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          await supabase.auth.admin.deleteUser(userId);
+          return new Response(
+            JSON.stringify({ error: `Failed to create user profile: ${profileError.message}`, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        console.log('Profile already exists for user:', userId);
       }
     }
 
@@ -212,19 +265,41 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Assign SubUser role in user_roles table
+    const { error: roleError } = await supabase
+      .from('user_roles')
+      .upsert({
+        user_id: userId,
+        role: 'SubUser'
+      }, {
+        onConflict: 'user_id,role'
+      });
+
+    if (roleError) {
+      console.warn('Failed to assign SubUser role (non-critical):', roleError);
+    } else {
+      console.log('SubUser role assigned successfully to user:', userId);
+    }
+
     const responseMessage = isNewUser
       ? 'Sub-user created successfully with new account'
-      : 'Sub-user created successfully with existing account';
+      : isPasswordReset 
+        ? 'Sub-user linked successfully - password has been reset'
+        : 'Sub-user created successfully with existing account';
 
     return new Response(
       JSON.stringify({
         success: true,
         message: responseMessage,
         user_id: userId,
-        temporary_password: tempPassword,
-        instructions: tempPassword
-          ? 'The user should change their password on first login'
-          : 'The user can log in with their existing credentials',
+        temporary_password: isCustomPassword ? undefined : tempPassword,
+        password_reset: isPasswordReset,
+        is_new_user: isNewUser,
+        is_custom_password: isCustomPassword,
+        email: email,
+        instructions: isCustomPassword 
+          ? 'Sub-user created with your custom password.' 
+          : 'Share these credentials securely with the sub-user. They should change their password on first login.',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

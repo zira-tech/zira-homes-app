@@ -179,13 +179,13 @@ export function UpgradeConfirmationModal({
               </Button>
             </div>
 
-            {/* Security Notice */}
+            {/* M-Pesa Payment Notice */}
             <div className="bg-muted/50 rounded-lg p-3 border">
               <div className="flex items-start gap-2">
-                <Shield className="h-4 w-4 text-blue-500 mt-0.5" />
+                <Shield className="h-4 w-4 text-green-500 mt-0.5" />
                 <div className="text-xs text-muted-foreground">
-                  <p className="font-medium mb-1">Secure Payment</p>
-                  <p>All payments are processed securely through Stripe. Your card information is never stored on our servers.</p>
+                  <p className="font-medium mb-1">M-Pesa Payment</p>
+                  <p>You'll receive an M-Pesa prompt on your phone. Enter your PIN to complete the payment securely.</p>
                 </div>
               </div>
             </div>

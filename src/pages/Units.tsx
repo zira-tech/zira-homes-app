@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/context/RoleContext";
 import { AddUnitDialog } from "@/components/units/AddUnitDialog";
 import { UnitDetailsDialog } from "@/components/units/UnitDetailsDialog";
 import { BulkUploadDropdown } from "@/components/bulk-upload/BulkUploadDropdown";
@@ -20,6 +21,8 @@ import { FeatureGate } from "@/components/ui/feature-gate";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Unit {
   id: string;
@@ -49,6 +52,8 @@ interface Property {
 
 const Units = () => {
   const { user } = useAuth();
+  const { isSubUser, landlordId } = useRole();
+  const targetId = (isSubUser && landlordId) ? landlordId : (user?.id as string);
   const [units, setUnits] = useState<Unit[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -58,6 +63,7 @@ const Units = () => {
   const [filterProperty, setFilterProperty] = useState("all");
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 12 });
+  const { currentStep, dismissStep } = useGettingStarted();
 
   const fetchUnits = async () => {
     try {
@@ -72,7 +78,7 @@ const Units = () => {
       const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
         .select("id, name, address, owner_id, manager_id")
-        .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`);
+        .or(`owner_id.eq.${targetId},manager_id.eq.${targetId}`);
 
       if (propertiesError) {
         console.error("❌ Properties query error:", propertiesError);
@@ -178,7 +184,7 @@ const Units = () => {
       const { data, error } = await supabase
         .from("properties")
         .select("id, name, property_type")
-        .or(`owner_id.eq.${user.id},manager_id.eq.${user.id}`)
+        .or(`owner_id.eq.${targetId},manager_id.eq.${targetId}`)
         .order("name");
 
       if (error) throw error;
@@ -212,6 +218,24 @@ const Units = () => {
   return (
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
+        {/* Getting Started Card */}
+        {currentStep === "add_units" && units.length === 0 && (
+          <GettingStartedCard
+            stepId="add_units"
+            title="Create your first unit"
+            description="Units are the individual rental spaces within your properties. Add units to start managing rentals and tenants."
+            icon={LayoutGrid}
+            actionLabel="Add Unit"
+            onAction={() => {
+              const addButton = document.querySelector('.flex.items-center.gap-3 button:last-child') as HTMLButtonElement;
+              addButton?.click();
+            }}
+            onDismiss={() => dismissStep("add_units")}
+            currentStep={2}
+            totalSteps={4}
+          />
+        )}
+        
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -221,13 +245,7 @@ const Units = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <FeatureGate 
-              feature={FEATURES.BULK_OPERATIONS}
-              fallbackTitle="Bulk Operations"
-              fallbackDescription="Upload multiple units at once with CSV import."
-            >
-              <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
-            </FeatureGate>
+            <BulkUploadDropdown type="units" onSuccess={fetchUnits} />
             <AddUnitDialog onUnitAdded={fetchUnits} />
           </div>
         </div>

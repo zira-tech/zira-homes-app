@@ -178,7 +178,7 @@ export const CreateInvoiceDialog = ({ onInvoiceCreated }: CreateInvoiceDialogPro
 
       // If the invoices table includes landlord_id (some schemas), include it; otherwise skip
       try {
-        const { data: colInfo } = await supabase.rpc('get_table_columns', { p_table_name: 'invoices' }).catch(() => ({ data: null }));
+        const { data: colInfo } = await (supabase as any).rpc('get_table_columns', { p_table_name: 'invoices' }).catch(() => ({ data: null }));
         const hasLandlordCol = Array.isArray(colInfo) && colInfo.some((c: any) => c.column_name === 'landlord_id');
         if (hasLandlordCol) insertPayload.landlord_id = landlordId;
       } catch (e) {

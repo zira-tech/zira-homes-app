@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { UpgradeButton } from "@/components/billing";
 import { HeaderTrialCountdown } from "@/components/trial/HeaderTrialCountdown";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
+import { TourLauncher } from "@/components/onboarding/TourLauncher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +77,8 @@ export function Header() {
           </div>
           
           <NotificationsPopover />
+          
+          <TourLauncher />
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

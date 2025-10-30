@@ -41,6 +41,13 @@ interface UserProfile {
     trial_end_date?: string;
     daysRemaining: number;
   };
+  sub_user_info?: {
+    landlord_id: string;
+    landlord_name: string;
+    landlord_email: string;
+    title: string | null;
+    permissions: Record<string, boolean>;
+  };
 }
 
 interface AddUserFormData {
@@ -79,6 +86,13 @@ const UserManagement = () => {
     phone: "",
     role: ""
   });
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>("all");
+  
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const { hasPermission } = usePermissions();
@@ -90,44 +104,48 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [page, pageSize]);
+  }, [page, pageSize, searchQuery, roleFilter, statusFilter, subscriptionFilter]);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (page !== 1) {
+      setPage(1);
+    }
+  }, [searchQuery, roleFilter, statusFilter, subscriptionFilter]);
 
   const fetchUsers = async () => {
     try {
-      // First get total count
-      const { count } = await supabase
-        .from("profiles")
-        .select('*', { count: 'exact', head: true });
-
-      setTotalUsers(count || 0);
-
-      // Then get paginated data
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          created_at
-        `)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
+      // Use the optimized RPC function to fetch users with all related data
+      const { data: result, error } = await supabase.rpc('admin_list_profiles_with_roles', {
+        p_limit: pageSize,
+        p_offset: offset
+      });
 
       if (error) throw error;
+
+      const response = result as any;
+      if (!response?.success) {
+        if (response?.error === 'forbidden') {
+          toast({
+            title: "Access Denied",
+            description: "Admin privileges required to view users",
+            variant: "destructive",
+          });
+          setUsers([]);
+          setTotalUsers(0);
+          setLoading(false);
+          return;
+        }
+        throw new Error(response?.error || "Failed to fetch users");
+      }
+
+      setTotalUsers(response.total_count || 0);
       
-      // Fetch user roles and subscriptions only for the current page
-      const usersWithRolesAndSubscriptions = await Promise.all(
-        (data || []).map(async (user) => {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id);
-          
-          // Check if user has property-related role
+      // Fetch subscriptions and sub-user info for users with property roles
+      const usersWithSubscriptions = await Promise.all(
+        (response.users || []).map(async (user: any) => {
           const propertyRoles = ['Landlord', 'Manager', 'Agent'];
-          const hasPropertyRole = roles?.some(r => propertyRoles.includes(r.role));
+          const hasPropertyRole = user.user_roles?.some((r: any) => propertyRoles.includes(r.role));
           
           let subscription = null;
           if (hasPropertyRole) {
@@ -135,10 +153,9 @@ const UserManagement = () => {
               .from("landlord_subscriptions")
               .select("status, trial_end_date")
               .eq("landlord_id", user.id)
-              .single();
+              .maybeSingle();
             
             if (subscriptionData) {
-              // Calculate trial days remaining
               let daysRemaining = 0;
               if (subscriptionData.trial_end_date) {
                 const trialEndDate = new Date(subscriptionData.trial_end_date);
@@ -153,15 +170,72 @@ const UserManagement = () => {
             }
           }
           
+          // Check if user is a sub-user and fetch their info
+          let subUserInfo = null;
+          const isSubUser = user.user_roles?.some((r: any) => r.role === 'SubUser');
+          if (isSubUser) {
+            const { data: subUserData } = await supabase
+              .from("admin_sub_user_view")
+              .select("*")
+              .eq("user_id", user.id)
+              .eq("status", "active")
+              .maybeSingle();
+            
+            if (subUserData) {
+              subUserInfo = {
+                landlord_id: subUserData.landlord_id,
+                landlord_name: `${subUserData.landlord_first_name || ''} ${subUserData.landlord_last_name || ''}`.trim(),
+                landlord_email: subUserData.landlord_email,
+                title: subUserData.title,
+                permissions: subUserData.permissions as Record<string, boolean>
+              };
+            }
+          }
+          
           return {
             ...user,
-            user_roles: roles || [],
-            subscription
+            subscription,
+            sub_user_info: subUserInfo
           };
         })
       );
       
-      setUsers(usersWithRolesAndSubscriptions as UserProfile[]);
+      // Apply client-side filters (since RPC doesn't support filtering yet)
+      let filteredUsers = usersWithSubscriptions as UserProfile[];
+      
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filteredUsers = filteredUsers.filter(user => 
+          (user.first_name?.toLowerCase().includes(query) || false) ||
+          (user.last_name?.toLowerCase().includes(query) || false) ||
+          (user.email?.toLowerCase().includes(query) || false) ||
+          (user.phone?.toLowerCase().includes(query) || false)
+        );
+      }
+      
+      // Role filter
+      if (roleFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => getUserRole(user) === roleFilter);
+      }
+      
+      // Status filter
+      if (statusFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => getUserStatus(user) === statusFilter);
+      }
+      
+      // Subscription filter
+      if (subscriptionFilter !== "all") {
+        filteredUsers = filteredUsers.filter(user => {
+          if (subscriptionFilter === "trial") return user.subscription?.status === "trial";
+          if (subscriptionFilter === "active") return user.subscription?.status === "active";
+          if (subscriptionFilter === "expired") return user.subscription?.status === "trial_expired";
+          if (subscriptionFilter === "no_subscription") return !user.subscription;
+          return true;
+        });
+      }
+      
+      setUsers(filteredUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({
@@ -172,6 +246,14 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+    setSubscriptionFilter("all");
+    setPage(1);
   };
 
   const onAddUser = async (data: AddUserFormData) => {
@@ -593,6 +675,8 @@ const UserManagement = () => {
         return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
       case "Tenant":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+      case "SubUser":
+        return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
     }
@@ -698,6 +782,101 @@ const UserManagement = () => {
 
         {/* Data Integrity Monitor */}
         <DataIntegrityMonitor />
+        
+        {/* Filters Section */}
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-primary flex items-center justify-between">
+              <span>Filter Users</span>
+              {(searchQuery || roleFilter !== "all" || statusFilter !== "all" || subscriptionFilter !== "all") && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleClearFilters}
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear Filters
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Search</Label>
+                <Input
+                  placeholder="Name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="border-border bg-card"
+                />
+              </div>
+              
+              {/* Role Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Role</Label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {roles.map((role) => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Subscription Filter */}
+              <div className="space-y-2">
+                <Label className="text-primary text-sm">Subscription</Label>
+                <Select value={subscriptionFilter} onValueChange={setSubscriptionFilter}>
+                  <SelectTrigger className="border-border bg-card">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">All Subscriptions</SelectItem>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="no_subscription">No Subscription</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Active filters summary */}
+            {(searchQuery || roleFilter !== "all" || statusFilter !== "all" || subscriptionFilter !== "all") && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  Showing {users.length} of {totalUsers} users
+                  {searchQuery && ` matching "${searchQuery}"`}
+                  {roleFilter !== "all" && ` • Role: ${roleFilter}`}
+                  {statusFilter !== "all" && ` • Status: ${statusFilter}`}
+                  {subscriptionFilter !== "all" && ` • Subscription: ${subscriptionFilter}`}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Summary Stats */}
         <div className="grid gap-6 md:grid-cols-4">
@@ -770,6 +949,7 @@ const UserManagement = () => {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Parent Landlord</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Trial Status</TableHead>
                   <TableHead>Actions</TableHead>
@@ -778,13 +958,13 @@ const UserManagement = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       Loading users...
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       No users found
                     </TableCell>
                   </TableRow>
@@ -820,6 +1000,21 @@ const UserManagement = () => {
                             ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {user.sub_user_info ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-sm">{user.sub_user_info.landlord_name}</span>
+                            <span className="text-xs text-muted-foreground">{user.sub_user_info.landlord_email}</span>
+                            {user.sub_user_info.title && (
+                              <Badge variant="outline" className="w-fit text-xs">
+                                {user.sub_user_info.title}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                        <TableCell>
                          <Badge 

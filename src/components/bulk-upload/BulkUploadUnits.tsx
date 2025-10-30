@@ -208,7 +208,7 @@ export function BulkUploadUnits() {
         bathrooms: row["Bathrooms"] ? Number(row["Bathrooms"]) : null,
         amenities: row["Amenities"] ? String(row["Amenities"]).split(',').map(a => a.trim()) : null,
         description: row["Description"] ? String(row["Description"]) : null,
-        status: 'available'
+        status: 'vacant'
       }));
 
       const { error: unitsError } = await supabase

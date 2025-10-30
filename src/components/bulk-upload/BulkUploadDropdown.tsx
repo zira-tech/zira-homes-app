@@ -13,7 +13,7 @@ import { BulkUploadTenants } from "./BulkUploadTenants";
 import { BulkUploadUnits } from "./BulkUploadUnits";
 import { BulkUploadProperties } from "./BulkUploadProperties";
 import { BulkUploadHistory } from "./BulkUploadHistory";
-import { FeatureGate } from "@/components/ui/feature-gate";
+import { TrialFeatureBadge } from "@/components/trial/TrialFeatureBadge";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface BulkUploadDropdownProps {
@@ -63,35 +63,33 @@ export function BulkUploadDropdown({ type, onSuccess }: BulkUploadDropdownProps)
   };
 
   return (
-    <FeatureGate 
-      feature={FEATURES.BULK_OPERATIONS}
-      fallbackTitle="Bulk Operations"
-      fallbackDescription="Efficiently manage multiple properties with bulk upload and operations."
-    >
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Upload className="h-4 w-4" />
-            Bulk Actions
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem onClick={handleUploadClick} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Bulk Upload {config.label}
-          </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2">
-            <Download className="h-4 w-4" />
-            Download Template
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleHistoryClick} className="gap-2">
-            <FileText className="h-4 w-4" />
-            Upload History
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <>
+      <TrialFeatureBadge feature={FEATURES.BULK_OPERATIONS}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Bulk Actions
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
+            <DropdownMenuItem onClick={handleUploadClick} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Bulk Upload {config.label}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2">
+              <Download className="h-4 w-4" />
+              Download Template
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleHistoryClick} className="gap-2">
+              <FileText className="h-4 w-4" />
+              Upload History
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TrialFeatureBadge>
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -117,6 +115,6 @@ export function BulkUploadDropdown({ type, onSuccess }: BulkUploadDropdownProps)
           </div>
         </DialogContent>
       </Dialog>
-    </FeatureGate>
+    </>
   );
 }

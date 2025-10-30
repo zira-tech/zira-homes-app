@@ -18,6 +18,10 @@ import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { checkBackendReady } from "@/utils/backendHealth";
+import { useRole } from "@/context/RoleContext";
+import { InteractiveTour } from "@/components/onboarding/InteractiveTour";
+import { GettingStartedCard } from "@/components/onboarding/GettingStartedCard";
+import { useGettingStarted } from "@/hooks/useGettingStarted";
 
 interface Tenant {
   id: string;
@@ -58,6 +62,8 @@ const Tenants = () => {
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
   const [backendReady, setBackendReady] = useState<boolean>(true);
   const [backendReason, setBackendReason] = useState<string>("");
+  const { isSubUser, landlordId } = useRole();
+  const { currentStep, dismissStep } = useGettingStarted();
 
   useEffect(() => {
     (async () => {
@@ -93,7 +99,7 @@ const Tenants = () => {
 
         // Fallback: strictly scope to current landlord's portfolio (owner or manager)
         const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
+        const uid = (isSubUser && landlordId) ? landlordId : auth?.user?.id;
         if (!uid) throw new Error('Not authenticated');
 
         // 1) Get properties owned/managed by this user
@@ -264,7 +270,7 @@ const Tenants = () => {
   const fetchProperties = async () => {
     try {
       const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id;
+      const uid = (isSubUser && landlordId) ? landlordId : auth?.user?.id;
       if (!uid) throw new Error('Not authenticated');
 
       const { data, error } = await (supabase as any)
@@ -352,8 +358,29 @@ const Tenants = () => {
     <DashboardLayout>
       <div className="bg-tint-gray p-6 space-y-8">
         <div className="space-y-6">
+            {/* Getting Started Card */}
+            {currentStep === "add_tenants" && tenants.length === 0 && (
+              <GettingStartedCard
+                stepId="add_tenants"
+                title="Add your first tenant"
+                description="Start managing your tenants by adding their information. You can link them to units and generate invoices."
+                icon={Users}
+                actionLabel="Add Tenant"
+                onAction={() => {
+                  const addButton = document.querySelector('[data-tour="add-tenant-btn"] button') as HTMLButtonElement;
+                  addButton?.click();
+                }}
+                onDismiss={() => dismissStep("add_tenants")}
+                currentStep={3}
+                totalSteps={4}
+              />
+            )}
+            
+            {/* Tour Prompt */}
+            <InteractiveTour tourId="add_tenant_tour" showPrompt={tenants.length === 0} />
+            
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-tour="tenants-header">
               <div>
                 <h1 className="text-3xl font-bold text-primary">Tenants</h1>
                 <p className="text-muted-foreground">
@@ -369,7 +396,9 @@ const Tenants = () => {
                   {viewMode === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
                 </Button>
                 <BulkUploadDropdown type="tenants" onSuccess={fetchTenants} />
-                <AddTenantDialog onTenantAdded={fetchTenants} />
+                <div data-tour="add-tenant-btn">
+                  <AddTenantDialog onTenantAdded={fetchTenants} />
+                </div>
               </div>
             </div>
 

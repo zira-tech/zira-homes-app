@@ -82,11 +82,10 @@ export function UnitDetailsDialog({ unit, mode, trigger }: UnitDetailsDialogProp
         loading_docks: data.loading_docks
       };
 
-      // Only update status if it's being set to maintenance
-      if (data.status === 'maintenance') {
-        updateData.status = 'maintenance';
-      }
-      // If status is not maintenance, don't include it (let database handle occupancy)
+      // Handle status updates:
+      // - Set to 'maintenance' when explicitly requested  
+      // - Set to 'vacant' when returning from maintenance (DB will update to 'occupied' if active lease exists)
+      updateData.status = data.status === 'maintenance' ? 'maintenance' : 'vacant';
 
       const { error } = await supabase
         .from('units')
