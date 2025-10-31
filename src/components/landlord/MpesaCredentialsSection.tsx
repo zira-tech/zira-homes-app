@@ -59,11 +59,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       if (!user?.id) return;
 
       try {
-        // Use the new encrypted table - only check if config exists
-        // Note: We can't read the encrypted credentials back, only check if they exist
+        // Check if config exists
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active, consumer_key_encrypted')
+          .select('id, callback_url, environment, is_active')
           .eq('landlord_id', user.id)
           .maybeSingle();
 
