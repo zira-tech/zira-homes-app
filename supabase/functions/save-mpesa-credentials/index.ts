@@ -78,27 +78,8 @@ serve(async (req) => {
       );
     }
 
-    // SECURITY: Use secure encryption key from environment
-    const encryptionKey = Deno.env.get('DATA_ENCRYPTION_KEY');
-    if (!encryptionKey) {
-      return new Response(
-        JSON.stringify({ error: 'Server encryption not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Encrypt sensitive data
-    const [
-      encryptedConsumerKey,
-      encryptedConsumerSecret,
-      encryptedShortcode,
-      encryptedPasskey
-    ] = await Promise.all([
-      encrypt(consumer_key, encryptionKey),
-      encrypt(consumer_secret, encryptionKey),
-      encrypt(shortcode, encryptionKey),
-      encrypt(passkey, encryptionKey)
-    ]);
+    // SECURITY: If an encryption key is provided, we could encrypt, but current schema stores plain values
+    // Proceed without encryption to match current DB columns
 
     // Log security event with enhanced tracking
     try {
@@ -119,15 +100,15 @@ serve(async (req) => {
       // Don't fail the request for logging issues
     }
 
-    // Save encrypted credentials
+    // Save credentials in current schema (plain columns)
     const { error: saveError } = await supabaseClient
       .from('landlord_mpesa_configs')
       .upsert({
         landlord_id: user.id,
-        consumer_key_encrypted: encryptedConsumerKey,
-        consumer_secret_encrypted: encryptedConsumerSecret,
-        shortcode_encrypted: encryptedShortcode,
-        passkey_encrypted: encryptedPasskey,
+        consumer_key,
+        consumer_secret,
+        business_shortcode: shortcode,
+        passkey,
         callback_url,
         environment,
         is_active

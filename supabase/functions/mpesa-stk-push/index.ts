@@ -307,40 +307,13 @@ serve(async (req) => {
     let consumerKey, consumerSecret, shortcode, passkey;
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
 
-    if (mpesaConfig && mpesaConfig.consumer_key_encrypted) {
-      // Decrypt landlord-specific encrypted credentials
-      const encryptionKey = Deno.env.get('DATA_ENCRYPTION_KEY');
-      if (!encryptionKey) {
-        console.error('Encryption key not configured');
-        // Fallback to environment variables
-        consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
-        consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
-        shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
-        passkey = Deno.env.get('MPESA_PASSKEY');
-      } else {
-        try {
-          // Decrypt all credentials in parallel
-          const [decryptedKey, decryptedSecret, decryptedShortcode, decryptedPasskey] = await Promise.all([
-            decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey),
-            decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey),
-            decryptCredential(mpesaConfig.shortcode_encrypted, encryptionKey),
-            decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey)
-          ]);
-
-          consumerKey = decryptedKey;
-          consumerSecret = decryptedSecret;
-          shortcode = decryptedShortcode;
-          passkey = decryptedPasskey;
-          console.log('Successfully decrypted landlord M-Pesa credentials');
-        } catch (decryptError) {
-          console.error('Failed to decrypt landlord M-Pesa config:', decryptError);
-          // Fallback to environment variables
-          consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
-          consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
-          shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
-          passkey = Deno.env.get('MPESA_PASSKEY');
-        }
-      }
+    if (mpesaConfig && mpesaConfig.consumer_key) {
+      // Use landlord-specific credentials directly
+      consumerKey = mpesaConfig.consumer_key;
+      consumerSecret = mpesaConfig.consumer_secret;
+      shortcode = mpesaConfig.business_shortcode;
+      passkey = mpesaConfig.passkey;
+      console.log('Using landlord-specific M-Pesa credentials');
     } else {
       // Use secure environment variables
       consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
