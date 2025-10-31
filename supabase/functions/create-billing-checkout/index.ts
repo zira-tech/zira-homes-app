@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[CREATE-BILLING-CHECKOUT] ${step}${detailsStr}`);
+  console.log(`[M-PESA-BILLING] ${step}${detailsStr}`);
 };
 
 serve(async (req) => {
@@ -17,7 +17,7 @@ serve(async (req) => {
   }
 
   try {
-    logStep("Function started - M-Pesa integration");
+    logStep("M-Pesa billing checkout started");
 
     // Create Supabase client using anon key for authentication
     const supabaseClient = createClient(
