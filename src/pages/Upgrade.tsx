@@ -221,13 +221,33 @@ export function Upgrade() {
       // Surface rich error details from the Edge Function (non-2xx)
       if (mpesaError) {
         try {
+          // supabase-js Error with Response context
           const ctx = (mpesaError as any).context;
-          const details = ctx?.json ? await ctx.json() : undefined;
-          console.error('❌ mpesa-stk-push failed (non-2xx):', { status: (mpesaError as any)?.status, details });
-          toast.error(details?.error || details?.message || 'M-Pesa request failed. Please try again.');
-        } catch {
-          console.error('❌ mpesa-stk-push failed (non-2xx):', mpesaError);
-          toast.error(mpesaError.message || 'M-Pesa request failed.');
+          const detailsFromCtx = ctx?.json ? await ctx.json() : undefined;
+          const detailsFromWrapper = (mpesaError as any).details; // custom client wrapper
+          const proxyInfo = (mpesaError as any).proxyFailedDetails;
+
+          const derivedMsg =
+            detailsFromCtx?.error ||
+            detailsFromCtx?.message ||
+            detailsFromWrapper?.error ||
+            detailsFromWrapper?.message ||
+            (typeof detailsFromWrapper === 'string' ? detailsFromWrapper : undefined) ||
+            (mpesaError as any)?.message ||
+            'M-Pesa request failed. Please try again.';
+
+          console.error('❌ mpesa-stk-push failed (non-2xx):', {
+            status: (mpesaError as any)?.status,
+            message: (mpesaError as any)?.message,
+            detailsFromCtx,
+            detailsFromWrapper,
+            proxyInfo,
+          });
+
+          toast.error(derivedMsg);
+        } catch (e) {
+          console.error('❌ mpesa-stk-push failed (non-2xx, details parse error):', e, mpesaError);
+          toast.error((mpesaError as any)?.message || 'M-Pesa request failed.');
         }
         throw mpesaError;
       }
