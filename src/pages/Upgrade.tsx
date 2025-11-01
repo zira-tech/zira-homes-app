@@ -218,7 +218,19 @@ export function Upgrade() {
         }
       );
 
-      if (mpesaError) throw mpesaError;
+      // Surface rich error details from the Edge Function (non-2xx)
+      if (mpesaError) {
+        try {
+          const ctx = (mpesaError as any).context;
+          const details = ctx?.json ? await ctx.json() : undefined;
+          console.error('❌ mpesa-stk-push failed (non-2xx):', { status: (mpesaError as any)?.status, details });
+          toast.error(details?.error || details?.message || 'M-Pesa request failed. Please try again.');
+        } catch {
+          console.error('❌ mpesa-stk-push failed (non-2xx):', mpesaError);
+          toast.error(mpesaError.message || 'M-Pesa request failed.');
+        }
+        throw mpesaError;
+      }
 
       if (mpesaData?.success) {
         setConfirmModalOpen(false);
@@ -229,7 +241,9 @@ export function Upgrade() {
           window.location.href = '/';
         }, 3000);
       } else {
-        throw new Error(mpesaData?.message || 'Failed to initiate M-Pesa payment');
+        const derived = mpesaData?.error || mpesaData?.message || mpesaData?.data?.ResponseDescription;
+        console.error('❌ mpesa-stk-push returned failure payload:', mpesaData);
+        throw new Error(derived || 'Failed to initiate M-Pesa payment');
       }
       
     } catch (error: any) {
