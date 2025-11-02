@@ -221,67 +221,102 @@ const TrialManagement = () => {
   const fetchTrialUsers = async (page = 1, limit = 10) => {
     const offset = (page - 1) * limit;
     
-    const { data, count } = await supabase
-      .from('landlord_subscriptions')
-      .select(`
-        landlord_id,
-        status,
-        trial_start_date,
-        trial_end_date
-      `, { count: 'exact' })
-      .in('status', ['trial', 'trial_expired', 'suspended'])
-      .order('trial_end_date', { ascending: true })
-      .range(offset, offset + limit - 1);
+    try {
+      // Fetch subscriptions first
+      const { data: subscriptions, count, error: subsError } = await supabase
+        .from('landlord_subscriptions')
+        .select('landlord_id, status, trial_start_date, trial_end_date', { count: 'exact' })
+        .in('status', ['trial', 'trial_expired', 'suspended'])
+        .order('trial_end_date', { ascending: true })
+        .range(offset, offset + limit - 1);
 
-    if (data) {
-      const usersWithStats = await Promise.all(
-        data.map(async (user) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('email, first_name, last_name')
-            .eq('id', user.landlord_id)
-            .single();
+      if (subsError) throw subsError;
 
-          const { count: propertiesCount } = await supabase
-            .from('properties')
-            .select('*', { count: 'exact', head: true })
-            .eq('owner_id', user.landlord_id);
+      if (!subscriptions || subscriptions.length === 0) {
+        setTrialUsers([]);
+        setTotalUsers(0);
+        return;
+      }
 
-          const { count: unitsCount } = await supabase
+      // Fetch all profiles for these landlords in one query
+      const landlordIds = subscriptions.map(s => s.landlord_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name')
+        .in('id', landlordIds);
+
+      if (profilesError) throw profilesError;
+
+      // Create a map for quick profile lookup
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+      // Fetch property counts for all landlords in one query
+      const { data: properties, error: propsError } = await supabase
+        .from('properties')
+        .select('id, owner_id')
+        .in('owner_id', landlordIds);
+
+      if (propsError) throw propsError;
+
+      // Count properties per landlord
+      const propertyCounts = new Map<string, number>();
+      properties?.forEach(p => {
+        propertyCounts.set(p.owner_id, (propertyCounts.get(p.owner_id) || 0) + 1);
+      });
+
+      // Fetch unit counts for all properties in one query
+      const propertyIds = properties?.map(p => p.id) || [];
+      const { data: units, error: unitsError } = propertyIds.length > 0
+        ? await supabase
             .from('units')
-            .select('*', { count: 'exact', head: true })
-            .in('property_id', 
-              (await supabase
-                .from('properties')
-                .select('id')
-                .eq('owner_id', user.landlord_id)
-              ).data?.map(p => p.id) || []
-            );
+            .select('property_id')
+            .in('property_id', propertyIds)
+        : { data: [], error: null };
 
-          const tenantsCount = 0;
+      if (unitsError) throw unitsError;
 
-          const daysRemaining = user.trial_end_date 
-            ? Math.ceil((new Date(user.trial_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-            : 0;
+      // Count units per landlord via properties
+      const unitCounts = new Map<string, number>();
+      units?.forEach(u => {
+        const property = properties?.find(p => p.id === u.property_id);
+        if (property) {
+          unitCounts.set(property.owner_id, (unitCounts.get(property.owner_id) || 0) + 1);
+        }
+      });
 
-          return {
-            landlord_id: user.landlord_id,
-            email: profile?.email || '',
-            first_name: profile?.first_name || '',
-            last_name: profile?.last_name || '',
-            status: user.status,
-            trial_start_date: user.trial_start_date,
-            trial_end_date: user.trial_end_date,
-            days_remaining: Math.max(0, daysRemaining),
-            properties_count: propertiesCount || 0,
-            units_count: unitsCount || 0,
-            tenants_count: tenantsCount
-          };
-        })
-      );
+      // Combine all data
+      const usersWithStats = subscriptions.map(sub => {
+        const profile = profileMap.get(sub.landlord_id);
+        const daysRemaining = sub.trial_end_date 
+          ? Math.ceil((new Date(sub.trial_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        return {
+          landlord_id: sub.landlord_id,
+          email: profile?.email || 'Unknown',
+          first_name: profile?.first_name || 'Unknown',
+          last_name: profile?.last_name || 'User',
+          status: sub.status,
+          trial_start_date: sub.trial_start_date,
+          trial_end_date: sub.trial_end_date,
+          days_remaining: Math.max(0, daysRemaining),
+          properties_count: propertyCounts.get(sub.landlord_id) || 0,
+          units_count: unitCounts.get(sub.landlord_id) || 0,
+          tenants_count: 0,
+        };
+      });
 
       setTrialUsers(usersWithStats);
       setTotalUsers(count || 0);
+    } catch (error) {
+      console.error('Error fetching trial users:', error);
+      setTrialUsers([]);
+      setTotalUsers(0);
+      toast({
+        title: "Error",
+        description: "Failed to load trial users",
+        variant: "destructive",
+      });
     }
   };
 

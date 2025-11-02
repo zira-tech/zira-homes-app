@@ -56,12 +56,8 @@ export function TrialBanner() {
         setTrialInfo({
           daysRemaining,
           totalDays,
-          featuresEnabled: Array.isArray(subscription.trial_features_enabled) 
-            ? subscription.trial_features_enabled.filter((item): item is string => typeof item === 'string')
-            : [],
-          limitations: typeof subscription.trial_limitations === 'object' && subscription.trial_limitations !== null
-            ? subscription.trial_limitations as Record<string, number>
-            : {},
+          featuresEnabled: [],
+          limitations: {},
           isTrialActive: daysRemaining > 0,
         });
       }

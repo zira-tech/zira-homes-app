@@ -74,39 +74,6 @@ export type Database = {
         }
         Relationships: []
       }
-      automated_billing_settings: {
-        Row: {
-          auto_payment_enabled: boolean
-          billing_day_of_month: number
-          created_at: string
-          enabled: boolean
-          grace_period_days: number
-          id: string
-          notification_enabled: boolean
-          updated_at: string
-        }
-        Insert: {
-          auto_payment_enabled?: boolean
-          billing_day_of_month?: number
-          created_at?: string
-          enabled?: boolean
-          grace_period_days?: number
-          id?: string
-          notification_enabled?: boolean
-          updated_at?: string
-        }
-        Update: {
-          auto_payment_enabled?: boolean
-          billing_day_of_month?: number
-          created_at?: string
-          enabled?: boolean
-          grace_period_days?: number
-          id?: string
-          notification_enabled?: boolean
-          updated_at?: string
-        }
-        Relationships: []
-      }
       billing_plans: {
         Row: {
           billing_cycle: string
@@ -119,7 +86,7 @@ export type Database = {
           fixed_amount_per_unit: number | null
           id: string
           is_active: boolean | null
-          is_custom: boolean
+          is_custom: boolean | null
           max_properties: number | null
           max_units: number | null
           name: string
@@ -140,12 +107,12 @@ export type Database = {
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
-          is_custom?: boolean
+          is_custom?: boolean | null
           max_properties?: number | null
           max_units?: number | null
           name: string
           percentage_rate?: number | null
-          price?: number
+          price: number
           sms_credits_included?: number | null
           tier_pricing?: Json | null
           updated_at?: string
@@ -161,7 +128,7 @@ export type Database = {
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
-          is_custom?: boolean
+          is_custom?: boolean | null
           max_properties?: number | null
           max_units?: number | null
           name?: string
@@ -175,31 +142,25 @@ export type Database = {
       }
       billing_settings: {
         Row: {
-          created_at: string
+          created_at: string | null
           description: string | null
-          id: string
           setting_key: string
           setting_value: Json
-          updated_at: string
-          updated_by: string | null
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           description?: string | null
-          id?: string
           setting_key: string
           setting_value: Json
-          updated_at?: string
-          updated_by?: string | null
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           description?: string | null
-          id?: string
           setting_key?: string
           setting_value?: Json
-          updated_at?: string
-          updated_by?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -386,7 +347,7 @@ export type Database = {
           accessed_record_id: string | null
           accessed_table: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           user_agent: string | null
         }
         Insert: {
@@ -396,7 +357,7 @@ export type Database = {
           accessed_record_id?: string | null
           accessed_table: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           user_agent?: string | null
         }
         Update: {
@@ -406,7 +367,7 @@ export type Database = {
           accessed_record_id?: string | null
           accessed_table?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           user_agent?: string | null
         }
         Relationships: []
@@ -640,7 +601,7 @@ export type Database = {
           ended_at: string | null
           id: string
           impersonated_user_id: string
-          ip_address: unknown | null
+          ip_address: unknown
           is_active: boolean
           session_token: string
           started_at: string
@@ -653,7 +614,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           impersonated_user_id: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           is_active?: boolean
           session_token: string
           started_at?: string
@@ -666,7 +627,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           impersonated_user_id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           is_active?: boolean
           session_token?: string
           started_at?: string
@@ -854,15 +815,7 @@ export type Database = {
           till_number?: string | null
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "landlord_mpesa_configs_landlord_fk"
-            columns: ["landlord_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       landlord_payment_preferences: {
         Row: {
@@ -908,19 +861,15 @@ export type Database = {
           auto_renewal: boolean | null
           billing_plan_id: string | null
           created_at: string
-          grace_period_days: number
           id: string
           landlord_id: string
           last_billing_date: string | null
           next_billing_date: string | null
           onboarding_completed: boolean | null
-          onboarding_completed_at: string | null
           sms_credits_balance: number | null
           status: string
           subscription_start_date: string | null
           trial_end_date: string | null
-          trial_features_enabled: Json | null
-          trial_limitations: Json | null
           trial_start_date: string | null
           trial_usage_data: Json | null
           updated_at: string
@@ -929,19 +878,15 @@ export type Database = {
           auto_renewal?: boolean | null
           billing_plan_id?: string | null
           created_at?: string
-          grace_period_days?: number
           id?: string
           landlord_id: string
           last_billing_date?: string | null
           next_billing_date?: string | null
           onboarding_completed?: boolean | null
-          onboarding_completed_at?: string | null
           sms_credits_balance?: number | null
           status?: string
           subscription_start_date?: string | null
           trial_end_date?: string | null
-          trial_features_enabled?: Json | null
-          trial_limitations?: Json | null
           trial_start_date?: string | null
           trial_usage_data?: Json | null
           updated_at?: string
@@ -950,19 +895,15 @@ export type Database = {
           auto_renewal?: boolean | null
           billing_plan_id?: string | null
           created_at?: string
-          grace_period_days?: number
           id?: string
           landlord_id?: string
           last_billing_date?: string | null
           next_billing_date?: string | null
           onboarding_completed?: boolean | null
-          onboarding_completed_at?: string | null
           sms_credits_balance?: number | null
           status?: string
           subscription_start_date?: string | null
           trial_end_date?: string | null
-          trial_features_enabled?: Json | null
-          trial_limitations?: Json | null
           trial_start_date?: string | null
           trial_usage_data?: Json | null
           updated_at?: string
@@ -2168,7 +2109,7 @@ export type Database = {
           details: Json | null
           event_type: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           severity: string
           user_agent: string | null
           user_id: string | null
@@ -2178,7 +2119,7 @@ export type Database = {
           details?: Json | null
           event_type: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           severity?: string
           user_agent?: string | null
           user_id?: string | null
@@ -2188,7 +2129,7 @@ export type Database = {
           details?: Json | null
           event_type?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           severity?: string
           user_agent?: string | null
           user_id?: string | null
@@ -3111,146 +3052,39 @@ export type Database = {
         }
         Relationships: []
       }
-      trial_configurations: {
-        Row: {
-          billing_plan_id: string | null
-          created_at: string
-          features_enabled: Json
-          id: string
-          is_active: boolean
-          limitations: Json
-          trial_duration_days: number
-          updated_at: string
-        }
-        Insert: {
-          billing_plan_id?: string | null
-          created_at?: string
-          features_enabled?: Json
-          id?: string
-          is_active?: boolean
-          limitations?: Json
-          trial_duration_days?: number
-          updated_at?: string
-        }
-        Update: {
-          billing_plan_id?: string | null
-          created_at?: string
-          features_enabled?: Json
-          id?: string
-          is_active?: boolean
-          limitations?: Json
-          trial_duration_days?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trial_configurations_billing_plan_id_fkey"
-            columns: ["billing_plan_id"]
-            isOneToOne: false
-            referencedRelation: "billing_plans"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       trial_notification_templates: {
         Row: {
-          created_at: string
+          created_at: string | null
           days_before_expiry: number
           email_content: string
           html_content: string
           id: string
           is_active: boolean | null
-          notification_type: string
           subject: string
           template_name: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
-          days_before_expiry?: number
+          created_at?: string | null
+          days_before_expiry: number
           email_content: string
           html_content: string
           id?: string
           is_active?: boolean | null
-          notification_type: string
           subject: string
           template_name: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           days_before_expiry?: number
           email_content?: string
           html_content?: string
           id?: string
           is_active?: boolean | null
-          notification_type?: string
           subject?: string
           template_name?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      trial_status_logs: {
-        Row: {
-          created_at: string
-          id: string
-          landlord_id: string
-          metadata: Json | null
-          new_status: string
-          old_status: string | null
-          reason: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          landlord_id: string
-          metadata?: Json | null
-          new_status: string
-          old_status?: string | null
-          reason?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          landlord_id?: string
-          metadata?: Json | null
-          new_status?: string
-          old_status?: string | null
-          reason?: string | null
-        }
-        Relationships: []
-      }
-      trial_usage_tracking: {
-        Row: {
-          created_at: string
-          feature_name: string
-          id: string
-          last_used_at: string
-          metadata: Json | null
-          updated_at: string
-          usage_count: number
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          feature_name: string
-          id?: string
-          last_used_at?: string
-          metadata?: Json | null
-          updated_at?: string
-          usage_count?: number
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          feature_name?: string
-          id?: string
-          last_used_at?: string
-          metadata?: Json | null
-          updated_at?: string
-          usage_count?: number
-          user_id?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -3400,7 +3234,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           performed_at: string
           user_agent: string | null
           user_id: string
@@ -3411,7 +3245,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           performed_at?: string
           user_agent?: string | null
           user_id: string
@@ -3422,7 +3256,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           performed_at?: string
           user_agent?: string | null
           user_id?: string
@@ -3437,7 +3271,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           performed_by: string
           user_agent: string | null
           user_id: string
@@ -3449,7 +3283,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           performed_by: string
           user_agent?: string | null
           user_id: string
@@ -3461,7 +3295,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           performed_by?: string
           user_agent?: string | null
           user_id?: string
@@ -3571,7 +3405,7 @@ export type Database = {
           created_at: string
           device_info: Json | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           is_active: boolean | null
           location: string | null
           login_time: string
@@ -3585,7 +3419,7 @@ export type Database = {
           created_at?: string
           device_info?: Json | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           is_active?: boolean | null
           location?: string | null
           login_time?: string
@@ -3599,7 +3433,7 @@ export type Database = {
           created_at?: string
           device_info?: Json | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           is_active?: boolean | null
           location?: string | null
           login_time?: string
@@ -3760,10 +3594,7 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number }
         Returns: Json
       }
-      audit_security_exposure: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      audit_security_exposure: { Args: never; Returns: string }
       backfill_trial_periods: {
         Args: {
           _cutoff: string
@@ -3814,18 +3645,8 @@ export type Database = {
         }
         Returns: Json
       }
-      check_trial_limitation: {
-        Args: { _current_count?: number; _feature: string; _user_id: string }
-        Returns: boolean
-      }
-      cleanup_old_security_events: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_rate_limits: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_old_security_events: { Args: never; Returns: undefined }
+      cleanup_rate_limits: { Args: never; Returns: undefined }
       create_landlord_mpesa_config: {
         Args: {
           p_business_shortcode: string
@@ -3931,10 +3752,7 @@ export type Database = {
         Args: { alg: string; data: string; iv: string; key: string }
         Returns: string
       }
-      encrypt_pii: {
-        Args: { data: string; key: string }
-        Returns: string
-      }
+      encrypt_pii: { Args: { data: string; key: string }; Returns: string }
       encrypt_sensitive_data: {
         Args: { data: string; key_name?: string }
         Returns: string
@@ -3949,10 +3767,7 @@ export type Database = {
           user_id: string
         }[]
       }
-      generate_invoice_number: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      generate_invoice_number: { Args: never; Returns: string }
       generate_monthly_invoices_for_landlord: {
         Args: {
           p_dry_run?: boolean
@@ -3961,32 +3776,26 @@ export type Database = {
         }
         Returns: Json
       }
-      generate_monthly_service_invoices: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      generate_service_invoice_number: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      generate_monthly_service_invoices: { Args: never; Returns: Json }
+      generate_service_invoice_number: { Args: never; Returns: string }
       get_cash_flow_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
-      get_data_integrity_report: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      get_executive_summary_report: {
-        Args:
-          | {
+      get_data_integrity_report: { Args: never; Returns: Json }
+      get_executive_summary_report:
+        | {
+            Args: { p_end_date?: string; p_start_date?: string }
+            Returns: Json
+          }
+        | {
+            Args: {
               p_end_date?: string
               p_include_tenant_scope?: boolean
               p_start_date?: string
             }
-          | { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
+            Returns: Json
+          }
       get_expense_summary_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
@@ -3995,16 +3804,19 @@ export type Database = {
         Args: { p_feature_name: string; p_user_id: string }
         Returns: number
       }
-      get_financial_summary_report: {
-        Args:
-          | {
+      get_financial_summary_report:
+        | {
+            Args: {
               p_end_date?: string
               p_property_id?: string
               p_start_date?: string
             }
-          | { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
+            Returns: Json
+          }
+        | {
+            Args: { p_end_date?: string; p_start_date?: string }
+            Returns: Json
+          }
       get_invoice_overview: {
         Args: {
           p_limit?: number
@@ -4055,10 +3867,6 @@ export type Database = {
         }
         Returns: Json
       }
-      get_landlord_trial_status: {
-        Args: { _landlord_id: string }
-        Returns: boolean
-      }
       get_lease_expiry_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
@@ -4087,12 +3895,12 @@ export type Database = {
           unit_number: string
         }[]
       }
-      get_market_rent_report: {
-        Args:
-          | Record<PropertyKey, never>
-          | { p_end_date?: string; p_start_date?: string }
-        Returns: Json
-      }
+      get_market_rent_report:
+        | {
+            Args: { p_end_date?: string; p_start_date?: string }
+            Returns: Json
+          }
+        | { Args: never; Returns: Json }
       get_mpesa_credentials_safe: {
         Args: { _landlord_id?: string }
         Returns: {
@@ -4107,10 +3915,7 @@ export type Database = {
           updated_at: string
         }[]
       }
-      get_my_sub_user_permissions: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      get_my_sub_user_permissions: { Args: never; Returns: Json }
       get_occupancy_report: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
@@ -4143,12 +3948,9 @@ export type Database = {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: Json
       }
-      get_security_dashboard_stats: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      get_security_dashboard_stats: { Args: never; Returns: Json }
       get_sms_usage_for_admin: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           cost: number
           created_at: string
@@ -4160,22 +3962,13 @@ export type Database = {
           status: string
         }[]
       }
-      get_sub_user_landlord: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      get_sub_user_landlord: { Args: { _user_id: string }; Returns: string }
       get_sub_user_permissions: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
       }
-      get_tenant_contacts: {
-        Args: { p_user_id?: string }
-        Returns: Json
-      }
-      get_tenant_leases: {
-        Args: { p_user_id?: string }
-        Returns: Json
-      }
+      get_tenant_contacts: { Args: { p_user_id?: string }; Returns: Json }
+      get_tenant_leases: { Args: { p_user_id?: string }; Returns: Json }
       get_tenant_maintenance_data: {
         Args: { p_limit?: number; p_user_id?: string }
         Returns: Json
@@ -4184,28 +3977,18 @@ export type Database = {
         Args: { p_limit?: number; p_user_id?: string }
         Returns: Json
       }
-      get_tenant_profile_data: {
-        Args: { p_user_id?: string }
-        Returns: Json
-      }
+      get_tenant_profile_data: { Args: { p_user_id?: string }; Returns: Json }
       get_tenant_property_ids: {
         Args: { _tenant_id: string }
         Returns: string[]
       }
-      get_tenant_unit_ids: {
-        Args: { _user_id: string }
-        Returns: string[]
-      }
+      get_tenant_unit_ids: { Args: { _user_id: string }; Returns: string[] }
       get_tour_status: {
         Args: { p_tour_name: string; p_user_id: string }
         Returns: string
       }
       get_transaction_status: {
         Args: { p_checkout_request_id: string }
-        Returns: string
-      }
-      get_trial_status: {
-        Args: { _user_id: string }
         Returns: string
       }
       get_user_audit_history: {
@@ -4239,23 +4022,26 @@ export type Database = {
           updated_at: string
         }[]
       }
-      get_user_tenant_ids: {
-        Args: { _user_id: string }
-        Returns: string[]
-      }
+      get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
       }
-      has_role: {
-        Args:
-          | { _role: Database["public"]["Enums"]["app_role"]; _user_id: string }
-          | {
+      has_role:
+        | {
+            Args: {
               _role: Database["public"]["Enums"]["app_role"]
               _user_id?: string
             }
-        Returns: boolean
-      }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["app_role"]
+              _user_id: string
+            }
+            Returns: boolean
+          }
       has_role_safe: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -4263,10 +4049,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      has_role_self_text: {
-        Args: { _role: string }
-        Returns: boolean
-      }
+      has_role_self_text: { Args: { _role: string }; Returns: boolean }
       has_role_text: {
         Args: { _role: string; _user_id: string }
         Returns: boolean
@@ -4281,10 +4064,7 @@ export type Database = {
         }
         Returns: string
       }
-      is_admin: {
-        Args: { _user_id?: string }
-        Returns: boolean
-      }
+      is_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_lease_managed_by_user: {
         Args: { p_lease_id: string }
         Returns: boolean
@@ -4297,10 +4077,7 @@ export type Database = {
         Args: { _landlord_id: string; _user_id: string }
         Returns: boolean
       }
-      is_user_tenant: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_user_tenant: { Args: { _user_id: string }; Returns: boolean }
       log_maintenance_action: {
         Args: {
           _action_type: string
@@ -4312,30 +4089,36 @@ export type Database = {
         }
         Returns: undefined
       }
-      log_security_event: {
-        Args:
-          | {
-              _details?: Json
-              _event_type: string
-              _ip_address?: string
-              _severity?: string
-              _user_id?: string
-            }
-          | {
-              _details?: Json
-              _event_type: string
-              _ip_address?: unknown
-              _user_id?: string
-            }
-          | {
+      log_security_event:
+        | {
+            Args: {
               p_details?: Json
               p_event_type: string
               p_ip_address?: unknown
               p_severity?: string
               p_user_id?: string
             }
-        Returns: string
-      }
+            Returns: string
+          }
+        | {
+            Args: {
+              _details?: Json
+              _event_type: string
+              _ip_address?: string
+              _severity?: string
+              _user_id?: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              _details?: Json
+              _event_type: string
+              _ip_address?: unknown
+              _user_id?: string
+            }
+            Returns: undefined
+          }
       log_sensitive_data_access: {
         Args: { _operation: string; _record_id?: string; _table_name: string }
         Returns: undefined
@@ -4395,10 +4178,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      map_feature_to_permission: {
-        Args: { _feature: string }
-        Returns: string
-      }
+      map_feature_to_permission: { Args: { _feature: string }; Returns: string }
       mask_sensitive_data: {
         Args: { data: string; visible_chars?: number }
         Returns: string
@@ -4407,10 +4187,7 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: Json
       }
-      run_security_audit: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      run_security_audit: { Args: never; Returns: Json }
       soft_delete_user: {
         Args: { _performed_by?: string; _reason?: string; _user_id: string }
         Returns: Json
@@ -4419,10 +4196,7 @@ export type Database = {
         Args: { _performed_by?: string; _reason?: string; _user_id: string }
         Returns: Json
       }
-      sync_unit_status: {
-        Args: { p_unit_id: string }
-        Returns: undefined
-      }
+      sync_unit_status: { Args: { p_unit_id: string }; Returns: undefined }
       tenant_belongs_to_user: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
@@ -4456,10 +4230,7 @@ export type Database = {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
       }
-      validate_strong_password: {
-        Args: { password: string }
-        Returns: boolean
-      }
+      validate_strong_password: { Args: { password: string }; Returns: boolean }
       verify_mpesa_signature: {
         Args: { _body: string; _consumer_secret: string; _signature: string }
         Returns: boolean

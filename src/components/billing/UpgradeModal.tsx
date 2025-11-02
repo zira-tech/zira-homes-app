@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Star, Crown, Zap, X, Loader2, ArrowRight } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
+import { useUpgrade } from "@/hooks/useUpgrade";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -41,10 +42,12 @@ interface UpgradeModalProps {
 export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   const { user } = useAuth();
   const { trialStatus, trialDaysRemaining } = useTrialManagement();
+  const { upgradeToPlan, isProcessing: upgradeProcessing } = useUpgrade();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,103 +112,22 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       return;
     }
 
-    setIsProcessing(true);
-    
-    try {
-      console.log('🚀 Starting upgrade process for plan:', selectedPlanData.name);
-
-      // For commission-based plans, activate directly without payment setup
-      if (selectedPlanData.billing_model === 'percentage') {
-        console.log('✅ Activating commission-based plan directly...');
-        
-        const { data: subscription, error: subscriptionError } = await supabase
-          .from('landlord_subscriptions')
-          .upsert({
-            landlord_id: user.id,
-            billing_plan_id: selectedPlan,
-            status: 'active',
-            subscription_start_date: new Date().toISOString(),
-            trial_end_date: null, // End trial
-            auto_renewal: true,
-            sms_credits_balance: selectedPlanData.sms_credits_included || 0
-          }, {
-            onConflict: 'landlord_id'
-          })
-          .select();
-
-        if (subscriptionError) throw subscriptionError;
-
-        // Log the upgrade action
-        await supabase.rpc('log_user_activity', {
-          _user_id: user.id,
-          _action: 'subscription_upgrade',
-          _entity_type: 'billing_plan',
-          _entity_id: selectedPlan,
-          _details: {
-            plan_name: selectedPlanData.name,
-            billing_model: selectedPlanData.billing_model,
-            percentage_rate: selectedPlanData.percentage_rate
-          }
-        });
-        
-        toast.success(`${selectedPlanData.name} plan activated! You'll be billed ${selectedPlanData.percentage_rate}% commission on rent collected monthly.`);
-        onClose();
-        
-        // Refresh the page to update trial status
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        // For other billing models that require upfront payment, use M-Pesa
-        console.log('💳 Initiating M-Pesa payment...');
-
-        // Fetch user profile to get phone number
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('phone')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError || !profile?.phone) {
-          throw new Error('Phone number not found. Please update your profile with a valid phone number.');
-        }
-
-        const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
-          body: {
-            phone: profile.phone,
-            amount: selectedPlanData.price,
-            accountReference: `PLAN-${selectedPlan}`,
-            transactionDesc: `Subscription upgrade to ${selectedPlanData.name}`,
-            paymentType: 'subscription'
-          }
-        });
-
-        if (error) {
-          console.error('❌ M-Pesa payment error:', error);
-          throw error;
-        }
-
-        if (data?.success) {
-          console.log('✅ M-Pesa STK push initiated...');
-          toast.info('💳 M-Pesa payment prompt sent to your phone. Please enter your PIN to complete payment.');
-          onClose();
-
-          // Redirect after a delay
-          setTimeout(() => {
-            window.location.reload();
-          }, 3000);
-          return;
-        } else {
-          throw new Error(data?.message || "Failed to initiate M-Pesa payment");
-        }
-      }
-    } catch (error: any) {
-      console.error('❌ Upgrade error:', error);
-      const msg = error?.message || (typeof error === 'string' ? error : 'Upgrade failed. Please try again.');
-      toast.error(msg);
-    } finally {
-      setIsProcessing(false);
+    // For commission-based plans, activate directly
+    if (selectedPlanData.billing_model === 'percentage') {
+      await upgradeToPlan(selectedPlan);
+      onClose();
+      setTimeout(() => window.location.reload(), 1000);
+      return;
     }
+
+    // For other billing models, require phone number
+    if (!phoneNumber) {
+      setShowPhoneInput(true);
+      toast.error("Please enter your M-Pesa phone number");
+      return;
+    }
+
+    await upgradeToPlan(selectedPlan, phoneNumber);
   };
 
   const getPlanIcon = (planName: string) => {
@@ -397,16 +319,16 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
               <Button 
                 variant="outline"
                 onClick={onClose}
-                disabled={isProcessing}
+                disabled={upgradeProcessing}
               >
                 Cancel
               </Button>
               <Button 
                 onClick={handleUpgrade}
-                disabled={isProcessing || loading}
+                disabled={upgradeProcessing || loading}
                 className="min-w-32"
               >
-                {isProcessing ? (
+                {upgradeProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 

@@ -143,14 +143,8 @@ export function useTrialManagement() {
         }
       }
 
-      console.log('🎯 useTrialManagement: Getting trial status via RPC...');
-      // Get actual trial status using the database function
-      const { data: statusResult } = await supabase
-        .rpc('get_trial_status', { _user_id: user.id });
-
-      console.log('📊 useTrialManagement: RPC status result:', statusResult);
-
-      // Always try to fetch subscription data directly (with fallback if RPC fails)
+      console.log('🎯 useTrialManagement: Fetching trial status...');
+      // Fetch subscription data directly
       console.log('🔍 useTrialManagement: Fetching subscription data with maybeSingle...');
       const { data: subscription, error: subscriptionError } = await supabase
         .from('landlord_subscriptions')
@@ -184,13 +178,12 @@ export function useTrialManagement() {
         console.log('❌ useTrialManagement: No subscription found at all');
       } else {
         console.log('✅ useTrialManagement: Processing subscription data...');
-        const actualStatus = statusResult || effectiveSubscription.status;
+        const actualStatus = effectiveSubscription.status;
         const isTrialRelated = ['trial', 'trial_expired', 'suspended'].includes(actualStatus);
         
         console.log('🏷️ useTrialManagement: Processed status info:', {
           actualStatus,
           isTrialRelated,
-          hasRpcStatus: !!statusResult,
           subscriptionStatus: effectiveSubscription.status
         });
         
@@ -277,24 +270,25 @@ export function useTrialManagement() {
     if (!user || !isTrialUser) return;
 
     try {
-      // Update usage count in trial_usage_tracking table
-      await supabase
-        .from('trial_usage_tracking')
-        .upsert({
-          user_id: user.id,
-          feature_name: featureName,
-          usage_count: 1,
-          last_used_at: new Date().toISOString(),
-        });
+      // Update usage data in subscription record (trial_usage_data field)
+      const { data: currentSub } = await supabase
+        .from('landlord_subscriptions')
+        .select('trial_usage_data')
+        .eq('landlord_id', user.id)
+        .maybeSingle();
 
-      // Update usage data in subscription
-      const currentUsageData = trialStatus?.daysRemaining || {};
+      const usageData = currentSub?.trial_usage_data as any || {};
+      const featureUsage = usageData[featureName] || { count: 0, last_used: null };
+
       await supabase
         .from('landlord_subscriptions')
         .update({
           trial_usage_data: {
-            ...currentUsageData,
-            [featureName]: ((currentUsageData as any)?.[featureName] || 0) + 1
+            ...usageData,
+            [featureName]: {
+              count: featureUsage.count + 1,
+              last_used: new Date().toISOString(),
+            }
           }
         })
         .eq('landlord_id', user.id);
@@ -307,14 +301,29 @@ export function useTrialManagement() {
     if (!user) return false;
     
     try {
-      const { data: canAccess } = await supabase
-        .rpc('check_trial_limitation', {
-          _user_id: user.id,
-          _feature: featureName,
-          _current_count: currentCount
-        });
-      
-      return canAccess || false;
+      // Simplified feature access check - during trial, allow all features
+      const { data: subscription } = await supabase
+        .from('landlord_subscriptions')
+        .select('status, trial_end_date')
+        .eq('landlord_id', user.id)
+        .maybeSingle();
+
+      if (!subscription) return false;
+
+      // If trial is active, allow access
+      if (subscription.status === 'trial') {
+        const trialEndDate = subscription.trial_end_date ? new Date(subscription.trial_end_date) : null;
+        if (trialEndDate && trialEndDate > new Date()) {
+          return true; // Full access during trial
+        }
+      }
+
+      // For active subscriptions, allow access
+      if (subscription.status === 'active') {
+        return true;
+      }
+
+      return false;
     } catch (error) {
       console.error('Error checking feature access:', error);
       return false;

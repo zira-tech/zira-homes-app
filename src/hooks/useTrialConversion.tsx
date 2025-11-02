@@ -28,12 +28,11 @@ export function useTrialConversion() {
         .select('*')
         .in('status', ['trial', 'trial_expired', 'suspended']);
 
-      // Get converted users (those who moved from trial to active)
-      const { data: convertedUsers } = await supabase
-        .from('trial_status_logs')
+      // Get converted users (active subscriptions)
+      const { data: activeUsers } = await supabase
+        .from('landlord_subscriptions')
         .select('*')
-        .eq('old_status', 'trial')
-        .eq('new_status', 'active');
+        .eq('status', 'active');
 
       // Get billing plans for conversion breakdown
       const { data: billingPlans } = await supabase
@@ -42,7 +41,7 @@ export function useTrialConversion() {
         .eq('is_active', true);
 
       const totalTrials = trialUsers?.length || 0;
-      const totalConverted = convertedUsers?.length || 0;
+      const totalConverted = activeUsers?.length || 0;
       const conversionRate = totalTrials > 0 ? (totalConverted / totalTrials) * 100 : 0;
 
       // Calculate average trial duration (mock for now)

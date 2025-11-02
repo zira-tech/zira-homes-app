@@ -15,7 +15,6 @@ import { createSafeHtml } from "@/utils/xssProtection";
 interface EmailTemplate {
   id: string;
   template_name: string;
-  notification_type: string;
   days_before_expiry: number;
   subject: string;
   email_content: string;
@@ -116,13 +115,7 @@ const EmailTemplateEditor = () => {
 
   const getTemplateDescription = (template: EmailTemplate) => {
     if (template.days_before_expiry === 0) {
-      if (template.notification_type.includes('expired')) {
-        return "Sent when trial expires (grace period starts)";
-      } else if (template.notification_type.includes('suspended')) {
-        return "Sent when account is suspended";
-      } else if (template.notification_type.includes('grace')) {
-        return "Sent during grace period";
-      }
+      return "Sent when trial expires (grace period starts)";
     }
     return `Sent ${template.days_before_expiry} days before trial expiry`;
   };
