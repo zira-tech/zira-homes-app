@@ -3645,6 +3645,13 @@ export type Database = {
         }
         Returns: Json
       }
+      check_role_conflict: {
+        Args: {
+          _new_role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       cleanup_old_security_events: { Args: never; Returns: undefined }
       cleanup_rate_limits: { Args: never; Returns: undefined }
       create_landlord_mpesa_config: {

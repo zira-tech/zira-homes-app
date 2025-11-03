@@ -3,15 +3,21 @@ import { Crown, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/context/RoleContext";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 
 export function HeaderTrialCountdown() {
   const { user } = useAuth();
+  const { effectiveRole } = useRole();
   const { trialStatus, trialDaysRemaining, loading } = useTrialManagement();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-  // Show only for active trial users in header
-  const shouldShow = !loading && trialStatus && trialStatus.status === 'trial' && trialDaysRemaining >= 0;
+  // Show only for active trial users in header (exclude admins)
+  const shouldShow = !loading && 
+                     effectiveRole !== 'admin' && 
+                     trialStatus && 
+                     trialStatus.status === 'trial' && 
+                     trialDaysRemaining >= 0;
   if (!shouldShow) {
     return null;
   }

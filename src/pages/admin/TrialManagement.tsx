@@ -238,23 +238,42 @@ const TrialManagement = () => {
         return;
       }
 
-      // Fetch all profiles for these landlords in one query
+      // Filter out users with Admin role
       const landlordIds = subscriptions.map(s => s.landlord_id);
+      const { data: adminRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .in('user_id', landlordIds)
+        .eq('role', 'Admin');
+
+      const adminIds = new Set(adminRoles?.map(r => r.user_id) || []);
+
+      // Filter out admins from subscriptions
+      const nonAdminSubscriptions = subscriptions.filter(s => !adminIds.has(s.landlord_id));
+
+      if (nonAdminSubscriptions.length === 0) {
+        setTrialUsers([]);
+        setTotalUsers(0);
+        return;
+      }
+
+      // Fetch all profiles for non-admin landlords
+      const nonAdminLandlordIds = nonAdminSubscriptions.map(s => s.landlord_id);
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, first_name, last_name')
-        .in('id', landlordIds);
+        .in('id', nonAdminLandlordIds);
 
       if (profilesError) throw profilesError;
 
       // Create a map for quick profile lookup
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-      // Fetch property counts for all landlords in one query
+      // Fetch property counts for all non-admin landlords in one query
       const { data: properties, error: propsError } = await supabase
         .from('properties')
         .select('id, owner_id')
-        .in('owner_id', landlordIds);
+        .in('owner_id', nonAdminLandlordIds);
 
       if (propsError) throw propsError;
 
@@ -284,8 +303,8 @@ const TrialManagement = () => {
         }
       });
 
-      // Combine all data
-      const usersWithStats = subscriptions.map(sub => {
+      // Combine all data (using filtered non-admin subscriptions)
+      const usersWithStats = nonAdminSubscriptions.map(sub => {
         const profile = profileMap.get(sub.landlord_id);
         const daysRemaining = sub.trial_end_date 
           ? Math.ceil((new Date(sub.trial_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))

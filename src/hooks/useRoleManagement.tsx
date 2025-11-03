@@ -92,6 +92,29 @@ export const useRoleManagement = () => {
         };
       }
 
+      // Check for role conflicts before assigning
+      const existingRoles = await getUserRoles(request.userId);
+      const roleConflicts: Record<AppRole, AppRole[]> = {
+        'Admin': ['Landlord', 'Tenant', 'Manager', 'Agent'],
+        'Landlord': ['Admin', 'Tenant'],
+        'Tenant': ['Admin', 'Landlord', 'Manager', 'Agent'],
+        'Manager': ['Admin', 'Tenant'],
+        'Agent': ['Admin', 'Tenant'],
+      };
+
+      const conflicts = roleConflicts[request.role] || [];
+      const hasConflict = existingRoles.some(existing => 
+        conflicts.includes(existing as AppRole)
+      );
+
+      if (hasConflict) {
+        const conflictingRole = existingRoles.find(r => conflicts.includes(r as AppRole));
+        return {
+          success: false,
+          message: `Cannot assign ${request.role} role: User already has ${conflictingRole} role which conflicts`
+        };
+      }
+
       // Assign the role
       const { error } = await supabase
         .from('user_roles')
