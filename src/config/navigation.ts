@@ -61,6 +61,7 @@ export const adminNav: NavGroup[] = [
     items: [
       { title: "Admin Dashboard", url: "/admin", icon: Monitor },
       { title: "User Management", url: "/admin/users", icon: UserCheck },
+      { title: "Landlord Management", url: "/admin/landlords", icon: Users2 },
       { title: "Platform Analytics", url: "/admin/analytics", icon: PieChart },
       { title: "Support Center", url: "/admin/enhanced-support", icon: Shield },
       { title: "Communication", url: "/admin/communication", icon: MessageSquare },
@@ -72,6 +73,7 @@ export const adminNav: NavGroup[] = [
       { title: "PDF Templates", url: "/admin/pdf-templates", icon: FileText },
       { title: "Payment Config", url: "/admin/payment-config", icon: Banknote },
       { title: "Bulk Messaging", url: "/admin/bulk-messaging", icon: Smartphone },
+      { title: "SMS Logs", url: "/admin/sms-logs", icon: MessageSquare },
       { title: "Audit Logs", url: "/admin/audit-logs", icon: Archive },
       { title: "Self-Hosted Monitor", url: "/admin/self-hosted", icon: Server },
       { title: "Invoice Management", url: "/admin/invoices", icon: Receipt },

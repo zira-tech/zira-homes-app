@@ -167,9 +167,15 @@ const handler = async (req: Request): Promise<Response> => {
     if (provider.base_url) {
       const url = new URL(provider.base_url);
       const allowedDomains = ['advantasms.com', 'twilio.com', 'africastalking.com'];
+      const allowedHttpIPs = ['68.183.101.252']; // Trusted InHouse SMS provider
       
-      if (url.protocol !== 'https:' || 
-          !allowedDomains.some(domain => url.hostname.endsWith(domain))) {
+      // Allow HTTPS domains or specific trusted HTTP IPs
+      const isHttpsTrustedDomain = url.protocol === 'https:' && 
+        allowedDomains.some(domain => url.hostname.endsWith(domain));
+      const isHttpTrustedIP = url.protocol === 'http:' && 
+        allowedHttpIPs.includes(url.hostname);
+      
+      if (!isHttpsTrustedDomain && !isHttpTrustedIP) {
         console.error('Blocked unsafe SMS provider URL:', provider.base_url);
         return new Response(JSON.stringify({ error: 'SMS provider not supported' }), {
           status: 400,
