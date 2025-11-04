@@ -2322,6 +2322,68 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_campaigns: {
+        Row: {
+          actual_cost: number | null
+          created_at: string
+          created_by: string | null
+          estimated_cost: number | null
+          failed_sends: number | null
+          filter_criteria: Json | null
+          id: string
+          message: string
+          metadata: Json | null
+          name: string
+          sent_at: string | null
+          status: string
+          successful_sends: number | null
+          template_id: string | null
+          total_recipients: number | null
+        }
+        Insert: {
+          actual_cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          estimated_cost?: number | null
+          failed_sends?: number | null
+          filter_criteria?: Json | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          name: string
+          sent_at?: string | null
+          status?: string
+          successful_sends?: number | null
+          template_id?: string | null
+          total_recipients?: number | null
+        }
+        Update: {
+          actual_cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          estimated_cost?: number | null
+          failed_sends?: number | null
+          filter_criteria?: Json | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          name?: string
+          sent_at?: string | null
+          status?: string
+          successful_sends?: number | null
+          template_id?: string | null
+          total_recipients?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "sms_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_logs: {
         Row: {
           created_at: string | null

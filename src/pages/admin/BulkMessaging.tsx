@@ -275,30 +275,32 @@ const BulkMessaging = () => {
   };
 
   const fetchCampaigns = async () => {
-    // Mock campaigns data - in real app, this would fetch from a campaigns table
-    const mockCampaigns: MessageCampaign[] = [
-      {
-        id: '1',
-        title: 'Rent Reminder',
-        message: 'Your monthly rent payment is due in 3 days. Please make payment to avoid late fees.',
+    try {
+      const { data, error } = await supabase
+        .from('sms_campaigns')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const formattedCampaigns: MessageCampaign[] = (data || []).map(campaign => ({
+        id: campaign.id,
+        title: campaign.name,
+        message: campaign.message,
         type: 'sms',
-        recipients_count: 25,
-        status: 'sent',
-        sent_at: '2025-01-02T10:00:00Z',
-        created_at: '2025-01-02T09:30:00Z',
-      },
-      {
-        id: '2',
-        title: 'Maintenance Notice',
-        message: 'Scheduled maintenance for water systems on January 15th from 9 AM to 2 PM.',
-        type: 'whatsapp',
-        recipients_count: 45,
-        status: 'scheduled',
-        scheduled_at: '2025-01-10T08:00:00Z',
-        created_at: '2025-01-08T14:20:00Z',
-      }
-    ];
-    setCampaigns(mockCampaigns);
+        recipients_count: campaign.total_recipients || 0,
+        status: campaign.status as any,
+        scheduled_at: campaign.sent_at || undefined,
+        sent_at: campaign.sent_at || undefined,
+        created_at: campaign.created_at,
+      }));
+
+      setCampaigns(formattedCampaigns);
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+      setCampaigns([]);
+    }
   };
 
   const loadProviderSettings = async () => {
@@ -543,20 +545,44 @@ const BulkMessaging = () => {
         description: `Sending ${messageType.toUpperCase()} to ${selectedRecipients.length} recipients...`,
       });
 
-      // Add to campaigns list
-      const newCampaign: MessageCampaign = {
-        id: Date.now().toString(),
-        title: messageTitle,
-        message: messageContent,
-        type: messageType,
-        recipients_count: selectedRecipients.length,
-        status: isScheduled ? 'scheduled' : 'sent',
-        scheduled_at: isScheduled ? `${scheduledDate}T${scheduledTime}:00Z` : undefined,
-        sent_at: !isScheduled ? new Date().toISOString() : undefined,
-        created_at: new Date().toISOString(),
-      };
+      // Save campaign to database
+      const { data: savedCampaign, error: campaignError } = await supabase
+        .from('sms_campaigns')
+        .insert({
+          name: messageTitle,
+          message: messageContent,
+          created_by: user?.id,
+          status: isScheduled ? 'scheduled' : 'completed',
+          sent_at: !isScheduled ? new Date().toISOString() : null,
+          total_recipients: selectedRecipients.length,
+          successful_sends: selectedRecipients.length,
+          failed_sends: 0,
+          filter_criteria: {
+            recipient_type: recipientType,
+            property: selectedProperty,
+          },
+        })
+        .select()
+        .single();
 
-      setCampaigns([newCampaign, ...campaigns]);
+      if (campaignError) {
+        console.error('Error saving campaign:', campaignError);
+      } else {
+        // Add to local campaigns list
+        const newCampaign: MessageCampaign = {
+          id: savedCampaign.id,
+          title: messageTitle,
+          message: messageContent,
+          type: messageType,
+          recipients_count: selectedRecipients.length,
+          status: isScheduled ? 'scheduled' : 'sent',
+          scheduled_at: isScheduled ? `${scheduledDate}T${scheduledTime}:00Z` : undefined,
+          sent_at: !isScheduled ? new Date().toISOString() : undefined,
+          created_at: new Date().toISOString(),
+        };
+
+        setCampaigns([newCampaign, ...campaigns]);
+      }
 
       // Reset form
       setMessageTitle('');

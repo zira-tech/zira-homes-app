@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, UserPlus, Settings, UserX, Shield, Users } from "lucide-react";
+import { Plus, UserPlus, Settings, UserX, Shield, Users, AlertTriangle } from "lucide-react";
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useForm, useWatch } from "react-hook-form";
 import { useSubUsers } from "@/hooks/useSubUsers";
@@ -17,6 +17,8 @@ import { DisabledActionWrapper } from "@/components/feature-access/DisabledActio
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CreateSubUserFormData {
   email: string;
@@ -56,6 +58,7 @@ const SubUserManagement = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
   const [selectedSubUser, setSelectedSubUser] = useState<any>(null);
+  const [roleConflictWarning, setRoleConflictWarning] = useState<string | null>(null);
   const { subUsers, loading, createSubUser, updateSubUserPermissions, deactivateSubUser } = useSubUsers();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
   const { trialStatus } = useTrialManagement();
@@ -77,8 +80,55 @@ const SubUserManagement = () => {
   const permissions = watch('permissions');
   const passwordValue = useWatch({ control, name: "password" });
 
+  const checkRoleConflicts = async (email: string) => {
+    try {
+      // Check if user exists and has conflicting roles
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (existingUser) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', existingUser.id);
+
+        if (roles && roles.length > 0) {
+          const rolesList = roles.map(r => r.role).join(', ');
+          const hasConflictingRole = roles.some(r => 
+            r.role === 'Admin' || r.role === 'Tenant'
+          );
+          
+          if (hasConflictingRole) {
+            setRoleConflictWarning(
+              `⚠️ Warning: This user already has roles: ${rolesList}. ` +
+              `Adding them as a sub-user may cause role conflicts. ` +
+              `Admin and Tenant roles cannot be combined with Landlord/Manager roles.`
+            );
+            return false;
+          }
+        }
+      }
+      setRoleConflictWarning(null);
+      return true;
+    } catch (error) {
+      console.error('Error checking role conflicts:', error);
+      return true; // Allow creation if check fails
+    }
+  };
+
   const onCreateSubUser = async (data: CreateSubUserFormData) => {
     try {
+      // Check for role conflicts before creating
+      const canProceed = await checkRoleConflicts(data.email);
+      
+      if (!canProceed && roleConflictWarning) {
+        // Show warning but allow user to proceed
+        return;
+      }
+
       // Normalize permissions before sending
       const normalizedData = {
         ...data,
@@ -86,6 +136,7 @@ const SubUserManagement = () => {
       };
       await createSubUser(normalizedData);
       setCreateDialogOpen(false);
+      setRoleConflictWarning(null);
       reset();
     } catch (error) {
       // Error handled in hook
@@ -158,6 +209,14 @@ const SubUserManagement = () => {
           <form onSubmit={handleSubmit(onCreateSubUser)} className="flex flex-col gap-4">
             <ScrollArea className="h-[60vh] pr-4">
               <div className="space-y-6">
+              {roleConflictWarning && (
+                <Alert variant="destructive" className="bg-destructive/10 border-destructive/50">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    {roleConflictWarning}
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first_name" className="text-primary">First Name *</Label>
@@ -189,6 +248,7 @@ const SubUserManagement = () => {
                   className="border-border bg-card"
                   {...register("email", { required: "Email is required" })}
                   placeholder="john.doe@example.com"
+                  onBlur={(e) => checkRoleConflicts(e.target.value)}
                 />
                 {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
                 <p className="text-xs text-muted-foreground">
