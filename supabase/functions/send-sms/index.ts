@@ -280,15 +280,16 @@ const handler = async (req: Request): Promise<Response> => {
 };
 
 async function sendInHouseSMS(phone: string, message: string, provider: any) {
-  // Normalize base_url to ensure trailing slash
-  let baseUrl = provider.base_url || Deno.env.get('INHOUSE_SMS_URL') || 'https://api.example.com/sms/';
+  // Prefer INHOUSE_SMS_URL from env (HTTPS) over provider.base_url
+  let baseUrl = Deno.env.get('INHOUSE_SMS_URL') || provider.base_url || 'https://api.example.com/sms/';
   if (!baseUrl.endsWith('/')) {
     baseUrl += '/';
   }
   
-  // Determine HTTP method (default to GET for roberms bulk_api)
-  const httpMethod = provider.config_data?.http_method || 
-    (baseUrl.includes('roberms.com') ? 'GET' : 'POST');
+  console.log('Using InHouse SMS URL:', baseUrl);
+  
+  // Force POST method for reliable body delivery
+  const httpMethod = 'POST';
   
   // Enhanced phone number validation and formatting
   let formattedPhone = phone.replace(/\D/g, '');
@@ -362,13 +363,18 @@ async function sendInHouseSMS(phone: string, message: string, provider: any) {
     method: httpMethod,
     headers: headers,
     body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(15000) // 15 second timeout
   });
 
   if (!response.ok) {
-    throw new Error(`SMS API error: ${response.status} - ${response.statusText}`);
+    const responseText = await response.text();
+    const errorMsg = `SMS API error: ${response.status} ${response.statusText} - ${responseText}`;
+    console.error('InHouse SMS Error:', errorMsg);
+    throw new Error(errorMsg);
   }
 
   const responseText = await response.text();
+  console.log('InHouse SMS Response:', responseText);
   try {
     return JSON.parse(responseText);
   } catch {
