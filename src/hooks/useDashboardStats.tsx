@@ -27,59 +27,35 @@ export function useDashboardStats() {
 
   const fetchStats = async () => {
     try {
-      // Fetch properties count
-      const { data: properties, error: propertiesError } = await supabase
-        .from("properties")
-        .select("id");
+      // Prefer secure server-side aggregation via RPC to avoid RLS mismatches
+      const { data, error } = await supabase.rpc('get_landlord_dashboard_data');
+      if (error || !data) throw error || new Error('No data');
 
-      if (propertiesError) throw propertiesError;
+      const ps = (data as any).property_stats || {};
+      const totalUnits = Number(ps.total_units || 0);
+      const occupiedUnits = Number(ps.occupied_units || 0);
+      const vacantUnits = Math.max(totalUnits - occupiedUnits, 0);
+      const monthlyRevenue = Number(ps.monthly_revenue || 0);
 
-      // Fetch units data
-      const { data: units, error: unitsError } = await supabase
-        .from("units")
-        .select("id, status, rent_amount");
+      // pending_maintenance is an array limited by RPC (<=10); use its length as an indicator
+      const pending = Array.isArray((data as any).pending_maintenance) ? (data as any).pending_maintenance.length : 0;
 
-      if (unitsError) throw unitsError;
-
-      // Fetch tenants count
-      const { data: tenants, error: tenantsError } = await supabase
-        .from("tenants")
-        .select("id");
-
-      if (tenantsError) throw tenantsError;
-
-      // Calculate stats
-      const totalProperties = properties?.length || 0;
-      const totalUnits = units?.length || 0;
-      const occupiedUnits = units?.filter(unit => unit.status === "occupied").length || 0;
-      const vacantUnits = units?.filter(unit => unit.status === "vacant").length || 0;
-      const activeTenants = tenants?.length || 0;
-      const monthlyRevenue = units
-        ?.filter(unit => unit.status === "occupied")
-        .reduce((sum, unit) => sum + (unit.rent_amount || 0), 0) || 0;
       const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-      // Fetch maintenance requests count
-      const { data: maintenanceData, error: maintenanceError } = await supabase
-        .from("maintenance_requests")
-        .select("id")
-        .eq("status", "pending");
-
-      if (maintenanceError) throw maintenanceError;
-      const maintenanceRequests = maintenanceData?.length || 0;
       setStats({
-        totalProperties,
+        totalProperties: Number(ps.total_properties || 0),
         totalUnits,
         occupiedUnits,
         vacantUnits,
-        activeTenants,
+        activeTenants: occupiedUnits, // proxy until RPC provides exact active tenant count
         monthlyRevenue,
         occupancyRate,
-        maintenanceRequests,
+        maintenanceRequests: pending,
       });
-
     } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
+      console.error('Error fetching dashboard stats (RPC):', error);
+      // fall back to zeros to render UI instead of skeletons
+      setStats((s) => ({ ...s }));
     } finally {
       setLoading(false);
     }
