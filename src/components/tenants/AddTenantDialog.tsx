@@ -195,111 +195,64 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         has_lease: !!data.unit_id 
       }).catch(console.error);
 
-      const looksLikeCryptoMissing = (e: any) => {
-        const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
-        return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
-      };
+      // Use secure RPC to create tenant (and optional lease) in a single transaction.
+      const { data: result, error: rpcError } = await supabase.rpc('create_tenant_and_optional_lease', {
+        p_first_name: data.first_name,
+        p_last_name: data.last_name,
+        p_email: data.email,
+        p_phone: data.phone || null,
+        p_national_id: data.national_id || null,
+        p_employment_status: data.employment_status || null,
+        p_profession: data.profession || null,
+        p_employer_name: data.employer_name || null,
+        p_monthly_income: data.monthly_income != null ? Number(data.monthly_income) : null,
+        p_emergency_contact_name: data.emergency_contact_name || null,
+        p_emergency_contact_phone: data.emergency_contact_phone || null,
+        p_previous_address: data.previous_address || null,
+        p_property_id: data.property_id || null,
+        p_unit_id: data.unit_id || null,
+        p_lease_start_date: data.lease_start_date || null,
+        p_lease_end_date: data.lease_end_date || null,
+        p_monthly_rent: data.monthly_rent != null ? Number(data.monthly_rent) : null,
+        p_security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
+      });
 
-      const isActiveLeaseConstraint = (m: any) => /idx_unique_active_lease_per_unit|unique\s+.*active\s+lease\s+.*unit/i.test(String(m || ''));
-
-      // Prepare insert data
-      const insertBase: any = {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        phone: data.phone,
-        national_id: data.national_id,
-        employment_status: data.employment_status,
-        profession: data.profession,
-        employer_name: data.employer_name,
-        monthly_income: data.monthly_income ? Number(data.monthly_income) : null,
-        emergency_contact_name: data.emergency_contact_name || null,
-        emergency_contact_phone: data.emergency_contact_phone || null,
-        previous_address: data.previous_address || null,
-      };
-
-      const insertWithPlainEncrypted = (withProperty: boolean) => supabase
-        .from('tenants')
-        .insert({
-          ...insertBase,
-          ...(withProperty ? { property_id: data.property_id || null } : {}),
-          phone_encrypted: data.phone || null,
-          national_id_encrypted: data.national_id || null,
-          emergency_contact_phone_encrypted: data.emergency_contact_phone || null,
-        })
-        .select('id, first_name, last_name, email')
-        .single();
-
-      const insertNormal = (withProperty: boolean) => supabase
-        .from('tenants')
-        .insert({
-          ...insertBase,
-          ...(withProperty ? { property_id: data.property_id || null } : {}),
-        })
-        .select('id, first_name, last_name, email')
-        .single();
-
-      // Attempt tenant insert
-      let attempt = await insertNormal(true);
-
-      if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
-        attempt = await insertNormal(false);
+      if (rpcError) {
+        throw new Error(rpcError.message);
       }
 
-      if (attempt.error && looksLikeCryptoMissing(attempt.error)) {
-        console.warn('Encryption functions unavailable. Retrying insert with PII also set on *_encrypted columns.');
-        attempt = await insertWithPlainEncrypted(Boolean(data.property_id));
-      }
+      const rpcRes = (result ?? {}) as { success?: boolean; tenant?: any; lease?: any; error?: any; code?: any };
 
-      if (attempt.error) {
-        throw new Error(attempt.error.message);
-      }
-
-      const tenantInserted = attempt.data;
-
-      // Create lease if unit selected
-      let leaseCreated = false;
-      if (data.unit_id) {
-        if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
-          throw new Error("Missing lease fields (start, end, monthly rent).");
+      if (!rpcRes || rpcRes.success === false) {
+        const code = (rpcRes && rpcRes.code) || '';
+        const msg = (rpcRes && rpcRes.error) || 'Failed to create tenant';
+        // Duplicate email
+        if (/23505/.test(String(code)) || /already exists/i.test(String(msg))) {
+          toast({
+            title: 'Duplicate Tenant',
+            description: 'A tenant with this email already exists.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Tenant Creation Failed',
+            description: msg,
+            variant: 'destructive',
+          });
         }
-        
-        const { error: leaseError } = await supabase
-          .from('leases')
-          .insert({
-            tenant_id: tenantInserted.id,
-            unit_id: data.unit_id,
-            monthly_rent: Number(data.monthly_rent),
-            lease_start_date: data.lease_start_date,
-            lease_end_date: data.lease_end_date,
-            security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
-          })
-          .select('id')
-          .single();
-          
-        if (leaseError) {
-          if (isActiveLeaseConstraint(leaseError.message)) {
-            toast({
-              title: 'Unit Already Occupied',
-              description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
-              variant: 'destructive',
-            });
-            return;
-          }
-          throw new Error(leaseError.message);
-        }
-        
-        leaseCreated = true;
-
-        // Non-blocking unit status sync
-        void supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id });
+        // Failure log (non-blocking)
+        logActivity('tenant_creation_failed', 'tenant', undefined, { error: msg, code }).catch(console.error);
+        return;
       }
 
-      // Non-blocking activity log
+      const leaseCreated = !!rpcRes.lease;
+      const tenantId = rpcRes.tenant?.id || undefined;
+
+      // Success activity log (non-blocking)
       logActivity(
         'tenant_created',
         'tenant',
-        tenantInserted.id,
+        tenantId,
         {
           tenant_name: `${data.first_name} ${data.last_name}`,
           tenant_email: data.email,
@@ -313,32 +266,29 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       console.log(`✅ Tenant created in ${(endTime - startTime).toFixed(0)}ms`);
 
       toast({
-        title: "Tenant Created",
-        description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
-        variant: "default",
+        title: 'Tenant Created',
+        description: leaseCreated ? 'Tenant and lease created successfully.' : 'Tenant created successfully.',
+        variant: 'default',
         duration: 3000,
       });
 
       reset();
       handleOpenChange(false);
       onTenantAdded();
-      
+
     } catch (error: any) {
-      console.error("Error creating tenant:", error);
-      
+      console.error('Error creating tenant:', error);
       toast({
-        title: "Tenant Creation Failed",
-        description: error?.message || "An unexpected error occurred",
-        variant: "destructive",
+        title: 'Tenant Creation Failed',
+        description: error?.message || 'An unexpected error occurred',
+        variant: 'destructive',
       });
-      
-      // Non-blocking failure log
+      // Failure log (non-blocking)
       logActivity('tenant_creation_failed', 'tenant', undefined, {
         error: error?.message,
         property_id: data.property_id,
         unit_id: data.unit_id
       }).catch(console.error);
-      
     } finally {
       clearTimeout(watchdog);
       setLoading(false);
