@@ -238,6 +238,19 @@ const handler = async (req: Request): Promise<Response> => {
     // Send SMS
     if (includeSMS && tenant.phone) {
       try {
+        // Get landlord ID from property ownership
+        const propertyId = tenant.leases?.[0]?.units?.property_id;
+        let landlordId: string | null = null;
+        
+        if (propertyId) {
+          const { data: property } = await supabaseAdmin
+            .from("properties")
+            .select("owner_id")
+            .eq("id", propertyId)
+            .single();
+          landlordId = property?.owner_id || null;
+        }
+
         const smsMessage = `Welcome to Zira Homes! Your login:\nEmail: ${tenant.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}`;
         
         const { data: smsData, error: smsError } = await supabaseAdmin.functions.invoke(
@@ -247,6 +260,8 @@ const handler = async (req: Request): Promise<Response> => {
               phone_number: tenant.phone,
               message: smsMessage,
               message_type: "tenant_welcome",
+              landlord_id: landlordId,
+              user_id: tenant.user_id,
             },
           }
         );
