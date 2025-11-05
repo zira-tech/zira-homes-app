@@ -35,15 +35,16 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check Admin role
-    const { data: isAdmin, error: roleError } = await supabase.rpc('has_role', {
-      _user_id: user.id,
-      _role: 'Admin'
-    });
+    // Check Admin, Landlord or Manager role
+    const [{ data: isAdmin }, { data: isLandlord }, { data: isManager }] = await Promise.all([
+      supabase.rpc('has_role', { _user_id: user.id, _role: 'Admin' }),
+      supabase.rpc('has_role', { _user_id: user.id, _role: 'Landlord' }),
+      supabase.rpc('has_role', { _user_id: user.id, _role: 'Manager' }),
+    ]);
 
-    if (roleError || !isAdmin) {
+    if (!isAdmin && !isLandlord && !isManager) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: Admin role required' }),
+        JSON.stringify({ error: 'Unauthorized: Admin, Landlord or Manager role required' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

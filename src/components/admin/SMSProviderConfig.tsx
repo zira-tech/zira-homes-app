@@ -146,10 +146,11 @@ const SMSProviderConfig = () => {
   };
 
   const saveProvider = async () => {
-    if (!newProvider.provider_name || !newProvider.sender_id) {
+    // Only require provider name so base URL can be updated independently
+    if (!newProvider.provider_name) {
       toast({
         title: "Validation Error",
-        description: "Provider name and sender ID are required",
+        description: "Provider name is required",
         variant: "destructive",
       });
       return;
