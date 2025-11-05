@@ -31,10 +31,29 @@ const EmailTemplateEditor = () => {
   const [previewTemplate, setPreviewTemplate] = useState<EmailTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalTemplate, setOriginalTemplate] = useState<EmailTemplate | null>(null);
 
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  // Keyboard shortcut for saving
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editingTemplate && hasUnsavedChanges) {
+          saveTemplate();
+        }
+      }
+    };
+
+    if (editingTemplate) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [editingTemplate, hasUnsavedChanges]);
 
   const fetchTemplates = async () => {
     try {
@@ -80,6 +99,8 @@ const EmailTemplateEditor = () => {
         t.id === editingTemplate.id ? editingTemplate : t
       ));
       setEditingTemplate(null);
+      setHasUnsavedChanges(false);
+      setOriginalTemplate(null);
 
       toast({
         title: "Template Saved",
@@ -94,6 +115,23 @@ const EmailTemplateEditor = () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTemplateChange = (updates: Partial<EmailTemplate>) => {
+    setEditingTemplate(prev => prev ? { ...prev, ...updates } : null);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      if (confirm('You have unsaved changes. Are you sure you want to close?')) {
+        setEditingTemplate(null);
+        setHasUnsavedChanges(false);
+        setOriginalTemplate(null);
+      }
+    } else {
+      setEditingTemplate(null);
     }
   };
 
@@ -153,7 +191,11 @@ const EmailTemplateEditor = () => {
                   <Button
                     size="sm"
                     variant="default"
-                    onClick={() => setEditingTemplate({ ...template })}
+                    onClick={() => {
+                      setEditingTemplate({ ...template });
+                      setOriginalTemplate({ ...template });
+                      setHasUnsavedChanges(false);
+                    }}
                     className="flex items-center gap-2"
                   >
                     <Edit className="h-4 w-4" />
@@ -183,29 +225,27 @@ const EmailTemplateEditor = () => {
       {/* Edit Dialog */}
       {editingTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-6xl h-[95vh] flex flex-col">
+          <Card className="w-full max-w-6xl max-h-[90vh] flex flex-col">
             <CardHeader className="flex-shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle>Edit Email Template</CardTitle>
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setEditingTemplate(null)}
+                  onClick={handleClose}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col space-y-6 overflow-hidden">
+            <CardContent className="flex-1 flex flex-col space-y-6 overflow-y-auto">
               <div className="grid gap-4 md:grid-cols-2 flex-shrink-0">
                 <div className="space-y-2">
                   <Label htmlFor="template-name">Template Name</Label>
                   <Input
                     id="template-name"
                     value={editingTemplate.template_name}
-                    onChange={(e) => setEditingTemplate(prev => prev ? 
-                      { ...prev, template_name: e.target.value } : null
-                    )}
+                    onChange={(e) => handleTemplateChange({ template_name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -213,9 +253,7 @@ const EmailTemplateEditor = () => {
                   <Input
                     id="template-subject"
                     value={editingTemplate.subject}
-                    onChange={(e) => setEditingTemplate(prev => prev ? 
-                      { ...prev, subject: e.target.value } : null
-                    )}
+                    onChange={(e) => handleTemplateChange({ subject: e.target.value })}
                   />
                 </div>
               </div>
@@ -223,64 +261,63 @@ const EmailTemplateEditor = () => {
               <div className="flex items-center space-x-2 flex-shrink-0">
                 <Switch
                   checked={editingTemplate.is_active}
-                  onCheckedChange={(checked) => setEditingTemplate(prev => prev ? 
-                    { ...prev, is_active: checked } : null
-                  )}
+                  onCheckedChange={(checked) => handleTemplateChange({ is_active: checked })}
                 />
                 <Label>Template is active</Label>
               </div>
 
-              <Tabs defaultValue="text" className="w-full flex-1 flex flex-col">
+              <Tabs defaultValue="text" className="w-full">
                 <TabsList className="flex-shrink-0">
                   <TabsTrigger value="text">Plain Text</TabsTrigger>
                   <TabsTrigger value="html">HTML</TabsTrigger>
                 </TabsList>
-                <TabsContent value="text" className="space-y-2 flex-1 flex flex-col">
+                <TabsContent value="text" className="space-y-2">
                   <Label htmlFor="email-content">Email Content (Plain Text)</Label>
                   <Textarea
                     id="email-content"
                     value={editingTemplate.email_content}
-                    onChange={(e) => setEditingTemplate(prev => prev ? 
-                      { ...prev, email_content: e.target.value } : null
-                    )}
-                    className="flex-1 min-h-[300px] resize-none"
+                    onChange={(e) => handleTemplateChange({ email_content: e.target.value })}
+                    className="min-h-[300px] max-h-[400px] resize-none"
                     placeholder="Enter email content in plain text..."
                   />
-                  <p className="text-sm text-muted-foreground flex-shrink-0">
+                  <p className="text-sm text-muted-foreground">
                     Available variables: {"{{first_name}}"}, {"{{trial_end_date}}"}, {"{{days_remaining}}"}, {"{{upgrade_url}}"}
                   </p>
                 </TabsContent>
-                <TabsContent value="html" className="space-y-2 flex-1 flex flex-col">
+                <TabsContent value="html" className="space-y-2">
                   <Label htmlFor="html-content">Email Content (HTML)</Label>
                   <Textarea
                     id="html-content"
                     value={editingTemplate.html_content}
-                    onChange={(e) => setEditingTemplate(prev => prev ? 
-                      { ...prev, html_content: e.target.value } : null
-                    )}
-                    className="flex-1 min-h-[300px] resize-none"
+                    onChange={(e) => handleTemplateChange({ html_content: e.target.value })}
+                    className="min-h-[300px] max-h-[400px] resize-none"
                     placeholder="Enter email content in HTML..."
                   />
-                  <p className="text-sm text-muted-foreground flex-shrink-0">
+                  <p className="text-sm text-muted-foreground">
                     Available variables: {"{{first_name}}"}, {"{{trial_end_date}}"}, {"{{days_remaining}}"}, {"{{upgrade_url}}"}
                   </p>
                 </TabsContent>
               </Tabs>
 
-              <div className="flex justify-end space-x-2 flex-shrink-0 pt-4 border-t">
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t pt-4 mt-4 flex justify-end space-x-2 z-10">
                 <Button
                   variant="outline"
-                  onClick={() => setEditingTemplate(null)}
+                  onClick={handleClose}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={saveTemplate}
-                  disabled={saving}
+                  disabled={saving || !hasUnsavedChanges}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {saving ? "Saving..." : "Save Template"}
+                  {saving ? "Saving..." : hasUnsavedChanges ? "Save Template" : "Saved"}
                 </Button>
+                {hasUnsavedChanges && !saving && (
+                  <p className="text-xs text-muted-foreground self-center mr-2">
+                    Press Ctrl+S to save
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
