@@ -3,10 +3,17 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmsCredits } from "@/hooks/useSmsCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MessageSquare, TrendingUp, DollarSign, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { 
+  MessageSquare, TrendingUp, DollarSign, Clock, CheckCircle, XCircle, 
+  AlertCircle, RefreshCw, CreditCard 
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { FeatureGate } from "@/components/ui/feature-gate";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
@@ -28,8 +35,15 @@ interface SmsStats {
   total_cost: number;
 }
 
+interface Landlord {
+  id: string;
+  email: string;
+}
+
 const SmsUsage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { balance, isLow, loading: creditsLoading, refresh: refreshCredits } = useSmsCredits();
   const [logs, setLogs] = useState<SmsLog[]>([]);
   const [stats, setStats] = useState<SmsStats>({
     total_sent: 0,
@@ -38,18 +52,106 @@ const SmsUsage = () => {
     total_cost: 0
   });
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [landlords, setLandlords] = useState<Landlord[]>([]);
+  const [selectedLandlordId, setSelectedLandlordId] = useState<string>("");
+  const [currentLandlordId, setCurrentLandlordId] = useState<string>("");
 
   useEffect(() => {
     if (user) {
-      loadSmsData();
-    }
-  }, [user]);
+      checkAdminRole();
+      const effectiveLandlordId = selectedLandlordId || user.id;
+      setCurrentLandlordId(effectiveLandlordId);
+      loadSmsData(effectiveLandlordId);
+      
+      // Real-time subscription
+      const channel = supabase
+        .channel('sms_logs_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sms_logs',
+            filter: `landlord_id=eq.${effectiveLandlordId}`
+          },
+          (payload) => {
+            console.log('📱 SMS log change:', payload);
+            if (payload.eventType === 'INSERT') {
+              setLogs(prev => {
+                const newLogs = [payload.new as SmsLog, ...prev].slice(0, 50);
+                recalculateStats(newLogs);
+                return newLogs;
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              setLogs(prev => {
+                const newLogs = prev.map(log => 
+                  log.id === payload.new.id ? payload.new as SmsLog : log
+                );
+                recalculateStats(newLogs);
+                return newLogs;
+              });
+            }
+            refreshCredits();
+          }
+        )
+        .subscribe();
 
-  const loadSmsData = async () => {
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user, selectedLandlordId]);
+
+  const checkAdminRole = async () => {
+    try {
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user?.id);
+      
+      if (roles?.some(r => r.role === 'Admin')) {
+        setIsAdmin(true);
+        loadLandlords();
+      }
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+    }
+  };
+
+  const loadLandlords = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .order('email');
+      
+      if (!error && data) {
+        setLandlords(data.map(p => ({ 
+          id: p.id, 
+          email: p.email
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading landlords:', error);
+    }
+  };
+
+  const recalculateStats = (logsList: SmsLog[]) => {
+    const newStats: SmsStats = {
+      total_sent: logsList.filter(log => log.status === 'sent').length,
+      total_failed: logsList.filter(log => log.status === 'failed').length,
+      total_pending: logsList.filter(log => log.status === 'pending').length,
+      total_cost: logsList.filter(log => log.status === 'sent').length * 2.5,
+    };
+    setStats(newStats);
+  };
+
+  const loadSmsData = async (landlordId: string) => {
     try {
       setLoading(true);
 
-      // Load SMS logs for current month with explicit landlord_id filter
+      // Load SMS logs for current month
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -57,7 +159,7 @@ const SmsUsage = () => {
       const { data: logsData, error: logsError } = await supabase
         .from('sms_logs')
         .select('*')
-        .eq('landlord_id', user?.id)
+        .eq('landlord_id', landlordId)
         .gte('created_at', startOfMonth.toISOString())
         .order('created_at', { ascending: false })
         .limit(50);
@@ -69,18 +171,7 @@ const SmsUsage = () => {
 
       console.log(`✅ Loaded ${logsData?.length || 0} SMS logs for landlord`);
       setLogs(logsData || []);
-
-      // Calculate stats
-      const sent = logsData?.filter(log => log.status === 'sent').length || 0;
-      const failed = logsData?.filter(log => log.status === 'failed').length || 0;
-      const pending = logsData?.filter(log => log.status === 'pending').length || 0;
-
-      setStats({
-        total_sent: sent,
-        total_failed: failed,
-        total_pending: pending,
-        total_cost: sent * 2.5 // KES 2.50 per SMS (only count successful sends)
-      });
+      recalculateStats(logsData || []);
 
     } catch (error) {
       console.error('Error loading SMS data:', error);
@@ -141,11 +232,44 @@ const SmsUsage = () => {
               <h1 className="text-3xl font-bold">SMS Usage</h1>
               <p className="text-muted-foreground">Monitor your SMS delivery and costs</p>
             </div>
-            <Button onClick={loadSmsData} variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Badge variant={isLow ? "destructive" : "default"} className="text-sm">
+                  <CreditCard className="mr-1 h-3 w-3" />
+                  Credits: {balance}
+                </Badge>
+                <Button variant="outline" size="sm" onClick={() => navigate('/billing')}>
+                  Top up
+                </Button>
+              </div>
+              <Button onClick={() => loadSmsData(currentLandlordId)} variant="outline">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
+
+          {isAdmin && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>You're viewing SMS logs. Select a landlord to view their activity:</span>
+                <Select value={selectedLandlordId} onValueChange={setSelectedLandlordId}>
+                  <SelectTrigger className="w-[300px]">
+                    <SelectValue placeholder="View your own logs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Your own logs (Admin)</SelectItem>
+                    {landlords.map(landlord => (
+                      <SelectItem key={landlord.id} value={landlord.id}>
+                        {landlord.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -21,9 +21,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("🧪 Testing SMS functionality...");
 
-    // Get phone number from request body or use default
+    // Get phone number and landlord_id from request body or use defaults
     const body = await req.json().catch(() => ({}));
     const testPhone = body.phone_number || "254722241745";
+    const landlordId = body.landlord_id || null;
     
     const testMessage = `🧪 Test SMS from ZIRA Property Management System
 
@@ -33,15 +34,15 @@ If you received this message, the SMS system is working correctly! ✅
 
 - ZIRA Tech Team`;
 
-    console.log(`📱 Sending test SMS to: ${testPhone}`);
+    console.log(`📱 Sending test SMS to: ${testPhone} for landlord: ${landlordId || 'admin/default'}`);
 
     // Send SMS using the send-sms-with-logging function
     const { data, error } = await supabase.functions.invoke('send-sms-with-logging', {
       body: {
         phone_number: testPhone,
         message: testMessage,
-        message_type: 'general',
-        landlord_id: null
+        message_type: 'test',
+        landlord_id: landlordId
       }
     });
 
