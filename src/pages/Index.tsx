@@ -26,14 +26,14 @@ export default function Index() {
   const navigate = useNavigate();
   const { data, loading, error } = useLandlordDashboard();
   const { expiringCount } = useLeaseExpiryCount();
-  const { isTenant, assignedRoles } = useRole();
+  const { isTenant } = useRole();
 
   // Safety redirect: If user is tenant-only, redirect to tenant portal
   useEffect(() => {
-    if (isTenant || assignedRoles.includes("tenant")) {
+    if (isTenant) {
       navigate('/tenant', { replace: true });
     }
-  }, [isTenant, assignedRoles, navigate]);
+  }, [isTenant, navigate]);
 
   // Extract dashboard stats safely
   const stats = data?.property_stats ? {

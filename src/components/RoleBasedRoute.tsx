@@ -24,10 +24,9 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
   
-  // Redirect from "/" based on role (use assignedRoles as authoritative signal)
+  // Redirect from "/" based on effectiveRole (the currently selected/active role)
   if (location.pathname === "/") {
-    // Prioritize tenant role - if user has tenant role OR effectiveRole is tenant, go to tenant portal
-    if (assignedRoles.includes("tenant") || effectiveRole === "tenant") {
+    if (effectiveRole === "tenant") {
       return <Navigate to="/tenant" replace />;
     }
     if (effectiveRole === "admin") {
@@ -39,14 +38,13 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
   // Helper to check if we're in actual tenant area (not /tenants which is for landlords)
   const isTenantArea = location.pathname === "/tenant" || location.pathname.startsWith("/tenant/");
 
-  // Block tenant users from accessing non-tenant routes (use assignedRoles as failsafe)
-  if ((effectiveRole === "tenant" || assignedRoles.includes("tenant")) && !isTenantArea && location.pathname !== "/auth") {
+  // Block tenant users from accessing non-tenant routes
+  if (effectiveRole === "tenant" && !isTenantArea && location.pathname !== "/auth") {
     return <Navigate to="/tenant" replace />;
   }
 
   // Block non-tenant users from accessing tenant routes
-  // Allow if effectiveRole is tenant OR assignedRoles includes tenant (prevents loop during hydration)
-  if (isTenantArea && !(effectiveRole === "tenant" || assignedRoles.includes("tenant"))) {
+  if (isTenantArea && effectiveRole !== "tenant") {
     return <Navigate to="/" replace />;
   }
 
