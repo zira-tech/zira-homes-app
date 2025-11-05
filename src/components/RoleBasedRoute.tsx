@@ -44,8 +44,9 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
     return <Navigate to="/tenant" replace />;
   }
 
-  // Block non-tenant users from accessing tenant routes (unless impersonating)
-  if (isTenantArea && effectiveRole !== "tenant") {
+  // Block non-tenant users from accessing tenant routes
+  // Allow if effectiveRole is tenant OR assignedRoles includes tenant (prevents loop during hydration)
+  if (isTenantArea && !(effectiveRole === "tenant" || assignedRoles.includes("tenant"))) {
     return <Navigate to="/" replace />;
   }
 

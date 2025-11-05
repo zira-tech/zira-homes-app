@@ -100,19 +100,19 @@ export const AppRoutes = () => {
       
       {/* Tenant routes with lazy loading */}
       <Route
-        path="/tenant/*"
+        path="/tenant"
         element={
           <RequireAuth>
             <RoleBasedRoute>
               <React.Suspense fallback={<LoadingSpinner />}>
                 <Routes>
-                  <Route path="/" element={<TenantDashboard />} />
-                  <Route path="/maintenance" element={<TenantMaintenance />} />
-                  <Route path="/messages" element={<TenantMessages />} />
-                  <Route path="/payment-preferences" element={<TenantPaymentPreferences />} />
-                  <Route path="/payments" element={<TenantPayments />} />
-                  <Route path="/profile" element={<TenantProfile />} />
-                  <Route path="/support" element={<TenantSupport />} />
+                  <Route index element={<TenantDashboard />} />
+                  <Route path="maintenance" element={<TenantMaintenance />} />
+                  <Route path="messages" element={<TenantMessages />} />
+                  <Route path="payment-preferences" element={<TenantPaymentPreferences />} />
+                  <Route path="payments" element={<TenantPayments />} />
+                  <Route path="profile" element={<TenantProfile />} />
+                  <Route path="support" element={<TenantSupport />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </React.Suspense>
