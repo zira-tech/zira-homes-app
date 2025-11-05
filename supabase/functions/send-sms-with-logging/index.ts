@@ -244,6 +244,16 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Deduct SMS credit for non-admin users
       if (!isAdmin && effectiveLandlordId) {
+        // Get current balance before deduction
+        const { data: subscription } = await supabase
+          .from('landlord_subscriptions')
+          .select('sms_credits_balance')
+          .eq('landlord_id', effectiveLandlordId)
+          .single();
+
+        const currentBalance = subscription?.sms_credits_balance || 0;
+        const newBalance = currentBalance - 1;
+
         const { error: deductError } = await supabase
           .from('landlord_subscriptions')
           .update({ 
@@ -257,6 +267,32 @@ const handler = async (req: Request): Promise<Response> => {
           // Don't fail the request, just log the error
         } else {
           console.log(`💳 Deducted 1 SMS credit from landlord ${effectiveLandlordId}`);
+          
+          // Log credit usage transaction
+          const { error: txError } = await supabase
+            .from('sms_credit_transactions')
+            .insert({
+              landlord_id: effectiveLandlordId,
+              transaction_type: 'usage',
+              credits_change: -1,
+              balance_after: newBalance,
+              description: `SMS sent to ${phoneResult.formatted}`,
+              reference_id: smsLog?.id,
+              reference_type: 'sms_log',
+              created_by: userId,
+              metadata: {
+                phone_number: phoneResult.formatted,
+                message_length: message.length,
+                message_type: message_type || 'general',
+                provider: provider_name || 'InHouse SMS'
+              }
+            });
+
+          if (txError) {
+            console.error('Error logging SMS credit transaction:', txError);
+          } else {
+            console.log(`📝 Logged SMS credit usage transaction. New balance: ${newBalance}`);
+          }
         }
       }
 

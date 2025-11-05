@@ -265,6 +265,33 @@ serve(async (req) => {
               } else {
                 console.log('SMS credits updated successfully. New balance:', newBalance);
                 
+                // Log credit purchase transaction
+                const { error: txError } = await supabase
+                  .from('sms_credit_transactions')
+                  .insert({
+                    landlord_id: landlordId,
+                    transaction_type: 'purchase',
+                    credits_change: smsCount,
+                    balance_after: newBalance,
+                    description: `SMS bundle purchase via M-Pesa`,
+                    reference_id: transaction.id,
+                    reference_type: 'mpesa_transaction',
+                    created_by: landlordId,
+                    metadata: {
+                      bundle_id: transaction.metadata?.bundle_id,
+                      bundle_name: transaction.metadata?.bundle_name,
+                      amount_paid: amount || transaction.amount,
+                      mpesa_receipt: transactionId,
+                      checkout_request_id: checkoutRequestID
+                    }
+                  });
+
+                if (txError) {
+                  console.error('Error logging SMS credit transaction:', txError);
+                } else {
+                  console.log(`📝 Logged SMS credit purchase transaction. Credits added: ${smsCount}`);
+                }
+                
                 // Send SMS confirmation
                 try {
                   const { data: profile } = await supabase

@@ -2425,6 +2425,56 @@ export type Database = {
           },
         ]
       }
+      sms_credit_transactions: {
+        Row: {
+          balance_after: number
+          created_at: string
+          created_by: string | null
+          credits_change: number
+          description: string | null
+          id: string
+          landlord_id: string
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string | null
+          transaction_type: string
+        }
+        Insert: {
+          balance_after: number
+          created_at?: string
+          created_by?: string | null
+          credits_change: number
+          description?: string | null
+          id?: string
+          landlord_id: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          transaction_type: string
+        }
+        Update: {
+          balance_after?: number
+          created_at?: string
+          created_by?: string | null
+          credits_change?: number
+          description?: string | null
+          id?: string
+          landlord_id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_credit_transactions_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_logs: {
         Row: {
           created_at: string | null
