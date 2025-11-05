@@ -79,11 +79,16 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           // Check metadata first (fastest)
           const metadataRole = user.user_metadata?.role;
           
+          // Early tenant detection via metadata
           if (metadataRole === "Tenant") {
+            setAssignedRoles(["tenant"]);
             return "tenant";
           }
 
-          // Prefer RPC-based role checks (works with server proxy fallback)
+          // Check if user has an active lease (tenant status)
+          const { data: isTenant } = await supabase.rpc('is_user_tenant', { _user_id: user.id });
+          
+          // Check all management roles
           const rolesToCheck = ["Admin", "Landlord", "Manager", "Agent"] as const;
           const roleChecks = await Promise.all(
             rolesToCheck.map(async (r) => {
@@ -92,15 +97,20 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             })
           );
 
-          const allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
+          let allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
+          
+          // Add tenant to roles if they have an active lease
+          if (isTenant && !allRoles.includes("tenant")) {
+            allRoles.push("tenant");
+          }
+          
           setAssignedRoles(allRoles);
 
-          // Sub-user check via secure RPC (detect even if roles list didn't include it)
+          // Sub-user check via secure RPC
           try {
             const { data: subUserData } = await supabase.rpc("get_my_sub_user_permissions");
             const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
             if (subUserInfo && (subUserInfo.permissions || subUserInfo.status)) {
-              setSelectedRole("subuser");
               if (subUserInfo.permissions) setSubUserPermissions(subUserInfo.permissions);
               setLandlordId(subUserInfo.landlord_id || null);
               if (subUserInfo.landlord_id) {
@@ -117,32 +127,53 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
                   setIsOnLandlordTrial(isActive);
                 }
               }
-              return "subuser";
+              // Don't auto-select subuser role, let user choose between their roles
+              if (!allRoles.includes("subuser")) {
+                allRoles.push("subuser");
+                setAssignedRoles(allRoles);
+              }
             }
           } catch {}
 
-          // SECURITY: Only trust stored selection if included in server-verified roles
+          // SECURITY: Check stored role preference (must be server-verified)
           const storedSelectedRole = localStorage.getItem('selectedRole');
           if (storedSelectedRole && allRoles.includes(storedSelectedRole.toLowerCase())) {
             setSelectedRole(storedSelectedRole.toLowerCase());
-          } else {
-            if (allRoles.includes("admin")) { setSelectedRole("admin"); return "admin"; }
-            if (allRoles.includes("landlord")) { setSelectedRole("landlord"); return "landlord"; }
-            if (allRoles.includes("manager")) { setSelectedRole("manager"); return "manager"; }
-            if (allRoles.includes("agent")) { setSelectedRole("agent"); return "agent"; }
-            if (storedSelectedRole && !allRoles.includes(storedSelectedRole.toLowerCase())) {
-              localStorage.removeItem('selectedRole');
-            }
+            return storedSelectedRole.toLowerCase();
           }
 
-          // Only check tenant if no other roles matched
-          const { data: isTenant } = await supabase.rpc('is_user_tenant', { _user_id: user.id });
-          if (isTenant) {
+          // Priority for multi-role users: Tenant > Admin > Landlord > Manager > Agent
+          // Tenants with active leases should default to tenant view
+          if (isTenant && allRoles.includes("tenant")) {
+            setSelectedRole("tenant");
             return "tenant";
           }
+          if (allRoles.includes("admin")) { 
+            setSelectedRole("admin"); 
+            return "admin"; 
+          }
+          if (allRoles.includes("landlord")) { 
+            setSelectedRole("landlord"); 
+            return "landlord"; 
+          }
+          if (allRoles.includes("manager")) { 
+            setSelectedRole("manager"); 
+            return "manager"; 
+          }
+          if (allRoles.includes("agent")) { 
+            setSelectedRole("agent"); 
+            return "agent"; 
+          }
+          
+          // Clean up invalid stored role
+          if (storedSelectedRole && !allRoles.includes(storedSelectedRole.toLowerCase())) {
+            localStorage.removeItem('selectedRole');
+          }
 
-          // Fallback to metadata or keep current role
-          return metadataRole?.toLowerCase() || selectedRole || "tenant";
+          // Fallback to metadata or tenant
+          const fallbackRole = metadataRole?.toLowerCase() || (isTenant ? "tenant" : null) || selectedRole || "tenant";
+          setSelectedRole(fallbackRole);
+          return fallbackRole;
         });
 
         // Only update if different from optimistic value

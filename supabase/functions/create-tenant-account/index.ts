@@ -287,13 +287,36 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       // Assign Tenant role idempotently for both new and existing users
-      const { error: roleInsertError } = await supabaseAdmin
+      console.log("Assigning Tenant role to user:", userId);
+      const { data: roleData, error: roleInsertError } = await supabaseAdmin
         .from('user_roles')
-        .insert({ user_id: userId, role: 'Tenant' }, { onConflict: 'user_id,role' });
+        .insert({ user_id: userId, role: 'Tenant' })
+        .select();
 
       // Ignore unique constraint (already has role), but surface other errors
-      if (roleInsertError && roleInsertError.code !== '23505') {
-        throw roleInsertError;
+      if (roleInsertError) {
+        if (roleInsertError.code === '23505') {
+          console.log("User already has Tenant role (duplicate key ignored)");
+        } else {
+          console.error("Error assigning Tenant role:", roleInsertError);
+          throw roleInsertError;
+        }
+      } else {
+        console.log("Tenant role assigned successfully:", roleData);
+      }
+
+      // Verify role was set correctly
+      const { data: verifyRole } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .eq('role', 'Tenant')
+        .single();
+      
+      if (!verifyRole) {
+        console.error("CRITICAL: Tenant role verification failed for user:", userId);
+      } else {
+        console.log("Tenant role verified for user:", userId);
       }
 
       // Create tenant record
