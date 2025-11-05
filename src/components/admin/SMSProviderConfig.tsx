@@ -38,7 +38,6 @@ const SMSProviderConfig = () => {
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [editingProvider, setEditingProvider] = useState<SMSProvider | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [countries] = useState([
     { code: 'KE', name: 'Kenya' },
     { code: 'UG', name: 'Uganda' },
@@ -97,39 +96,47 @@ const SMSProviderConfig = () => {
     try {
       setLoading(true);
       
-      // Use secure admin function to fetch providers (bypasses RLS)
-      const { data: result, error } = await supabase.functions.invoke('admin-list-sms-providers');
+      // Fetch from database first
+      const { data: dbProviders, error } = await supabase
+        .from('sms_providers')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching providers:', error);
-        
-        if (error.message?.includes('403') || error.message?.includes('Unauthorized')) {
-          toast({
-            title: "Access Denied",
-            description: "You need Admin, Landlord, or Manager privileges to view SMS providers",
-            variant: "destructive",
-          });
-          setProviders([]);
+        console.error('Database error:', error);
+        // Fallback to localStorage
+        const savedProviders = localStorage.getItem('sms_providers');
+        if (savedProviders) {
+          setProviders(JSON.parse(savedProviders));
         } else {
-          toast({
-            title: "Error",
-            description: "Failed to fetch SMS provider configurations",
-            variant: "destructive",
-          });
+          // Ultimate fallback to default data
+          const defaultProviders: SMSProvider[] = [
+            {
+              id: '1',
+              provider_name: 'InHouse SMS',
+              authorization_token: 'f22b2aa230b02b428a71023c7eb7f7bb9d440f38',
+              sender_id: 'ZIRA TECH',
+              base_url: 'http://68.183.101.252:803/bulk_api/',
+              is_active: true,
+              is_default: true,
+              config_data: { 
+                username: 'ZIRA TECH',
+                unique_identifier: '77',
+                sender_type: '10',
+                authorization_token: 'f22b2aa230b02b428a71023c7eb7f7bb9d440f38'
+              }
+            }
+          ];
+          setProviders(defaultProviders);
         }
-        return;
+      } else {
+        setProviders((dbProviders || []) as SMSProvider[]);
       }
-
-      if (!result?.success) {
-        throw new Error(result?.error || 'Failed to fetch providers');
-      }
-
-      setProviders(result.providers || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching SMS providers:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to fetch SMS provider configurations",
+        description: "Failed to fetch SMS provider configurations",
         variant: "destructive",
       });
     } finally {
@@ -138,22 +145,14 @@ const SMSProviderConfig = () => {
   };
 
   const saveProvider = async () => {
-    // Only require provider name so base URL can be updated independently
-    if (!newProvider.provider_name) {
-      toast({
-        title: "Validation Error",
-        description: "Provider name is required",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSaving(true);
     try {
-      // Normalize and validate base_url
-      let normalizedBaseUrl = newProvider.base_url?.trim();
-      if (normalizedBaseUrl && !normalizedBaseUrl.endsWith('/')) {
-        normalizedBaseUrl += '/';
+      if (!newProvider.provider_name) {
+        toast({
+          title: "Validation Error",
+          description: "Provider name is required",
+          variant: "destructive",
+        });
+        return;
       }
 
       const config_data: Record<string, any> = {};
@@ -167,13 +166,12 @@ const SMSProviderConfig = () => {
       if (newProvider.additional_config) {
         try {
           Object.assign(config_data, JSON.parse(newProvider.additional_config));
-        } catch (e: any) {
+        } catch (e) {
           toast({
             title: "Invalid JSON",
-            description: `Additional config must be valid JSON: ${e.message}`,
+            description: "Additional configuration must be valid JSON",
             variant: "destructive",
           });
-          setIsSaving(false);
           return;
         }
       }
@@ -181,41 +179,27 @@ const SMSProviderConfig = () => {
       const providerData = {
         provider_name: newProvider.provider_name,
         sender_id: newProvider.sender_id || null,
-        base_url: normalizedBaseUrl || null,
+        base_url: newProvider.base_url || null,
         is_active: editingProvider ? editingProvider.is_active : (providers.length === 0),
         is_default: editingProvider ? editingProvider.is_default : (providers.length === 0),
         config_data
       };
 
-      console.log('Saving provider:', providerData);
+      if (editingProvider) {
+        // Update existing provider
+        const { error } = await supabase
+          .from('sms_providers')
+          .update(providerData)
+          .eq('id', editingProvider.id);
 
-      // Add timeout to prevent infinite "Saving..."
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout after 12 seconds')), 12000)
-      );
+        if (error) throw error;
+      } else {
+        // Insert new provider
+        const { error } = await supabase
+          .from('sms_providers')
+          .insert([providerData]);
 
-      const invokePromise = supabase.functions.invoke('admin-upsert-sms-provider', {
-        body: {
-          id: editingProvider?.id,
-          ...providerData
-        }
-      });
-
-      const { data: result, error: functionError } = await Promise.race([
-        invokePromise,
-        timeoutPromise
-      ]) as any;
-
-      if (functionError) {
-        console.error('Function error:', functionError);
-        throw new Error(functionError.message || 'Failed to invoke save function');
-      }
-      
-      if (!result?.success) {
-        const errorMsg = result?.error || 'Unknown error occurred';
-        const details = result?.details ? ` (${result.details})` : '';
-        console.error('Save failed:', result);
-        throw new Error(errorMsg + details);
+        if (error) throw error;
       }
 
       toast({
@@ -223,29 +207,16 @@ const SMSProviderConfig = () => {
         description: `Provider ${editingProvider ? 'updated' : 'added'} successfully`,
       });
 
-      // Update local state optimistically
-      const savedProvider = result.provider;
-      if (editingProvider) {
-        setProviders(prev => prev.map(p => p.id === editingProvider.id ? savedProvider : p));
-      } else {
-        setProviders(prev => [...prev, savedProvider]);
-      }
-
-      // Close dialog and reset form immediately
-      setIsDialogOpen(false);
       resetForm();
-      
-      // Refetch in background to ensure consistency
-      fetchProviders();
+      setIsDialogOpen(false);
+      fetchProviders(); // Refresh the list
     } catch (error: any) {
       console.error('Error saving provider:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save SMS provider",
+        description: error.message || "Failed to save provider configuration",
         variant: "destructive",
       });
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -642,12 +613,8 @@ const SMSProviderConfig = () => {
               </div>
 
               <div className="flex gap-3 pt-4 border-t">
-                <Button 
-                  onClick={saveProvider} 
-                  className="flex-1 bg-primary hover:bg-primary/90"
-                  disabled={isSaving}
-                >
-                  {isSaving ? 'Saving...' : editingProvider ? 'Update' : 'Add'} Provider
+                <Button onClick={saveProvider} className="flex-1 bg-primary hover:bg-primary/90">
+                  {editingProvider ? 'Update' : 'Add'} Provider
                 </Button>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                   Cancel

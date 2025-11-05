@@ -101,9 +101,3 @@ verify_jwt = true
 
 [functions.sms-health-check]
 verify_jwt = true
-
-[functions.admin-upsert-sms-provider]
-verify_jwt = true
-
-[functions.admin-list-sms-providers]
-verify_jwt = true
