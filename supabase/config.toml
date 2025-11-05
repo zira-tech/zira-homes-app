@@ -98,3 +98,6 @@ verify_jwt = true
 
 [functions.send-tenant-welcome-notifications]
 verify_jwt = true
+
+[functions.sms-health-check]
+verify_jwt = true
