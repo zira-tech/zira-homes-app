@@ -49,6 +49,7 @@ import {
 import { EnhancedAnalyticsCharts } from "@/components/admin/EnhancedAnalyticsCharts";
 import { PropertyStakeholderSubscriptions } from "@/components/admin/PropertyStakeholderSubscriptions";
 import { CustomTrialManagement } from "@/components/admin/CustomTrialManagement";
+import { PropertyOwnershipAudit } from "@/components/admin/PropertyOwnershipAudit";
 
 interface BillingStats {
   totalRevenue: number;
@@ -901,10 +902,10 @@ const BillingDashboard = () => {
         {/* Enhanced Navigation Tabs */}
         <Tabs defaultValue="analytics" className="space-y-8">
           <div className="flex justify-center">
-            <TabsList className="grid w-full max-w-2xl grid-cols-4 bg-gray-100/80 backdrop-blur-sm p-1 h-12 rounded-xl shadow-lg border-0">
+            <TabsList className="grid w-full max-w-3xl grid-cols-5 bg-gray-100/80 backdrop-blur-sm p-1 h-12 rounded-xl shadow-lg border-0">
               <TabsTrigger 
                 value="analytics" 
-                className="relative flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
               >
                 <TrendingUp className="h-4 w-4" />
                 <span className="hidden sm:inline">Analytics</span>
@@ -912,15 +913,23 @@ const BillingDashboard = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="subscriptions" 
-                className="relative flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
               >
                 <Users className="h-4 w-4" />
                 <span className="hidden sm:inline">Subscriptions</span>
                 <span className="sm:hidden">Subs</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="audit" 
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
+              >
+                <AlertCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Audit</span>
+                <span className="sm:hidden">Audit</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="plans" 
-                className="relative flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
               >
                 <Crown className="h-4 w-4" />
                 <span className="hidden sm:inline">Plans</span>
@@ -928,7 +937,7 @@ const BillingDashboard = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="settings" 
-                className="relative flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-primary hover:bg-white/50"
               >
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Settings</span>
@@ -951,6 +960,10 @@ const BillingDashboard = () => {
               statusFilter={statusFilter}
               onStatusFilterChange={setStatusFilter}
             />
+          </TabsContent>
+
+          <TabsContent value="audit" className="space-y-6">
+            <PropertyOwnershipAudit />
           </TabsContent>
 
           <TabsContent value="plans" className="space-y-6">
