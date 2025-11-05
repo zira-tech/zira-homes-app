@@ -46,26 +46,9 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Check if user has Admin, Landlord, or Manager role
+    // Check if user has Admin role for full access
     const { data: hasAdminRole } = await supabase
       .rpc('has_role', { _user_id: user.id, _role: 'Admin' });
-    const { data: hasLandlordRole } = await supabase
-      .rpc('has_role', { _user_id: user.id, _role: 'Landlord' });
-    const { data: hasManagerRole } = await supabase
-      .rpc('has_role', { _user_id: user.id, _role: 'Manager' });
-
-    const isAuthorized = hasAdminRole || hasLandlordRole || hasManagerRole;
-
-    if (!isAuthorized) {
-      console.warn(`Unauthorized SMS provider access attempt by user: ${user.id}`);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Insufficient privileges to access SMS provider information'
-      }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
 
     // Query for ANY active SMS provider (not just default)
     const { data: providers, error } = await supabase
@@ -73,35 +56,42 @@ const handler = async (req: Request): Promise<Response> => {
       .select('*')
       .eq('is_active', true)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error || !providers) {
-      console.log('No active default provider found');
+    if (error) {
+      console.error('Error fetching SMS provider:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Error fetching SMS provider configuration'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    if (!providers) {
+      console.log('No active SMS provider found');
       return new Response(JSON.stringify({
         success: false,
         error: 'No SMS provider configured',
         message: 'Please configure an SMS provider in admin settings'
       }), {
         status: 404,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders,
-        },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
 
     // Return provider data based on role
-    // Admins get full info, Landlords/Managers get availability only
+    // Admins get full credentials info, all other authenticated users get availability only
     const safeProvider = hasAdminRole ? {
       id: providers.id,
       provider_name: providers.provider_name,
       sender_id: providers.sender_id,
       sender_type: providers.sender_type,
       is_active: providers.is_active,
-      is_default: providers.is_default,
       has_credentials: !!(providers.authorization_token || providers.username)
     } : {
-      // Limited info for landlords/managers
+      // Limited info for non-admin authenticated users (landlords, managers, tenants, etc.)
       provider_name: providers.provider_name,
       is_active: providers.is_active,
       available: true

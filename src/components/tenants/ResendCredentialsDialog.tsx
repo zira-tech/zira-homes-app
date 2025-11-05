@@ -130,8 +130,7 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
           .from('sms_providers')
           .select('*')
           .eq('is_active', true)
-          .eq('is_default', true)
-          .single();
+          .maybeSingle();
         
         if (!providerError && providerData) {
           smsConfig = {
