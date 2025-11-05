@@ -153,7 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Error creating SMS log:", logError);
     }
 
-    // Send SMS via the send-sms function
+    // Send SMS via the send-sms function with internal/system headers
     try {
       const { data: smsResponse, error: smsError } = await supabase.functions.invoke('send-sms', {
         body: {
@@ -162,6 +162,10 @@ const handler = async (req: Request): Promise<Response> => {
           provider_name: provider_name,
           provider_config: provider_config,
           landlord_id: landlord_id || userId
+        },
+        headers: {
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'x-internal-call': 'true'
         }
       });
 

@@ -31,36 +31,32 @@ const handler = async (req: Request): Promise<Response> => {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    // Authenticate user (Admin only)
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    // Tolerant authentication - attempt to identify caller but don't block
+    let callerType = 'none';
+    let userId: string | null = null;
     
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Check if user is admin
-    const { data: isAdmin } = await supabase.rpc('has_role', {
-      _user_id: user.id,
-      _role: 'Admin'
-    });
-
-    if (!isAdmin) {
-      return new Response(
-        JSON.stringify({ error: "Admin access required" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      try {
+        const token = authHeader.replace("Bearer ", "");
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        
+        if (!authError && user) {
+          userId = user.id;
+          
+          // Check if user is admin
+          const { data: isAdmin } = await supabase.rpc('has_role', {
+            _user_id: user.id,
+            _role: 'Admin'
+          });
+          
+          callerType = isAdmin ? 'admin' : 'user';
+        } else {
+          callerType = 'anon';
+        }
+      } catch {
+        callerType = 'anon';
+      }
     }
 
     const healthCheck: HealthCheckResponse = {
@@ -147,36 +143,41 @@ const handler = async (req: Request): Promise<Response> => {
           .eq('is_default', true)
           .single();
 
-        if (provider && provider.base_url) {
-          const startTime = Date.now();
-          
-          // Test basic connectivity (GET request without body)
-          const testUrl = provider.base_url.replace(/\/$/, '');
-          const response = await fetch(testUrl, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Zira-SMS-Health-Check/1.0'
-            },
-            signal: AbortSignal.timeout(10000) // 10 second timeout
-          }).catch(() => null);
+        if (provider) {
+          // Prefer INHOUSE_SMS_URL from env over provider.base_url
+          let testUrl = Deno.env.get('INHOUSE_SMS_URL') || provider.base_url;
+          if (testUrl) {
+            testUrl = testUrl.replace(/\/$/, '');
+            
+            const startTime = Date.now();
+            
+            // Test basic connectivity (GET request without body)
+            const response = await fetch(testUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Zira-SMS-Health-Check/1.0'
+              },
+              signal: AbortSignal.timeout(10000) // 10 second timeout
+            }).catch(() => null);
 
-          const responseTime = Date.now() - startTime;
+            const responseTime = Date.now() - startTime;
 
-          // Consider 2xx-4xx as reachable (API is up), only 5xx or network failure as down
-          if (response && response.status < 500) {
-            healthCheck.checks.api_connectivity = {
-              status: 'pass',
-              message: `API endpoint reachable (HTTP ${response.status})`,
-              response_time_ms: responseTime
-            };
-          } else {
-            healthCheck.checks.api_connectivity = {
-              status: 'fail',
-              message: `API endpoint returned status: ${response?.status || 'unreachable'}`,
-              response_time_ms: responseTime
-            };
-            healthCheck.status = 'degraded';
+            // Consider 2xx-4xx as reachable (API is up), only 5xx or network failure as down
+            if (response && response.status < 500) {
+              healthCheck.checks.api_connectivity = {
+                status: 'pass',
+                message: `API endpoint reachable (HTTP ${response.status})`,
+                response_time_ms: responseTime
+              };
+            } else {
+              healthCheck.checks.api_connectivity = {
+                status: 'fail',
+                message: `API endpoint returned status: ${response?.status || 'unreachable'}`,
+                response_time_ms: responseTime
+              };
+              healthCheck.status = 'degraded';
+            }
           }
         }
       } catch (error: any) {
@@ -214,12 +215,12 @@ const handler = async (req: Request): Promise<Response> => {
         if (hasDbCredentials || hasEnvCredentials) {
           healthCheck.checks.authentication = {
             status: 'pass',
-            message: `Credentials available (DB: ${hasDbCredentials}, ENV: ${hasEnvCredentials})`
+            message: `Credentials available (DB: ${hasDbCredentials}, ENV: ${hasEnvCredentials}). Caller: ${callerType}`
           };
         } else {
           healthCheck.checks.authentication = {
             status: 'fail',
-            message: 'No authentication credentials found in database or environment'
+            message: `No authentication credentials found in database or environment. Caller: ${callerType}`
           };
           healthCheck.status = 'unhealthy';
         }

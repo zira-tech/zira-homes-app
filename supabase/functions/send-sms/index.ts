@@ -51,51 +51,65 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Authenticate user from JWT token
+    // Detect internal/system calls
     const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const internalCallHeader = req.headers.get('x-internal-call');
+    const isInternalCall = 
+      (authHeader && authHeader.includes(supabaseServiceKey)) || 
+      internalCallHeader === 'true';
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid authentication token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    let user = null;
 
-    // Check if user has appropriate role (Admin, Landlord, Manager, Agent, or system)
-    const { data: hasValidRole, error: roleError } = await supabase.rpc('has_role', {
-      _user_id: user.id,
-      _role: 'Admin'
-    });
+    // For internal/system calls, bypass user authentication and role checks
+    if (!isInternalCall) {
+      // Normal flow: authenticate user
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: 'Missing authorization header' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    const { data: hasLandlordRole } = await supabase.rpc('has_role', {
-      _user_id: user.id,
-      _role: 'Landlord'
-    });
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user: authenticatedUser }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !authenticatedUser) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid authentication token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    const { data: hasManagerRole } = await supabase.rpc('has_role', {
-      _user_id: user.id,
-      _role: 'Manager'
-    });
+      user = authenticatedUser;
 
-    if (roleError || (!hasValidRole && !hasLandlordRole && !hasManagerRole)) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: Insufficient permissions for SMS sending' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Check if user has appropriate role (Admin, Landlord, Manager)
+      const { data: hasValidRole, error: roleError } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'Admin'
+      });
+
+      const { data: hasLandlordRole } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'Landlord'
+      });
+
+      const { data: hasManagerRole } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'Manager'
+      });
+
+      if (roleError || (!hasValidRole && !hasLandlordRole && !hasManagerRole)) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: Insufficient permissions for SMS sending' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      console.log('🔓 Internal/system call detected - bypassing user authentication');
     }
 
     const requestBody = await req.json();
