@@ -339,6 +339,18 @@ const BulkMessaging = () => {
   const filteredTenants = getFilteredTenants();
   const tenantsWithPhone = filteredTenants.filter(t => t.phone);
   
+  // Calculate tenant and unit counts per property and sort by tenant count
+  const propertyStats = properties.map(prop => {
+    const tenantCount = tenants.filter(t => t.property_id === prop.id).length;
+    return { ...prop, tenantCount };
+  }).sort((a, b) => b.tenantCount - a.tenantCount); // Sort by tenant count descending
+  
+  // Check for duplicate property names
+  const propertyNames = properties.map(p => p.name);
+  const hasDuplicateNames = propertyNames.some((name, idx) => 
+    propertyNames.indexOf(name) !== idx
+  );
+  
   const getMessagePreview = () => {
     if (!message) return "";
     const firstTenant = tenants.find(t => selectedTenants.has(t.id));
@@ -390,6 +402,16 @@ const BulkMessaging = () => {
             </Alert>
           )}
 
+          {/* Duplicate Property Names Warning */}
+          {hasDuplicateNames && (
+            <Alert className="border-yellow-200 bg-yellow-50">
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800">
+                ⚠️ You have multiple properties with the same name. Consider renaming them for better clarity.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Recipient Selection */}
             <Card>
@@ -412,12 +434,11 @@ const BulkMessaging = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Properties ({tenants.length})</SelectItem>
-                        {properties.map(prop => {
-                          const count = tenants.filter(t => t.property_id === prop.id).length;
+                        <SelectItem value="all">All Properties ({tenants.length} tenants)</SelectItem>
+                        {propertyStats.map(prop => {
                           return (
                             <SelectItem key={prop.id} value={prop.id}>
-                              {prop.name} ({count})
+                              {prop.name} ({prop.tenantCount} tenant{prop.tenantCount !== 1 ? 's' : ''})
                             </SelectItem>
                           );
                         })}
