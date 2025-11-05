@@ -159,16 +159,16 @@ const handler = async (req: Request): Promise<Response> => {
       }
       provider = providerData;
     } else {
-      // Get default provider
+      // Get any active provider
       const { data: defaultProvider, error: defaultError } = await supabase
         .from('sms_providers')
         .select('*')
         .eq('is_active', true)
-        .eq('is_default', true)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (defaultError || !defaultProvider) {
-        console.error('No default SMS provider found:', defaultError);
+        console.error('No active SMS provider found:', defaultError);
         return new Response(JSON.stringify({ error: 'No SMS provider configured' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

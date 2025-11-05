@@ -122,45 +122,6 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
   const resendSMS = async () => {
     setResendingSMS(true);
     try {
-      // First, try to get the SMS provider configuration from database
-      let smsConfig;
-      
-      try {
-        const { data: providerData, error: providerError } = await supabase
-          .from('sms_providers')
-          .select('*')
-          .eq('is_active', true)
-          .maybeSingle();
-        
-        if (!providerError && providerData) {
-          smsConfig = {
-            provider_name: providerData.provider_name,
-            base_url: providerData.base_url,
-            username: providerData.username,
-            unique_identifier: providerData.unique_identifier,
-            sender_id: providerData.sender_id,
-            sender_type: providerData.sender_type,
-            authorization_token: providerData.authorization_token,
-            config_data: providerData.config_data
-          };
-        } else {
-          throw new Error("No SMS provider configured");
-        }
-      } catch (configError) {
-        console.log("Using fallback SMS configuration");
-        // Fallback configuration
-        smsConfig = {
-          provider_name: "InHouse SMS",
-          base_url: "http://68.183.101.252:803/bulk_api/",
-          username: "ZIRA TECH",
-          unique_identifier: "77",
-          sender_id: "ZIRA TECH",
-          sender_type: "10",
-          authorization_token: "your-default-token"
-        };
-      }
-
-      // Enhanced SMS message template
       const smsMessage = `🏠 Zira Homes - New Login Details
 
 📧 Email: ${tenant.email}
@@ -171,13 +132,13 @@ Please change your password after first login.
 
 Need help? Contact support.`;
 
+      // Let the edge function fetch provider configuration using service role
       const { data: smsResult, error } = await supabase.functions.invoke('send-sms-with-logging', {
         body: {
-          provider_name: smsConfig.provider_name,
           phone_number: tenant.phone,
           message: smsMessage,
           landlord_id: user?.id,
-          provider_config: smsConfig
+          message_type: 'tenant_credentials'
         }
       });
 
