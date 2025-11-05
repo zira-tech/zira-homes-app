@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 interface BillingPlan {
   id: string;
@@ -56,6 +57,33 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
 
   const handleSave = () => {
     if (editedPlan) {
+      // Validate required fields based on billing model
+      if (!editedPlan.is_custom) {
+        if (editedPlan.billing_model === 'percentage' && (!editedPlan.percentage_rate || editedPlan.percentage_rate <= 0)) {
+          toast.error('Percentage rate is required and must be greater than 0');
+          return;
+        }
+        if (editedPlan.billing_model === 'fixed_per_unit' && (!editedPlan.fixed_amount_per_unit || editedPlan.fixed_amount_per_unit <= 0)) {
+          toast.error('Fixed amount per unit is required and must be greater than 0');
+          return;
+        }
+        if (editedPlan.billing_model === 'tiered' && (!editedPlan.tier_pricing || editedPlan.tier_pricing.length === 0)) {
+          toast.error('At least one pricing tier is required');
+          return;
+        }
+      }
+      
+      // Validate tier pricing structure
+      if (editedPlan.billing_model === 'tiered' && editedPlan.tier_pricing) {
+        for (let i = 0; i < editedPlan.tier_pricing.length; i++) {
+          const tier = editedPlan.tier_pricing[i];
+          if (tier.min_units < 0 || tier.max_units < tier.min_units || tier.price_per_unit <= 0) {
+            toast.error(`Invalid tier ${i + 1}: Check min/max units and price`);
+            return;
+          }
+        }
+      }
+
       onSave(editedPlan);
     }
   };

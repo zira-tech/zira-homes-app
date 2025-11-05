@@ -74,6 +74,47 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_plan_audit: {
+        Row: {
+          action: string
+          billing_plan_id: string
+          changed_by: string
+          changes: Json | null
+          created_at: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+        }
+        Insert: {
+          action: string
+          billing_plan_id: string
+          changed_by: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+        }
+        Update: {
+          action?: string
+          billing_plan_id?: string
+          changed_by?: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_plan_audit_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_plans: {
         Row: {
           billing_cycle: string
@@ -3924,6 +3965,10 @@ export type Database = {
       get_landlord_dashboard_data: {
         Args: { _user_id?: string }
         Returns: Json
+      }
+      get_landlord_rent_total: {
+        Args: { p_landlord_id: string; p_start_date: string }
+        Returns: number
       }
       get_landlord_tenants_summary: {
         Args: {

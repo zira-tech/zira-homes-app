@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditBillingPlanDialog } from "@/components/admin/EditBillingPlanDialog";
 import { PlanFeaturesList } from "@/components/billing/PlanFeaturesList";
+import { BillingPreviewCalculator } from "@/components/admin/BillingPreviewCalculator";
 import { Plus, Search, Settings, Users, Crown, Zap, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -412,6 +413,20 @@ export default function BillingPlanManager() {
           </div>
         )}
       </div>
+
+      {/* Preview Calculator Section */}
+      {editingPlan && editDialogOpen && !editingPlan.is_custom && (
+        <div className="mb-6">
+          <BillingPreviewCalculator
+            planId={editingPlan.id}
+            billingModel={editingPlan.billing_model}
+            percentageRate={editingPlan.percentage_rate}
+            fixedAmountPerUnit={editingPlan.fixed_amount_per_unit}
+            tierPricing={editingPlan.tier_pricing}
+            currency={editingPlan.currency}
+          />
+        </div>
+      )}
 
       {/* Edit Dialog */}
       <EditBillingPlanDialog
