@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Edit, Save, X } from "lucide-react";
+import { MessageSquare, Plus, Edit, Save, X, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { FeatureGate } from "@/components/ui/feature-gate";
@@ -33,6 +35,8 @@ const MessageTemplates = () => {
   const [loading, setLoading] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState<SMSTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [activeTab, setActiveTab] = useState("custom");
+  const [showVariables, setShowVariables] = useState(false);
 
   const categories = [
     { value: 'payment_reminders', label: 'Payment Reminders' },
@@ -139,6 +143,8 @@ const MessageTemplates = () => {
       name: `${defaultTemplate.name} (Custom)`
     });
     setIsCreating(true);
+    setActiveTab("custom");
+    toast.success("Template copied! Edit and save to create your custom version.");
   };
 
   if (loading) {
@@ -177,7 +183,7 @@ const MessageTemplates = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="custom" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="custom">My Templates</TabsTrigger>
             <TabsTrigger value="defaults">Default Templates</TabsTrigger>
@@ -235,9 +241,62 @@ const MessageTemplates = () => {
                       placeholder="Write your SMS template content here..."
                       rows={6}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Use variables like {'{tenant_name}'}, {'{property_name}'}, {'{amount}'} to personalize messages.
-                    </p>
+                    
+                    {/* Available Variables Helper */}
+                    <Collapsible open={showVariables} onOpenChange={setShowVariables}>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-xs">
+                          <Info className="h-3 w-3" />
+                          {showVariables ? "Hide" : "Show"} Available Variables
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <Alert className="mt-2">
+                          <AlertDescription>
+                            <div className="text-xs space-y-1">
+                              <p className="font-semibold mb-2">Click to copy and paste into your message:</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{landlord_name}');
+                                  toast.success('Copied: {landlord_name}');
+                                }}>{'{landlord_name}'}</code>
+                                <span className="text-muted-foreground text-xs">Your full name</span>
+                                
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{tenant_name}');
+                                  toast.success('Copied: {tenant_name}');
+                                }}>{'{tenant_name}'}</code>
+                                <span className="text-muted-foreground text-xs">Tenant's name</span>
+                                
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{property_name}');
+                                  toast.success('Copied: {property_name}');
+                                }}>{'{property_name}'}</code>
+                                <span className="text-muted-foreground text-xs">Property name</span>
+                                
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{unit_number}');
+                                  toast.success('Copied: {unit_number}');
+                                }}>{'{unit_number}'}</code>
+                                <span className="text-muted-foreground text-xs">Unit number</span>
+                                
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{amount}');
+                                  toast.success('Copied: {amount}');
+                                }}>{'{amount}'}</code>
+                                <span className="text-muted-foreground text-xs">Payment amount</span>
+                                
+                                <code className="bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80" onClick={() => {
+                                  navigator.clipboard.writeText('{due_date}');
+                                  toast.success('Copied: {due_date}');
+                                }}>{'{due_date}'}</code>
+                                <span className="text-muted-foreground text-xs">Due date</span>
+                              </div>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
                   
                   <div className="flex justify-end gap-2">

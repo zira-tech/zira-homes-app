@@ -136,6 +136,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`📱 Sending SMS to formatted number: ${phoneResult.formatted}`);
 
+    // Replace {landlord_name} variable if present in message
+    let processedMessage = message;
+    if (message.includes('{landlord_name}') && effectiveLandlordId) {
+      const { data: landlordProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', effectiveLandlordId)
+        .single();
+      
+      if (landlordProfile) {
+        const landlordName = `${landlordProfile.first_name || ''} ${landlordProfile.last_name || ''}`.trim() || 'Management';
+        processedMessage = processedMessage.replace(/{landlord_name}/g, landlordName);
+        console.log(`✅ Replaced {landlord_name} with: ${landlordName}`);
+      }
+    }
+
     // Check SMS credits for non-admin users
     if (!isAdmin && effectiveLandlordId) {
       const { data: subscription, error: subError } = await supabase
@@ -169,13 +185,13 @@ const handler = async (req: Request): Promise<Response> => {
       console.log(`✅ SMS credits available: ${creditsBalance}`);
     }
 
-    // Create initial log entry
+    // Create initial log entry (use processed message with variables replaced)
     const { data: smsLog, error: logError } = await supabase
       .from('sms_logs')
       .insert({
         phone_number: phone_number,
         phone_number_formatted: phoneResult.formatted,
-        message_content: message,
+        message_content: processedMessage,
         status: 'pending',
         provider_name: provider_name || 'InHouse SMS',
         landlord_id: effectiveLandlordId,
@@ -195,7 +211,7 @@ const handler = async (req: Request): Promise<Response> => {
       const { data: smsResponse, error: smsError } = await supabase.functions.invoke('send-sms', {
         body: {
           phone_number: phoneResult.formatted,
-          message: message,
+          message: processedMessage, // Use processed message with variables replaced
           provider_name: provider_name,
           provider_config: provider_config,
           landlord_id: landlord_id || userId
