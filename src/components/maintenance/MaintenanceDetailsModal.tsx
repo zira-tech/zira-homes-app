@@ -12,11 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Wrench, User, Calendar, DollarSign, AlertTriangle, Clock, CheckCircle, 
   MessageSquare, History, Image as ImageIcon, Phone, Mail, MapPin,
-  Edit, Save, X, FileText
+  Edit, Save, X, FileText, Upload, Trash2
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useDropzone } from "react-dropzone";
 
 interface MaintenanceRequest {
   id: string;
@@ -34,6 +35,7 @@ interface MaintenanceRequest {
   unit_id?: string;
   assigned_to?: string;
   images: string[];
+  landlord_images?: string[];
   internal_notes?: string;
   last_updated_by?: string;
   last_status_change: string;
@@ -116,6 +118,79 @@ export function MaintenanceDetailsModal({
     request.scheduled_date ? format(new Date(request.scheduled_date), "yyyy-MM-dd'T'HH:mm") : ""
   );
   const [showRejectReason, setShowRejectReason] = useState(false);
+  const [landlordImages, setLandlordImages] = useState<string[]>(request.landlord_images || []);
+  const [uploadingImages, setUploadingImages] = useState(false);
+
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp']
+    },
+    maxSize: 5242880, // 5MB
+    onDrop: handleImageDrop
+  });
+
+  async function handleImageDrop(acceptedFiles: File[]) {
+    if (acceptedFiles.length === 0) return;
+    
+    setUploadingImages(true);
+    const uploadedUrls: string[] = [];
+
+    try {
+      for (const file of acceptedFiles) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${request.id}/landlord_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('maintenance-images')
+          .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('maintenance-images')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      const newLandlordImages = [...landlordImages, ...uploadedUrls];
+      setLandlordImages(newLandlordImages);
+
+      // Update database
+      const { error: updateError } = await supabase
+        .from('maintenance_requests')
+        .update({ landlord_images: newLandlordImages })
+        .eq('id', request.id);
+
+      if (updateError) throw updateError;
+
+      toast.success(`${acceptedFiles.length} photo(s) uploaded successfully`);
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      toast.error('Failed to upload photos. Please try again.');
+    } finally {
+      setUploadingImages(false);
+    }
+  }
+
+  const handleRemoveLandlordImage = async (imageUrl: string) => {
+    try {
+      const newLandlordImages = landlordImages.filter(url => url !== imageUrl);
+      setLandlordImages(newLandlordImages);
+
+      const { error } = await supabase
+        .from('maintenance_requests')
+        .update({ landlord_images: newLandlordImages })
+        .eq('id', request.id);
+
+      if (error) throw error;
+
+      toast.success('Photo removed');
+    } catch (error) {
+      console.error('Error removing image:', error);
+      toast.error('Failed to remove photo');
+    }
+  };
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return 'Not specified';
@@ -267,7 +342,7 @@ export function MaintenanceDetailsModal({
                   <div className="mt-4">
                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                       <ImageIcon className="h-4 w-4" />
-                      Attachments
+                      Tenant Photos
                     </h4>
                     <div className="flex gap-2">
                       {request.images.map((image, index) => (
@@ -276,6 +351,26 @@ export function MaintenanceDetailsModal({
                           src={image}
                           alt={`Attachment ${index + 1}`}
                           className="w-20 h-20 object-cover rounded border"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Landlord Response Images */}
+                {landlordImages && landlordImages.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-success">
+                      <ImageIcon className="h-4 w-4" />
+                      Completion Photos
+                    </h4>
+                    <div className="flex gap-2">
+                      {landlordImages.map((image, index) => (
+                        <img
+                          key={index}
+                          src={image}
+                          alt={`Completion ${index + 1}`}
+                          className="w-20 h-20 object-cover rounded border-2 border-success"
                         />
                       ))}
                     </div>
@@ -636,6 +731,60 @@ export function MaintenanceDetailsModal({
                   <Save className="h-4 w-4 mr-2" />
                   Save Schedule & Cost
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* Upload Response Photos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Upload Completion Photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div
+                  {...getRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    uploadingImages 
+                      ? 'border-primary/50 bg-primary/5' 
+                      : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                  }`}
+                >
+                  <input {...getInputProps()} disabled={uploadingImages} />
+                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm font-medium mb-1">
+                    {uploadingImages ? 'Uploading...' : 'Drop photos here or click to browse'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPG, JPEG or WEBP up to 5MB
+                  </p>
+                </div>
+
+                {landlordImages.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Uploaded Photos ({landlordImages.length})</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {landlordImages.map((imageUrl, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={imageUrl}
+                            alt={`Completion ${index + 1}`}
+                            className="w-full h-24 object-cover rounded border"
+                          />
+                          <Button
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveLandlordImage(imageUrl)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

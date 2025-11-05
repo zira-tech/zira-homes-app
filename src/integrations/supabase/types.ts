@@ -1131,6 +1131,7 @@ export type Database = {
           id: string
           images: string[] | null
           internal_notes: string | null
+          landlord_images: string[] | null
           last_status_change: string | null
           last_updated_by: string | null
           notes: string | null
@@ -1154,6 +1155,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           internal_notes?: string | null
+          landlord_images?: string[] | null
           last_status_change?: string | null
           last_updated_by?: string | null
           notes?: string | null
@@ -1177,6 +1179,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           internal_notes?: string | null
+          landlord_images?: string[] | null
           last_status_change?: string | null
           last_updated_by?: string | null
           notes?: string | null
