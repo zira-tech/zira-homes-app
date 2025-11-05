@@ -24,9 +24,10 @@ import { useState, useEffect } from "react";
 
 export function Header() {
   const { user, signOut } = useAuth();
-  const { effectiveRole, assignedRoles, switchRole } = useRole();
+  const { effectiveRole, assignedRoles, switchRole, selectedRole } = useRole();
   const { theme, setTheme } = useTheme();
   const routeTitle = useRouteTitle();
+  const isDev = import.meta.env.DEV;
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -70,6 +71,19 @@ export function Header() {
         </div>
         
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Dev role debug badge */}
+          {isDev && (
+            <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-white/10 rounded text-xs text-white/80 font-mono">
+              <span className="font-semibold">Role:</span>
+              <span>{effectiveRole || 'null'}</span>
+              {selectedRole && selectedRole !== effectiveRole && (
+                <span className="text-white/60">({selectedRole})</span>
+              )}
+              <span className="text-white/40">|</span>
+              <span className="text-white/60">[{assignedRoles.join(', ')}]</span>
+            </div>
+          )}
+
           {/* Trial countdown and upgrade button grouped together */}
           <div className="flex items-center gap-2">
             <HeaderTrialCountdown />

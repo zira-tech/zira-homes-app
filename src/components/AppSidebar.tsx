@@ -25,8 +25,11 @@ import { useTrialManagement } from "@/hooks/useTrialManagement";
 export function AppSidebar() {
   const { signOut } = useAuth();
   const { open } = useSidebar();
-  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, subUserPermissions, isOnLandlordTrial, loading } = useRole();
+  const { isAdmin, isLandlord, isManager, isAgent, isSubUser, isTenant, assignedRoles, subUserPermissions, isOnLandlordTrial, loading } = useRole();
   const { trialStatus } = useTrialManagement();
+
+  // Check if user is tenant-only (has tenant role but no other roles)
+  const isTenantOnly = isTenant && assignedRoles.length === 1 && assignedRoles[0] === "tenant";
 
   // Feature access hooks
   const { allowed: hasReports } = usePlanFeatureAccess(FEATURES.BASIC_REPORTING);
@@ -251,8 +254,12 @@ export function AppSidebar() {
             <SidebarMenu className="gap-0.5">
               {accountNav.items
                 .filter((item) => {
-                  // Hide upgrade for admins and sub-users
-                  if ((isAdmin || isSubUser) && item.title === "Upgrade") {
+                  // Hide upgrade for admins, sub-users, and tenant-only users
+                  if ((isAdmin || isSubUser || isTenantOnly) && item.title === "Upgrade") {
+                    return false;
+                  }
+                  // Hide settings for tenant-only users (they use tenant portal settings)
+                  if (isTenantOnly && item.title === "Settings") {
                     return false;
                   }
                   return true;

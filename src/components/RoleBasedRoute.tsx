@@ -10,7 +10,7 @@ interface RoleBasedRouteProps {
 export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const { effectiveRole, loading: roleLoading } = useRole();
+  const { effectiveRole, assignedRoles, loading: roleLoading } = useRole();
 
   if (loading || roleLoading) {
     return (
@@ -24,26 +24,23 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
   
-  if (location.pathname === "/" && effectiveRole) {
-    switch (effectiveRole) {
-      case "tenant":
-        return <Navigate to="/tenant" replace />;
-      case "admin":
-        return <Navigate to="/admin" replace />;
-      case "landlord":
-      case "manager":
-      case "agent":
-      default:
-        // Keep them on the main dashboard
-        break;
+  // Redirect from "/" based on role (use assignedRoles as authoritative signal)
+  if (location.pathname === "/") {
+    // Prioritize tenant role - if user has tenant role OR effectiveRole is tenant, go to tenant portal
+    if (assignedRoles.includes("tenant") || effectiveRole === "tenant") {
+      return <Navigate to="/tenant" replace />;
     }
+    if (effectiveRole === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+    // Landlord, manager, agent stay on main dashboard
   }
 
   // Helper to check if we're in actual tenant area (not /tenants which is for landlords)
   const isTenantArea = location.pathname === "/tenant" || location.pathname.startsWith("/tenant/");
 
-  // Block tenant users from accessing non-tenant routes
-  if (effectiveRole === "tenant" && !isTenantArea && location.pathname !== "/auth") {
+  // Block tenant users from accessing non-tenant routes (use assignedRoles as failsafe)
+  if ((effectiveRole === "tenant" || assignedRoles.includes("tenant")) && !isTenantArea && location.pathname !== "/auth") {
     return <Navigate to="/tenant" replace />;
   }
 

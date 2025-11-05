@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecentPayments } from "@/components/dashboard/RecentPayments";
@@ -19,12 +19,21 @@ import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SubUserBanner } from "@/components/SubUserBanner";
+import { useRole } from "@/context/RoleContext";
 
 export default function Index() {
   useRouteTitle();
   const navigate = useNavigate();
   const { data, loading, error } = useLandlordDashboard();
   const { expiringCount } = useLeaseExpiryCount();
+  const { isTenant, assignedRoles } = useRole();
+
+  // Safety redirect: If user is tenant-only, redirect to tenant portal
+  useEffect(() => {
+    if (isTenant || assignedRoles.includes("tenant")) {
+      navigate('/tenant', { replace: true });
+    }
+  }, [isTenant, assignedRoles, navigate]);
 
   // Extract dashboard stats safely
   const stats = data?.property_stats ? {
