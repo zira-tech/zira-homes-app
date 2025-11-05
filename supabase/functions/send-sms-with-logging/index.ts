@@ -257,7 +257,7 @@ const handler = async (req: Request): Promise<Response> => {
         const { error: deductError } = await supabase
           .from('landlord_subscriptions')
           .update({ 
-            sms_credits_balance: supabase.raw('sms_credits_balance - 1')
+            sms_credits_balance: newBalance
           })
           .eq('landlord_id', effectiveLandlordId)
           .gt('sms_credits_balance', 0);
