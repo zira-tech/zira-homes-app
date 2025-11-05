@@ -53,79 +53,23 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Admin client for DB operations (bypasses RLS)
+    // Admin client for reading (bypasses RLS)
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body = await req.json();
-    const { id, provider_name, sender_id, base_url, is_active, is_default, config_data } = body;
+    const { data: providers, error } = await adminClient
+      .from('sms_providers')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (!provider_name) {
-      return new Response(
-        JSON.stringify({ error: 'provider_name is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Normalize base_url
-    let normalizedBaseUrl = base_url?.trim();
-    if (normalizedBaseUrl && !normalizedBaseUrl.endsWith('/')) {
-      normalizedBaseUrl += '/';
-    }
-
-    let result;
-
-    if (id) {
-      // Update existing provider
-      const { data, error } = await adminClient
-        .from('sms_providers')
-        .update({
-          provider_name,
-          sender_id,
-          base_url: normalizedBaseUrl,
-          is_active,
-          is_default,
-          config_data,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      result = data;
-      
-      console.log('Updated SMS provider:', id, 'by user:', user.id);
-    } else {
-      // Insert new provider (upsert by provider_name)
-      const { data, error } = await adminClient
-        .from('sms_providers')
-        .upsert({
-          provider_name,
-          sender_id,
-          base_url: normalizedBaseUrl,
-          is_active: is_active ?? false,
-          is_default: is_default ?? false,
-          config_data,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'provider_name'
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      result = data;
-      
-      console.log('Upserted SMS provider:', provider_name, 'by user:', user.id);
-    }
+    if (error) throw error;
 
     return new Response(
-      JSON.stringify({ success: true, provider: result }),
+      JSON.stringify({ success: true, providers: providers || [] }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
-    console.error('Error upserting SMS provider:', error);
+    console.error('Error listing SMS providers:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

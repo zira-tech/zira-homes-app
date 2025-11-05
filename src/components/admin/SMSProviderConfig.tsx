@@ -97,47 +97,39 @@ const SMSProviderConfig = () => {
     try {
       setLoading(true);
       
-      // Fetch from database first
-      const { data: dbProviders, error } = await supabase
-        .from('sms_providers')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Use secure admin function to fetch providers (bypasses RLS)
+      const { data: result, error } = await supabase.functions.invoke('admin-list-sms-providers');
 
       if (error) {
-        console.error('Database error:', error);
-        // Fallback to localStorage
-        const savedProviders = localStorage.getItem('sms_providers');
-        if (savedProviders) {
-          setProviders(JSON.parse(savedProviders));
+        console.error('Error fetching providers:', error);
+        
+        if (error.message?.includes('403') || error.message?.includes('Unauthorized')) {
+          toast({
+            title: "Access Denied",
+            description: "You need Admin, Landlord, or Manager privileges to view SMS providers",
+            variant: "destructive",
+          });
+          setProviders([]);
         } else {
-          // Ultimate fallback to default data
-          const defaultProviders: SMSProvider[] = [
-            {
-              id: '1',
-              provider_name: 'InHouse SMS',
-              authorization_token: 'f22b2aa230b02b428a71023c7eb7f7bb9d440f38',
-              sender_id: 'ZIRA TECH',
-              base_url: 'http://68.183.101.252:803/bulk_api/',
-              is_active: true,
-              is_default: true,
-              config_data: { 
-                username: 'ZIRA TECH',
-                unique_identifier: '77',
-                sender_type: '10',
-                authorization_token: 'f22b2aa230b02b428a71023c7eb7f7bb9d440f38'
-              }
-            }
-          ];
-          setProviders(defaultProviders);
+          toast({
+            title: "Error",
+            description: "Failed to fetch SMS provider configurations",
+            variant: "destructive",
+          });
         }
-      } else {
-        setProviders((dbProviders || []) as SMSProvider[]);
+        return;
       }
-    } catch (error) {
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to fetch providers');
+      }
+
+      setProviders(result.providers || []);
+    } catch (error: any) {
       console.error('Error fetching SMS providers:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch SMS provider configurations",
+        description: error.message || "Failed to fetch SMS provider configurations",
         variant: "destructive",
       });
     } finally {
@@ -203,16 +195,26 @@ const SMSProviderConfig = () => {
         }
       });
 
-      if (functionError) throw functionError;
-      if (!result?.success) throw new Error(result?.error || 'Failed to save provider');
+      if (functionError) {
+        console.error('Function error:', functionError);
+        throw new Error(functionError.message || 'Failed to invoke save function');
+      }
+      
+      if (!result?.success) {
+        console.error('Save failed:', result);
+        throw new Error(result?.error || 'Failed to save provider');
+      }
 
       toast({
         title: "Success",
         description: `Provider ${editingProvider ? 'updated' : 'added'} successfully`,
       });
 
+      // Close dialog and reset form BEFORE refetching
       setIsDialogOpen(false);
       resetForm();
+      
+      // Refetch providers to show updated data
       await fetchProviders();
     } catch (error: any) {
       console.error('Error saving provider:', error);
