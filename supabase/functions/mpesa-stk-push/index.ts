@@ -187,6 +187,20 @@ serve(async (req) => {
       // Subscription payment: Any authenticated user can pay for their own subscription
       authorized = true;
       landlordConfigId = user.id;
+    } else if (paymentType === 'sms_bundle') {
+      // SMS bundle purchase: Only landlords and admins can purchase SMS credits
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+
+      const isAdmin = userRoles?.some(r => r.role === 'Admin');
+      const isLandlord = userRoles?.some(r => r.role === 'Landlord');
+
+      if (isAdmin || isLandlord) {
+        authorized = true;
+        landlordConfigId = user.id;
+      }
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
       if (invoiceId) {
@@ -471,6 +485,18 @@ serve(async (req) => {
       // Only add invoice_id if it's a valid UUID (for rent payments)
       if (invoiceId && paymentType !== 'service-charge') {
         transactionData.invoice_id = invoiceId
+      }
+
+      // For SMS bundle payments, store bundle metadata
+      if (paymentType === 'sms_bundle' && requestBody.metadata) {
+        transactionData.metadata = {
+          payment_type: 'sms_bundle',
+          bundle_id: requestBody.metadata.bundle_id,
+          bundle_name: requestBody.metadata.bundle_name,
+          sms_count: requestBody.metadata.sms_count,
+          landlord_id: requestBody.metadata.landlord_id
+        };
+        console.log('Processing SMS bundle purchase:', transactionData.metadata);
       }
 
       // For service charge payments, store additional metadata

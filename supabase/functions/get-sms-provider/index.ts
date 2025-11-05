@@ -67,12 +67,12 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Query the actual SMS providers configuration
+    // Query for ANY active SMS provider (not just default)
     const { data: providers, error } = await supabase
       .from('sms_providers')
       .select('*')
       .eq('is_active', true)
-      .eq('is_default', true)
+      .limit(1)
       .single();
 
     if (error || !providers) {
