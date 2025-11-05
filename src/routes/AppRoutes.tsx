@@ -100,7 +100,7 @@ export const AppRoutes = () => {
       
       {/* Tenant routes with lazy loading */}
       <Route
-        path="/tenant"
+        path="/tenant/*"
         element={
           <RequireAuth>
             <RoleBasedRoute>
