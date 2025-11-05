@@ -5,9 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Star, Crown, Zap, X, Loader2, ArrowRight, Smartphone } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { Check, Star, Crown, Zap, X, Loader2, ArrowRight } from "lucide-react";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useUpgrade } from "@/hooks/useUpgrade";
@@ -48,8 +46,6 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [showPhoneInput, setShowPhoneInput] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -114,22 +110,10 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       return;
     }
 
-    // For commission-based plans, activate directly
-    if (selectedPlanData.billing_model === 'percentage') {
-      await upgradeToPlan(selectedPlan);
-      onClose();
-      setTimeout(() => window.location.reload(), 1000);
-      return;
-    }
-
-    // For other billing models, require phone number
-    if (!phoneNumber) {
-      setShowPhoneInput(true);
-      toast.error("Please enter your M-Pesa phone number");
-      return;
-    }
-
-    await upgradeToPlan(selectedPlan, phoneNumber);
+    // All plans activate immediately with end-of-month billing
+    await upgradeToPlan(selectedPlan);
+    onClose();
+    setTimeout(() => window.location.reload(), 1000);
   };
 
   const getPlanIcon = (planName: string) => {
@@ -304,40 +288,25 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         {/* Action Section */}
         {selectedPlan && !billingPlans.find(p => p.id === selectedPlan)?.is_custom && (
           <div className="bg-muted/50 border rounded-lg p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2">
-              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                ? 'Ready to activate?' 
-                : 'Ready to upgrade?'
-              }
-            </h3>
+            <h3 className="text-lg font-semibold mb-2">Ready to activate?</h3>
             <p className="text-muted-foreground mb-4 text-sm">
               You've selected the <strong>{billingPlans.find(p => p.id === selectedPlan)?.name}</strong> plan.
-              {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                ? ' This plan activates immediately. You\'ll be billed monthly based on rent collected.'
-                : ` Activate now and start using all features immediately. Your first payment of ${getCurrencySymbol(billingPlans.find(p => p.id === selectedPlan)?.currency || 'KES')}${billingPlans.find(p => p.id === selectedPlan)?.price} will be due at the end of this month.`
-              }
+              {(() => {
+                const plan = billingPlans.find(p => p.id === selectedPlan);
+                if (!plan) return '';
+                
+                if (plan.billing_model === 'percentage' && plan.percentage_rate) {
+                  return ` Activate now and start using all features immediately. You'll be billed ${plan.percentage_rate}% of rent collected at the end of each month.`;
+                } else if (plan.billing_model === 'fixed_per_unit' && plan.fixed_amount_per_unit) {
+                  return ` Activate now and start using all features immediately. You'll be billed ${getCurrencySymbol(plan.currency)}${plan.fixed_amount_per_unit} per unit at the end of each month.`;
+                } else if (plan.billing_model === 'tiered') {
+                  return ` Activate now and start using all features immediately. You'll be billed based on your tier pricing at the end of each month.`;
+                } else {
+                  return ` Activate now and start using all features immediately. You'll be billed at the end of each month.`;
+                }
+              })()}
             </p>
 
-            {/* Phone Number Input for Fixed Plans */}
-            {billingPlans.find(p => p.id === selectedPlan)?.billing_model !== 'percentage' && (
-              <div className="space-y-3 mb-4">
-                <Label htmlFor="mpesa-phone" className="flex items-center gap-2 text-sm font-medium">
-                  <Smartphone className="h-4 w-4" />
-                  M-Pesa Phone Number
-                </Label>
-                <Input
-                  id="mpesa-phone"
-                  type="tel"
-                  placeholder="e.g., 0712345678 or 254712345678"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="text-center text-lg"
-                />
-                <p className="text-xs text-muted-foreground text-center">
-                  📱 You'll receive an M-Pesa STK push to complete your end-of-month payment
-                </p>
-              </div>
-            )}
             <div className="flex gap-3 justify-center">
               <Button 
                 variant="outline"
@@ -354,15 +323,10 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 {upgradeProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                      ? 'Activating...' 
-                      : 'Processing...'
-                    }
+                    Activating...
                   </>
                 ) : (
-                  billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                    ? 'Activate Plan' 
-                    : 'Upgrade Now'
+                  'Activate Plan'
                 )}
               </Button>
             </div>

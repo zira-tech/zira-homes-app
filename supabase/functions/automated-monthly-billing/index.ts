@@ -138,13 +138,44 @@ serve(async (req) => {
 
         const smsCharges = smsUsage?.reduce((sum, sms) => sum + Number(sms.cost), 0) || 0;
 
+        // Get landlord's units for fixed/tiered pricing
+        const { data: units } = await supabaseClient
+          .from('units')
+          .select('id')
+          .in('property_id', propertyIds);
+
+        const unitCount = units?.length || 0;
+
         // Calculate service charge based on billing plan
         const plan = landlord.billing_plan;
         let serviceChargeAmount = 0;
         
         if (plan.billing_model === 'percentage' && plan.percentage_rate) {
+          // Commission-based: percentage of rent collected
           serviceChargeAmount = (rentCollected * plan.percentage_rate) / 100;
+        } else if (plan.billing_model === 'fixed_per_unit' && plan.fixed_amount_per_unit) {
+          // Fixed per unit: unit count × fixed amount
+          serviceChargeAmount = unitCount * plan.fixed_amount_per_unit;
+        } else if (plan.billing_model === 'tiered' && plan.tier_pricing) {
+          // Tiered pricing: find applicable tier and calculate
+          const tiers = Array.isArray(plan.tier_pricing) ? plan.tier_pricing : [];
+          const applicableTier = tiers.find((tier: any) => 
+            unitCount >= (tier.min_units || 0) && 
+            (tier.max_units === null || unitCount <= tier.max_units)
+          );
+          
+          if (applicableTier && applicableTier.price_per_unit) {
+            serviceChargeAmount = unitCount * applicableTier.price_per_unit;
+          }
         }
+
+        console.log(`Billing calculation for landlord ${landlord.landlord_id}:`, {
+          billing_model: plan.billing_model,
+          unit_count: unitCount,
+          rent_collected: rentCollected,
+          service_charge: serviceChargeAmount,
+          sms_charges: smsCharges
+        });
 
         const totalAmount = serviceChargeAmount + smsCharges;
 
