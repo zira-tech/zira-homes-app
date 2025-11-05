@@ -78,6 +78,7 @@ const handler = async (req: Request): Promise<Response> => {
     const authHeader = req.headers.get("authorization");
     let userId: string | null = null;
     let isAdmin = false;
+    let effectiveLandlordId: string | null = null;
     
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
@@ -94,6 +95,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     const body: SMSRequest = await req.json();
     const { phone_number, message, provider_name, provider_config, landlord_id, user_id, message_type } = body;
+
+    // Determine effective landlord ID (use provided or current user)
+    effectiveLandlordId = landlord_id || userId;
 
     if (!phone_number || !message) {
       return new Response(
@@ -132,6 +136,39 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`📱 Sending SMS to formatted number: ${phoneResult.formatted}`);
 
+    // Check SMS credits for non-admin users
+    if (!isAdmin && effectiveLandlordId) {
+      const { data: subscription, error: subError } = await supabase
+        .from('landlord_subscriptions')
+        .select('sms_credits_balance')
+        .eq('landlord_id', effectiveLandlordId)
+        .single();
+
+      if (subError) {
+        console.error('Error checking SMS credits:', subError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to check SMS credits' }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const creditsBalance = subscription?.sms_credits_balance || 0;
+      
+      if (creditsBalance < 1) {
+        console.warn(`❌ Insufficient SMS credits for landlord ${effectiveLandlordId}. Balance: ${creditsBalance}`);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Insufficient SMS credits',
+            credits_balance: creditsBalance,
+            message: 'Please purchase SMS credits to continue sending messages'
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`✅ SMS credits available: ${creditsBalance}`);
+    }
+
     // Create initial log entry
     const { data: smsLog, error: logError } = await supabase
       .from('sms_logs')
@@ -141,7 +178,7 @@ const handler = async (req: Request): Promise<Response> => {
         message_content: message,
         status: 'pending',
         provider_name: provider_name || 'InHouse SMS',
-        landlord_id: landlord_id || userId,
+        landlord_id: effectiveLandlordId,
         user_id: user_id,
         message_type: message_type || 'general',
         created_by: userId
@@ -203,6 +240,24 @@ const handler = async (req: Request): Promise<Response> => {
             provider_response: smsResponse
           })
           .eq('id', smsLog.id);
+      }
+
+      // Deduct SMS credit for non-admin users
+      if (!isAdmin && effectiveLandlordId) {
+        const { error: deductError } = await supabase
+          .from('landlord_subscriptions')
+          .update({ 
+            sms_credits_balance: supabase.raw('sms_credits_balance - 1')
+          })
+          .eq('landlord_id', effectiveLandlordId)
+          .gt('sms_credits_balance', 0);
+
+        if (deductError) {
+          console.error('Error deducting SMS credit:', deductError);
+          // Don't fail the request, just log the error
+        } else {
+          console.log(`💳 Deducted 1 SMS credit from landlord ${effectiveLandlordId}`);
+        }
       }
 
       return new Response(

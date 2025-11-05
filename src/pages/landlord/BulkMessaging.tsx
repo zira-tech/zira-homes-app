@@ -7,12 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmsCredits } from "@/hooks/useSmsCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Send, Users, Filter, MessageSquare } from "lucide-react";
+import { Send, Users, Filter, MessageSquare, AlertTriangle, CreditCard } from "lucide-react";
 import { FeatureGate } from "@/components/ui/feature-gate";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
+import { useNavigate } from "react-router-dom";
 
 interface Tenant {
   id: string;
@@ -29,6 +32,8 @@ interface Property {
 
 const BulkMessaging = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { balance: smsCredits, isLow: isLowCredits } = useSmsCredits();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedTenants, setSelectedTenants] = useState<Set<string>>(new Set());
@@ -57,36 +62,59 @@ const BulkMessaging = () => {
       if (propError) throw propError;
       setProperties(propertiesData || []);
 
-      // Load tenants with active leases
-      const { data: tenantsData, error: tenantError } = await supabase
-        .from('tenants')
+      // Get property IDs
+      const propertyIds = propertiesData?.map(p => p.id) || [];
+
+      if (propertyIds.length === 0) {
+        setTenants([]);
+        setLoading(false);
+        return;
+      }
+
+      // Load tenants with active leases - simplified query
+      const { data: leasesData, error: leasesError } = await supabase
+        .from('leases')
         .select(`
-          id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          leases!inner (
-            status,
-            unit_id,
-            units!inner (
-              property_id,
-              properties!inner (
-                owner_id
-              )
-            )
+          tenant_id,
+          tenants (
+            id,
+            first_name,
+            last_name,
+            email,
+            phone
+          ),
+          units!inner (
+            property_id
           )
         `)
-        .eq('leases.status', 'active')
-        .eq('leases.units.properties.owner_id', user?.id);
+        .eq('status', 'active')
+        .in('units.property_id', propertyIds);
 
-      if (tenantError) throw tenantError;
+      if (leasesError) {
+        console.error('Error loading leases:', leasesError);
+        throw leasesError;
+      }
 
-      // Deduplicate tenants
-      const uniqueTenants = Array.from(
-        new Map(tenantsData?.map(t => [t.id, t]) || []).values()
-      ) as Tenant[];
+      // Extract and deduplicate tenants
+      const tenantsMap = new Map<string, Tenant>();
+      leasesData?.forEach((lease: any) => {
+        if (lease.tenants) {
+          const tenant = lease.tenants;
+          if (!tenantsMap.has(tenant.id)) {
+            tenantsMap.set(tenant.id, {
+              id: tenant.id,
+              first_name: tenant.first_name,
+              last_name: tenant.last_name,
+              email: tenant.email,
+              phone: tenant.phone
+            });
+          }
+        }
+      });
 
+      const uniqueTenants = Array.from(tenantsMap.values());
+      console.log(`✅ Loaded ${uniqueTenants.length} unique tenants from ${leasesData?.length || 0} active leases`);
+      
       setTenants(uniqueTenants);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -128,6 +156,12 @@ const BulkMessaging = () => {
 
     if (!message.trim()) {
       toast.error("Please enter a message");
+      return;
+    }
+
+    // Check SMS credits
+    if (smsCredits < selectedTenants.size) {
+      toast.error(`Insufficient SMS credits. You have ${smsCredits} credits but need ${selectedTenants.size}.`);
       return;
     }
 
@@ -213,6 +247,22 @@ const BulkMessaging = () => {
             <p className="text-muted-foreground">Send SMS to multiple tenants at once</p>
           </div>
 
+          {/* Low Credits Warning */}
+          {isLowCredits && (
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>
+                  Low SMS credits ({smsCredits} remaining). Purchase more to continue messaging.
+                </span>
+                <Button size="sm" onClick={() => navigate('/billing')}>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Buy Credits
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Recipient Selection */}
             <Card>
@@ -236,24 +286,32 @@ const BulkMessaging = () => {
                 </div>
 
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {tenants.map((tenant) => (
-                    <div
-                      key={tenant.id}
-                      className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
-                      onClick={() => toggleTenant(tenant.id)}
-                    >
-                      <Checkbox
-                        checked={selectedTenants.has(tenant.id)}
-                        onCheckedChange={() => toggleTenant(tenant.id)}
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">
-                          {tenant.first_name} {tenant.last_name}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{tenant.phone || 'No phone'}</p>
-                      </div>
+                  {tenants.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No tenants with active leases found</p>
+                      <p className="text-sm">Add tenants with active leases to send SMS</p>
                     </div>
-                  ))}
+                  ) : (
+                    tenants.map((tenant) => (
+                      <div
+                        key={tenant.id}
+                        className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
+                        onClick={() => toggleTenant(tenant.id)}
+                      >
+                        <Checkbox
+                          checked={selectedTenants.has(tenant.id)}
+                          onCheckedChange={() => toggleTenant(tenant.id)}
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">
+                            {tenant.first_name} {tenant.last_name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{tenant.phone || 'No phone'}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -283,6 +341,16 @@ const BulkMessaging = () => {
                 <div className="p-4 bg-muted rounded-lg space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Recipients:</span>
+                    <span className="font-medium">{selectedTenants.size}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>SMS Credits Available:</span>
+                    <span className={`font-medium ${smsCredits < selectedTenants.size ? 'text-red-500' : ''}`}>
+                      {smsCredits}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Credits Required:</span>
                     <span className="font-medium">{selectedTenants.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">

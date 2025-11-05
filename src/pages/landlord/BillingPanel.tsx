@@ -413,7 +413,7 @@ const BillingPanel = () => {
                   <div className="text-sm text-muted-foreground">Available Credits</div>
                 </div>
                 <Badge variant="outline" className="bg-background">
-                  ${((subscription?.sms_credits_balance || 0) * 0.05).toFixed(2)} value
+                  KES {((subscription?.sms_credits_balance || 0) * 2.5).toFixed(2)} value
                 </Badge>
               </div>
 

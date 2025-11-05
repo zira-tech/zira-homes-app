@@ -49,7 +49,7 @@ const SmsUsage = () => {
     try {
       setLoading(true);
 
-      // Load SMS logs for current month
+      // Load SMS logs for current month with explicit landlord_id filter
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -57,12 +57,17 @@ const SmsUsage = () => {
       const { data: logsData, error: logsError } = await supabase
         .from('sms_logs')
         .select('*')
+        .eq('landlord_id', user?.id)
         .gte('created_at', startOfMonth.toISOString())
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (logsError) throw logsError;
+      if (logsError) {
+        console.error('Error fetching SMS logs:', logsError);
+        throw logsError;
+      }
 
+      console.log(`✅ Loaded ${logsData?.length || 0} SMS logs for landlord`);
       setLogs(logsData || []);
 
       // Calculate stats
@@ -74,7 +79,7 @@ const SmsUsage = () => {
         total_sent: sent,
         total_failed: failed,
         total_pending: pending,
-        total_cost: (sent + failed) * 2.5 // KES 2.50 per SMS
+        total_cost: sent * 2.5 // KES 2.50 per SMS (only count successful sends)
       });
 
     } catch (error) {
@@ -196,16 +201,23 @@ const SmsUsage = () => {
           {/* Recent SMS Logs */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent SMS Activity</CardTitle>
-              <CardDescription>Last 50 SMS sent this month</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Recent SMS Activity</CardTitle>
+                  <CardDescription>Last 50 SMS sent this month</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {logs.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                   <h3 className="text-lg font-medium mb-2">No SMS Activity</h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground mb-2">
                     You haven't sent any SMS messages this month.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Send SMS from Bulk Messaging or when resending tenant credentials
                   </p>
                 </div>
               ) : (
