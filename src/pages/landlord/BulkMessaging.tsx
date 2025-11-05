@@ -72,6 +72,12 @@ const BulkMessaging = () => {
 
       if (propError) throw propError;
       setProperties(propertiesData || []);
+      console.log('Loaded properties:', propertiesData?.length);
+      
+      // Create property ID to name map for efficient lookups
+      const propertyIdToNameMap = new Map(
+        propertiesData?.map(p => [p.id, p.name]) || []
+      );
 
       const propertyIds = propertiesData?.map(p => p.id) || [];
 
@@ -84,8 +90,9 @@ const BulkMessaging = () => {
       // Step 2: Get units for these properties
       const { data: unitsData, error: unitsError } = await supabase
         .from('units')
-        .select('id, property_id, unit_number, properties!inner(id, name)')
+        .select('id, property_id, unit_number')
         .in('property_id', propertyIds);
+      console.log('Loaded units:', unitsData?.length);
 
       if (unitsError) throw unitsError;
 
@@ -103,6 +110,7 @@ const BulkMessaging = () => {
         .select('tenant_id, unit_id')
         .eq('status', 'active')
         .in('unit_id', unitIds);
+      console.log('Loaded leases:', leasesData?.length);
 
       if (leasesError) throw leasesError;
 
@@ -119,6 +127,7 @@ const BulkMessaging = () => {
         .from('tenants')
         .select('id, first_name, last_name, email, phone')
         .in('id', tenantIds);
+      console.log('Loaded tenants:', tenantsData?.length);
 
       if (tenantsError) throw tenantsError;
 
@@ -129,7 +138,7 @@ const BulkMessaging = () => {
         if (unit && !tenantPropertyMap.has(lease.tenant_id)) {
           tenantPropertyMap.set(lease.tenant_id, {
             property_id: unit.property_id,
-            property_name: (unit.properties as any)?.name || 'Unknown'
+            property_name: propertyIdToNameMap.get(unit.property_id) || 'Unknown'
           });
         }
       });
