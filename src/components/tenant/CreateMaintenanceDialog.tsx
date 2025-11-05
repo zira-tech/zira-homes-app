@@ -61,6 +61,10 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
       toast.error('Please provide a short title for the request');
       return;
     }
+    if (!description.trim()) {
+      toast.error('Please provide a description of the issue');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -74,7 +78,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
 
       const insertPayload: any = {
         title: title.trim(),
-        description: description.trim() || null,
+        description: description.trim(),
         category: category,
         priority: priority,
         status: 'pending',
@@ -140,7 +144,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
           </div>
 
           <div>
-            <label className="text-sm font-medium">Description</label>
+            <label className="text-sm font-medium">Description <span className="text-destructive ml-1">*</span></label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue in detail" />
           </div>
 
