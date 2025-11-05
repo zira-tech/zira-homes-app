@@ -142,12 +142,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             return storedSelectedRole.toLowerCase();
           }
 
-          // Priority for multi-role users: Tenant > Admin > Landlord > Manager > Agent
-          // Tenants with active leases should default to tenant view
-          if (isTenant && allRoles.includes("tenant")) {
-            setSelectedRole("tenant");
-            return "tenant";
-          }
+          // Priority for multi-role users: Admin > Landlord > Manager > Agent > Tenant
+          // Higher-level roles should take precedence over tenant role
           if (allRoles.includes("admin")) { 
             setSelectedRole("admin"); 
             return "admin"; 
@@ -163,6 +159,11 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           if (allRoles.includes("agent")) { 
             setSelectedRole("agent"); 
             return "agent"; 
+          }
+          // Default to tenant if they have an active lease
+          if (isTenant && allRoles.includes("tenant")) {
+            setSelectedRole("tenant");
+            return "tenant";
           }
           
           // Clean up invalid stored role
