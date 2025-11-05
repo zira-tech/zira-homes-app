@@ -11,6 +11,7 @@ import { TrialCountdown } from './TrialCountdown';
 import { useToast } from '@/hooks/use-toast';
 import { TablePaginator } from '@/components/ui/table-paginator';
 import { Search, Filter, Eye, Settings, Crown } from 'lucide-react';
+import { SubscriptionDetailsDialog } from './SubscriptionDetailsDialog';
 
 interface PropertyStakeholderSubscription {
   id: string;
@@ -65,6 +66,8 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
     newPlan: any;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState<PropertyStakeholderSubscription | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const formatCurrency = (amount: number, currency?: string) => {
     return formatAmount(amount, currency);
   };
@@ -133,6 +136,11 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
   const handleCancelChange = () => {
     setConfirmOpen(false);
     setPendingChange(null);
+  };
+
+  const handleViewDetails = (subscription: PropertyStakeholderSubscription) => {
+    setSelectedSubscription(subscription);
+    setDetailsDialogOpen(true);
   };
 
   // Filtering logic
@@ -295,6 +303,8 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
                         variant="outline"
                         size="sm"
                         className="border-border"
+                        onClick={() => handleViewDetails(subscription)}
+                        title="View subscription details"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -339,6 +349,14 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
           />
         </div>
       </CardContent>
+
+      {selectedSubscription && (
+        <SubscriptionDetailsDialog
+          subscription={selectedSubscription}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+        />
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent className="max-w-4xl">
