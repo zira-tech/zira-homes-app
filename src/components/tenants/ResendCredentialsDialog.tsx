@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { Send, Copy, Mail, MessageSquare, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useQuery } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface ResendCredentialsDialogProps {
   tenant: {
@@ -23,10 +24,9 @@ interface ResendCredentialsDialogProps {
 export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [resendingEmail, setResendingEmail] = useState(false);
-  const [resendingSMS, setResendingSMS] = useState(false);
+  const [includeEmail, setIncludeEmail] = useState(true);
+  const [includeSMS, setIncludeSMS] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
 
   // Check SMS provider status using edge function (works for all roles)
   const { data: smsStatus, isLoading: smsStatusLoading } = useQuery({
@@ -50,129 +50,68 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
     staleTime: 60000, // Cache for 1 minute
   });
 
-  const generateNewPassword = () => {
-    // Enhanced password generation matching backend
-    const lowercase = "abcdefghijkmnpqrstuvwxyz";
-    const uppercase = "ABCDEFGHIJKLMNPQRSTUVWXYZ";
-    const numbers = "23456789";
-    const symbols = "!@#$%&*";
-    
-    let password = "";
-    
-    // Ensure at least one character from each category
-    password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
-    password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
-    password += numbers.charAt(Math.floor(Math.random() * numbers.length));
-    password += symbols.charAt(Math.floor(Math.random() * symbols.length));
-    
-    // Fill remaining positions (12 total)
-    const allChars = lowercase + uppercase + numbers + symbols;
-    for (let i = 0; i < 8; i++) {
-      password += allChars.charAt(Math.floor(Math.random() * allChars.length));
-    }
-    
-    // Shuffle the password
-    return password.split('').sort(() => Math.random() - 0.5).join('');
-  };
-
-  const [newPassword] = useState(generateNewPassword());
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied",
-      description: "Login details copied to clipboard",
-    });
-  };
-
-  const resendEmail = async () => {
-    setResendingEmail(true);
-    try {
-      const { error } = await supabase.functions.invoke('send-welcome-email', {
-        body: {
-          tenantEmail: tenant.email,
-          tenantName: `${tenant.first_name} ${tenant.last_name}`,
-          propertyName: 'Your Property',
-          unitNumber: 'Your Unit',
-          temporaryPassword: newPassword,
-          loginUrl: 'https://zirahomes.com/auth'
-        }
-      });
-
-      if (error) {
-        throw error;
-      }
-
+  const resendCredentials = async () => {
+    if (!includeEmail && !includeSMS) {
       toast({
-        title: "Email Sent",
-        description: "Welcome email resent successfully",
-      });
-    } catch (error) {
-      console.error("Error resending email:", error);
-      toast({
-        title: "Email Failed",
-        description: "Failed to resend welcome email. Please share credentials manually.",
+        title: "Select Notification Method",
+        description: "Please select at least one notification method (Email or SMS)",
         variant: "destructive",
       });
-    } finally {
-      setResendingEmail(false);
+      return;
     }
-  };
 
-  const resendSMS = async () => {
-    setResendingSMS(true);
+    setLoading(true);
     try {
-      const smsMessage = `🏠 Zira Homes - New Login Details
-
-📧 Email: ${tenant.email}
-🔑 Password: ${newPassword}
-🌐 Login: https://zirahomes.com/auth
-
-Please change your password after first login.
-
-Need help? Contact support.`;
-
-      // Let the edge function fetch provider configuration using service role
-      const { data: smsResult, error } = await supabase.functions.invoke('send-sms-with-logging', {
+      const { data, error } = await supabase.functions.invoke('send-tenant-welcome-notifications', {
         body: {
-          phone_number: tenant.phone,
-          message: smsMessage,
-          landlord_id: user?.id,
-          message_type: 'tenant_credentials'
+          tenantId: tenant.id,
+          includeEmail,
+          includeSMS
         }
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      toast({
-        title: "SMS Sent Successfully",
-        description: `New login credentials sent to ${tenant.phone}`,
-      });
-    } catch (error: any) {
-      console.error("Error resending SMS:", error);
-      
-      // Enhanced error handling with specific messages
-      let errorMessage = "Failed to send SMS. ";
-      
-      if (error.message?.includes('Invalid phone number')) {
-        errorMessage += "Please check the phone number format.";
-      } else if (error.message?.includes('authentication token')) {
-        errorMessage += "SMS provider not configured properly.";
-      } else if (error.message?.includes('Rate Limited')) {
-        errorMessage += "Too many messages sent. Please try again later.";
+      // Parse results to show specific success/failure
+      const results = data?.results || {};
+      const emailSuccess = results.email?.success;
+      const smsSuccess = results.sms?.success;
+
+      if (data?.success) {
+        let description = `New login credentials have been generated and sent to ${tenant.first_name}.`;
+        
+        if (includeEmail && includeEmail) {
+          description += `\n✅ Email: ${emailSuccess ? 'Sent' : 'Failed'}`;
+          description += `\n✅ SMS: ${smsSuccess ? 'Sent' : 'Failed'}`;
+        } else if (includeEmail) {
+          description = emailSuccess 
+            ? `Email sent successfully to ${tenant.email}` 
+            : 'Email sending failed';
+        } else if (includeSMS) {
+          description = smsSuccess 
+            ? `SMS sent successfully to ${tenant.phone}` 
+            : 'SMS sending failed';
+        }
+
+        toast({
+          title: "Credentials Sent Successfully",
+          description,
+        });
+        
+        setOpen(false);
       } else {
-        errorMessage += "Please share credentials manually.";
+        throw new Error(data?.error || 'Failed to send credentials');
       }
+    } catch (error: any) {
+      console.error("Error resending credentials:", error);
       
       toast({
-        title: "SMS Delivery Failed",
-        description: errorMessage,
+        title: "Failed to Send Credentials",
+        description: error.message || "Please try again or contact support.",
         variant: "destructive",
       });
     } finally {
-      setResendingSMS(false);
+      setLoading(false);
     }
   };
 
@@ -222,51 +161,45 @@ Need help? Contact support.`;
             </p>
           </div>
 
-          <div className="bg-accent/10 p-4 rounded-lg border border-accent/20">
-            <h4 className="font-medium text-primary mb-3">New Login Credentials</h4>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Email:</span>
-                <code className="text-sm bg-muted px-2 py-1 rounded">{tenant.email}</code>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Password:</span>
-                <code className="text-sm bg-muted px-2 py-1 rounded">{newPassword}</code>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => copyToClipboard(`Email: ${tenant.email}\nPassword: ${newPassword}\nLogin: https://zirahomes.com/auth`)}
-            >
-              <Copy className="w-4 h-4 mr-2" />
-              Copy All Details
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            <h4 className="font-medium text-primary">Resend Options</h4>
+          <div className="space-y-4">
+            <h4 className="font-medium text-primary">Notification Methods</h4>
             
-            <Button
-              onClick={resendEmail}
-              disabled={resendingEmail}
-              className="w-full"
-              variant="outline"
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              {resendingEmail ? "Sending..." : "Resend via Email"}
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-email"
+                checked={includeEmail}
+                onCheckedChange={(checked) => setIncludeEmail(checked as boolean)}
+              />
+              <Label
+                htmlFor="include-email"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Send via Email to {tenant.email}
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-sms"
+                checked={includeSMS}
+                onCheckedChange={(checked) => setIncludeSMS(checked as boolean)}
+                disabled={!tenant.phone || !smsAvailable}
+              />
+              <Label
+                htmlFor="include-sms"
+                className={`text-sm font-normal ${(!tenant.phone || !smsAvailable) ? 'opacity-50' : 'cursor-pointer'}`}
+              >
+                Send via SMS to {tenant.phone || 'No phone number'}
+              </Label>
+            </div>
 
             <Button
-              onClick={resendSMS}
-              disabled={resendingSMS || !tenant.phone || !smsAvailable}
+              onClick={resendCredentials}
+              disabled={loading}
               className="w-full"
-              variant="outline"
-              title={!smsAvailable ? "SMS provider not configured" : !tenant.phone ? "No phone number" : ""}
             >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              {resendingSMS ? "Sending..." : "Resend via SMS"}
+              <Send className="w-4 h-4 mr-2" />
+              {loading ? "Sending..." : "Send New Credentials"}
             </Button>
           </div>
 
@@ -283,14 +216,14 @@ Need help? Contact support.`;
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                SMS provider not configured. Please contact your administrator or use email/manual sharing.
+                SMS provider not configured. Please contact your administrator or use email.
               </AlertDescription>
             </Alert>
           )}
 
           <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20">
             <p className="text-xs text-destructive">
-              <strong>Note:</strong> This will generate a new temporary password. The old password will no longer work after the tenant logs in with the new one.
+              <strong>Note:</strong> This will generate a new temporary password and update it in the system. The tenant's old password will no longer work.
             </p>
           </div>
         </div>
