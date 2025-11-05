@@ -72,7 +72,7 @@ const handler = async (req: Request): Promise<Response> => {
           units!leases_unit_id_fkey!inner(
             unit_number,
             property_id,
-            properties!inner(
+            properties!units_property_id_fkey!inner(
               name
             )
           )
