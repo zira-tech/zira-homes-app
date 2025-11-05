@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from 'lucide-react';
+import { Calendar, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { useDropzone } from 'react-dropzone';
 
 export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
   const [open, setOpen] = useState(false);
@@ -18,6 +19,9 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
   const [priority, setPriority] = useState('medium');
   const [leases, setLeases] = useState<any[]>([]);
   const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -40,12 +44,52 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
     }
   };
 
+  const onDrop = (acceptedFiles: File[]) => {
+    const imageFiles = acceptedFiles.filter(file => file.type.startsWith('image/'));
+    
+    if (imageFiles.length !== acceptedFiles.length) {
+      toast.error('Only image files are allowed');
+    }
+
+    if (uploadedFiles.length + imageFiles.length > 5) {
+      toast.error('Maximum 5 images allowed');
+      return;
+    }
+
+    setUploadedFiles(prev => [...prev, ...imageFiles]);
+    
+    // Create previews
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.heic']
+    },
+    maxSize: 5242880, // 5MB
+    multiple: true
+  });
+
+  const removeImage = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   const resetForm = () => {
     setTitle('');
     setDescription('');
     setCategory('general');
     setPriority('medium');
     setSelectedLeaseId(null);
+    setUploadedFiles([]);
+    setImagePreviews([]);
   };
 
   const handleSubmit = async () => {
@@ -67,13 +111,40 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
     }
 
     setLoading(true);
+    setUploading(true);
     try {
       // Find lease object to extract tenant_id, property_id, unit_id
       const lease = leases.find((l: any) => l.id === selectedLeaseId);
       if (!lease) {
         toast.error('Selected lease not found');
         setLoading(false);
+        setUploading(false);
         return;
+      }
+
+      // Upload images to Supabase Storage
+      const imageUrls: string[] = [];
+      if (uploadedFiles.length > 0) {
+        for (const file of uploadedFiles) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${user!.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('maintenance-images')
+            .upload(fileName, file);
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw new Error(`Failed to upload ${file.name}`);
+          }
+
+          // Get public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from('maintenance-images')
+            .getPublicUrl(fileName);
+          
+          imageUrls.push(publicUrl);
+        }
       }
 
       const insertPayload: any = {
@@ -85,13 +156,14 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
         submitted_date: new Date().toISOString(),
         tenant_id: lease.tenant_id,
         property_id: lease.property_id ?? lease.unit?.property_id ?? null,
-        unit_id: lease.unit_id ?? null
+        unit_id: lease.unit_id ?? null,
+        images: imageUrls.length > 0 ? imageUrls : null
       };
 
       const { error } = await supabase.from('maintenance_requests').insert(insertPayload);
       if (error) throw error;
 
-      toast.success('Maintenance request submitted');
+      toast.success('Maintenance request submitted with photos');
       setOpen(false);
       resetForm();
       onCreated?.();
@@ -106,6 +178,7 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
       toast.error(message);
     } finally {
       setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -180,9 +253,61 @@ export const CreateMaintenanceDialog: React.FC<{ onCreated?: () => void }> = ({ 
             </div>
           </div>
 
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              <ImageIcon className="inline h-4 w-4 mr-1" />
+              Photos (Optional)
+            </label>
+            
+            {/* Dropzone */}
+            <div
+              {...getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                isDragActive 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <input {...getInputProps()} />
+              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+              {isDragActive ? (
+                <p className="text-sm text-primary">Drop photos here...</p>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-sm">Drag & drop photos or click to browse</p>
+                  <p className="text-xs text-muted-foreground">Max 5 images, 5MB each (JPG, PNG, WEBP)</p>
+                </div>
+              )}
+            </div>
+
+            {/* Image Previews */}
+            {imagePreviews.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative group">
+                    <img 
+                      src={preview} 
+                      alt={`Preview ${index + 1}`}
+                      className="w-full h-24 object-cover rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={loading}>{loading ? 'Submitting...' : 'Submit Request'}</Button>
+            <Button onClick={handleSubmit} disabled={loading || uploading}>
+              {uploading ? 'Uploading photos...' : loading ? 'Submitting...' : 'Submit Request'}
+            </Button>
           </div>
         </div>
       </DialogContent>

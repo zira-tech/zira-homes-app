@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Eye, Calendar, Clock, AlertTriangle, Wrench } from "lucide-react";
+import { Eye, Calendar, Clock, AlertTriangle, Wrench, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 
 interface MaintenanceRequest {
@@ -24,6 +24,7 @@ interface MaintenanceRequest {
   completed_date?: string;
   cost?: number;
   notes?: string;
+  images?: string[];
   tenants?: {
     first_name: string;
     last_name: string;
@@ -154,6 +155,35 @@ export function TenantMaintenanceDetailsDialog({ request, trigger }: TenantMaint
               <div>
                 <span className="font-medium text-muted-foreground">Additional Notes:</span>
                 <p className="mt-1 text-sm bg-muted p-3 rounded-md">{request.notes}</p>
+              </div>
+            )}
+
+            {request.images && request.images.length > 0 && (
+              <div>
+                <span className="font-medium text-muted-foreground flex items-center gap-2 mb-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Attached Photos ({request.images.length})
+                </span>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {request.images.map((imageUrl, index) => (
+                    <a
+                      key={index}
+                      href={imageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative block"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={`Maintenance issue ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-lg border hover:border-primary transition-colors cursor-pointer"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+                        <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
