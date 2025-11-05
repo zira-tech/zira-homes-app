@@ -225,6 +225,7 @@ serve(async (req) => {
     let shouldProcessDryRun = dryRun;
 
     // Authorization checks based on payment type
+    console.log('🔐 Starting authorization checks for paymentType:', paymentType, 'invoiceId:', invoiceId);
     let authorized = false;
     let landlordConfigId = landlordId;
 
@@ -274,7 +275,7 @@ serve(async (req) => {
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
       if (invoiceId) {
-        const { data: invoiceAuth } = await supabase
+        const { data: invoiceAuth, error: invoiceError } = await supabaseAdmin
           .from('invoices')
           .select(`
             tenant_id,
@@ -291,12 +292,48 @@ serve(async (req) => {
           .eq('id', invoiceId)
           .single();
 
+        console.log('📋 Invoice authorization query result:', {
+          found: !!invoiceAuth,
+          error: invoiceError?.message,
+          invoiceId
+        });
+
+        if (invoiceError) {
+          console.error('❌ Failed to fetch invoice for authorization:', invoiceError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to verify payment authorization',
+              errorId: 'AUTH_QUERY_FAILED',
+              details: invoiceError.message
+            }),
+            { 
+              status: 500, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
+        if (!invoiceAuth) {
+          console.error('❌ Invoice not found:', invoiceId);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invoice not found',
+              errorId: 'AUTH_INVOICE_NOT_FOUND',
+              invoiceId
+            }),
+            { 
+              status: 404, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
         if (invoiceAuth) {
           const isTenant = invoiceAuth.tenants.user_id === user.id;
           const isOwner = invoiceAuth.leases.units.properties.owner_id === user.id;
           const isManager = invoiceAuth.leases.units.properties.manager_id === user.id;
 
-          const { data: userRoles } = await supabase
+          const { data: userRoles } = await supabaseAdmin
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id);
@@ -311,14 +348,32 @@ serve(async (req) => {
     }
 
     if (!authorized) {
+      console.error('❌ Authorization failed:', {
+        userId: user.id,
+        paymentType,
+        invoiceId,
+        landlordId,
+        reason: 'User not authorized for this payment'
+      });
       return new Response(
-        JSON.stringify({ error: 'Unauthorized to initiate this payment' }),
+        JSON.stringify({ 
+          error: 'You are not authorized to initiate this payment',
+          errorId: 'AUTH_NOT_AUTHORIZED',
+          paymentType,
+          userId: user.id
+        }),
         { 
           status: 403, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
+
+    console.log('✅ Authorization successful:', {
+      userId: user.id,
+      paymentType,
+      landlordConfigId
+    });
 
     // Try to get landlord-specific M-Pesa config first    
     // If no landlordId provided, try to get it from invoice
@@ -354,6 +409,10 @@ serve(async (req) => {
 
       mpesaConfig = config;
       console.log('Landlord M-Pesa config found:', !!mpesaConfig);
+      
+      if (!mpesaConfig) {
+        console.warn('⚠️ No landlord M-Pesa config found for landlordId:', landlordConfigId);
+      }
     }
 
     // Helper function to decrypt credentials
@@ -442,11 +501,15 @@ serve(async (req) => {
       console.error('Missing M-Pesa credentials:', {
         missingConsumerKey: !consumerKey,
         missingConsumerSecret: !consumerSecret,
-        missingPasskey: !passkey
-      })
+        missingPasskey: !passkey,
+        landlordConfigId
+      });
+      
       return new Response(
         JSON.stringify({ 
-          error: 'M-Pesa configuration incomplete. Please configure M-Pesa credentials.',
+          error: 'M-Pesa payment gateway not configured',
+          errorId: 'MPESA_CONFIG_MISSING',
+          landlordId: landlordConfigId,
           missing: {
             consumerKey: !consumerKey,
             consumerSecret: !consumerSecret,
@@ -454,12 +517,14 @@ serve(async (req) => {
           }
         }),
         { 
-          status: 500, 
+          status: 503, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
-      )
+      );
     }
 
+    console.log('🔑 Fetching M-Pesa OAuth token...');
+    
     // Get OAuth token
     const authUrl = environment === 'production' 
       ? 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
@@ -525,6 +590,7 @@ serve(async (req) => {
     }
 
     console.log('STK Push payload:', JSON.stringify(stkPayload, null, 2))
+    console.log('📱 Sending STK push request to Safaricom API...');
 
     const stkResponse = await fetch(stkUrl, {
       method: 'POST',
