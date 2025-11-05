@@ -59,6 +59,10 @@ export function useUpgrade(): UseUpgradeResult {
 
       console.log('📋 Plan details:', plan);
 
+      // Calculate next billing date (end of current month)
+      const now = new Date();
+      const nextBillingDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
+      
       // Check billing model - commission-based (percentage) can be activated immediately
       if (plan.billing_model === 'percentage') {
         console.log('✅ Commission-based plan - activating directly');
@@ -66,7 +70,10 @@ export function useUpgrade(): UseUpgradeResult {
         const { data, error: activateError } = await supabase.functions.invoke(
           'activate-commission-plan',
           {
-            body: { planId },
+            body: { 
+              planId,
+              nextBillingDate: nextBillingDate.toISOString()
+            },
           }
         );
 
@@ -76,7 +83,7 @@ export function useUpgrade(): UseUpgradeResult {
 
         toast({
           title: "Plan Activated!",
-          description: `You've been upgraded to ${plan.name}. Commission will be calculated automatically.`,
+          description: `You've been upgraded to ${plan.name}. Your first billing will be at the end of this month based on rent collected.`,
         });
 
         // Log user activity
@@ -84,7 +91,12 @@ export function useUpgrade(): UseUpgradeResult {
           await supabase.rpc('log_user_activity', {
             _user_id: user.id,
             _action: 'plan_upgrade',
-            _details: { plan_id: planId, plan_name: plan.name, billing_model: 'commission' },
+            _details: { 
+              plan_id: planId, 
+              plan_name: plan.name, 
+              billing_model: 'commission',
+              next_billing_date: nextBillingDate.toISOString()
+            },
           });
         } catch (logError) {
           console.warn('Failed to log activity:', logError);
@@ -128,7 +140,8 @@ export function useUpgrade(): UseUpgradeResult {
 
       toast({
         title: "Payment Request Sent",
-        description: "Please check your phone and enter your M-Pesa PIN to complete the upgrade",
+        description: `Please check your phone and enter your M-Pesa PIN. Your plan will activate immediately, and you'll be billed ${plan.currency} ${plan.price} at the end of this month.`,
+        duration: 6000,
       });
 
       // Log activity

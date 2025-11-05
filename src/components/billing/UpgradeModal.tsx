@@ -5,7 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, Star, Crown, Zap, X, Loader2, ArrowRight } from "lucide-react";
+import { Check, Star, Crown, Zap, X, Loader2, ArrowRight, Smartphone } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useUpgrade } from "@/hooks/useUpgrade";
@@ -311,10 +313,31 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             <p className="text-muted-foreground mb-4 text-sm">
               You've selected the <strong>{billingPlans.find(p => p.id === selectedPlan)?.name}</strong> plan.
               {billingPlans.find(p => p.id === selectedPlan)?.billing_model === 'percentage' 
-                ? ' This plan will be activated immediately and you\'ll be billed monthly based on rent collected.'
-                : ' Click below to complete your upgrade and unlock all features.'
+                ? ' This plan activates immediately. You\'ll be billed monthly based on rent collected.'
+                : ` Activate now and start using all features immediately. Your first payment of ${getCurrencySymbol(billingPlans.find(p => p.id === selectedPlan)?.currency || 'KES')}${billingPlans.find(p => p.id === selectedPlan)?.price} will be due at the end of this month.`
               }
             </p>
+
+            {/* Phone Number Input for Fixed Plans */}
+            {billingPlans.find(p => p.id === selectedPlan)?.billing_model !== 'percentage' && (
+              <div className="space-y-3 mb-4">
+                <Label htmlFor="mpesa-phone" className="flex items-center gap-2 text-sm font-medium">
+                  <Smartphone className="h-4 w-4" />
+                  M-Pesa Phone Number
+                </Label>
+                <Input
+                  id="mpesa-phone"
+                  type="tel"
+                  placeholder="e.g., 0712345678 or 254712345678"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="text-center text-lg"
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  📱 You'll receive an M-Pesa STK push to complete your end-of-month payment
+                </p>
+              </div>
+            )}
             <div className="flex gap-3 justify-center">
               <Button 
                 variant="outline"

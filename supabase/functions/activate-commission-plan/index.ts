@@ -36,11 +36,11 @@ serve(async (req) => {
     if (!user) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id });
 
-    const { planId } = await req.json();
+    const { planId, nextBillingDate } = await req.json();
     if (!planId) {
       throw new Error("Plan ID is required");
     }
-    logStep("Request parsed", { planId });
+    logStep("Request parsed", { planId, nextBillingDate });
 
     // Get the billing plan and verify it's commission-based
     const { data: plan, error: planError } = await supabaseService
@@ -56,6 +56,12 @@ serve(async (req) => {
     }
     logStep("Plan retrieved", { planName: plan.name, percentageRate: plan.percentage_rate });
 
+    // Calculate next billing date if not provided (default to end of current month)
+    const billingDate = nextBillingDate || (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+    })();
+
     // Update or create the landlord subscription
     const { data: subscription, error: subscriptionError } = await supabaseService
       .from('landlord_subscriptions')
@@ -64,6 +70,7 @@ serve(async (req) => {
         billing_plan_id: planId,
         status: 'active',
         subscription_start_date: new Date().toISOString(),
+        next_billing_date: billingDate,
         trial_end_date: null, // End trial period
         auto_renewal: true,
         sms_credits_balance: plan.sms_credits_included || 0,
@@ -93,6 +100,13 @@ serve(async (req) => {
     });
     logStep("Activity logged");
 
+    // Format billing date for notification
+    const formattedBillingDate = new Date(billingDate).toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+
     // Insert a notification about monthly billing
     await supabaseService
       .from('notifications')
@@ -100,7 +114,7 @@ serve(async (req) => {
         user_id: user.id,
         type: 'billing',
         title: `${plan.name} Plan Activated`,
-        message: `Your ${plan.name} plan is now active. You'll be charged ${plan.percentage_rate}% commission on rent collected each month via M-Pesa.`,
+        message: `Your ${plan.name} plan is now active! You'll be charged ${plan.percentage_rate}% commission on rent collected. Your first billing will be on ${formattedBillingDate}.`,
         related_type: 'subscription',
         related_id: subscription?.[0]?.id
       });
