@@ -144,8 +144,10 @@ const handler = async (req: Request): Promise<Response> => {
           .single();
 
         if (provider) {
-          // Prefer INHOUSE_SMS_URL from env over provider.base_url
-          let testUrl = Deno.env.get('INHOUSE_SMS_URL') || provider.base_url;
+          // Prefer provider.base_url from DB, then INHOUSE_SMS_URL from env as fallback
+          let testUrl = provider.base_url || Deno.env.get('INHOUSE_SMS_URL');
+          const urlSource = provider.base_url ? 'database' : 'environment';
+          
           if (testUrl) {
             testUrl = testUrl.replace(/\/$/, '');
             
@@ -167,7 +169,7 @@ const handler = async (req: Request): Promise<Response> => {
             if (response && response.status < 500) {
               healthCheck.checks.api_connectivity = {
                 status: 'pass',
-                message: `API endpoint reachable (HTTP ${response.status})`,
+                message: `API endpoint reachable (HTTP ${response.status}) - URL from ${urlSource}`,
                 response_time_ms: responseTime
               };
             } else {

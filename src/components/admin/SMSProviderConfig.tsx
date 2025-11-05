@@ -38,6 +38,7 @@ const SMSProviderConfig = () => {
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [editingProvider, setEditingProvider] = useState<SMSProvider | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [countries] = useState([
     { code: 'KE', name: 'Kenya' },
     { code: 'UG', name: 'Uganda' },
@@ -145,14 +146,21 @@ const SMSProviderConfig = () => {
   };
 
   const saveProvider = async () => {
+    if (!newProvider.provider_name || !newProvider.sender_id) {
+      toast({
+        title: "Validation Error",
+        description: "Provider name and sender ID are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
     try {
-      if (!newProvider.provider_name) {
-        toast({
-          title: "Validation Error",
-          description: "Provider name is required",
-          variant: "destructive",
-        });
-        return;
+      // Normalize and validate base_url
+      let normalizedBaseUrl = newProvider.base_url?.trim();
+      if (normalizedBaseUrl && !normalizedBaseUrl.endsWith('/')) {
+        normalizedBaseUrl += '/';
       }
 
       const config_data: Record<string, any> = {};
@@ -166,12 +174,13 @@ const SMSProviderConfig = () => {
       if (newProvider.additional_config) {
         try {
           Object.assign(config_data, JSON.parse(newProvider.additional_config));
-        } catch (e) {
+        } catch {
           toast({
             title: "Invalid JSON",
-            description: "Additional configuration must be valid JSON",
+            description: "Additional config must be valid JSON",
             variant: "destructive",
           });
+          setIsSaving(false);
           return;
         }
       }
@@ -179,44 +188,40 @@ const SMSProviderConfig = () => {
       const providerData = {
         provider_name: newProvider.provider_name,
         sender_id: newProvider.sender_id || null,
-        base_url: newProvider.base_url || null,
+        base_url: normalizedBaseUrl || null,
         is_active: editingProvider ? editingProvider.is_active : (providers.length === 0),
         is_default: editingProvider ? editingProvider.is_default : (providers.length === 0),
         config_data
       };
 
-      if (editingProvider) {
-        // Update existing provider
-        const { error } = await supabase
-          .from('sms_providers')
-          .update(providerData)
-          .eq('id', editingProvider.id);
+      // Use the secure edge function instead of direct DB update
+      const { data: result, error: functionError } = await supabase.functions.invoke('admin-upsert-sms-provider', {
+        body: {
+          id: editingProvider?.id,
+          ...providerData
+        }
+      });
 
-        if (error) throw error;
-      } else {
-        // Insert new provider
-        const { error } = await supabase
-          .from('sms_providers')
-          .insert([providerData]);
-
-        if (error) throw error;
-      }
+      if (functionError) throw functionError;
+      if (!result?.success) throw new Error(result?.error || 'Failed to save provider');
 
       toast({
         title: "Success",
         description: `Provider ${editingProvider ? 'updated' : 'added'} successfully`,
       });
 
-      resetForm();
       setIsDialogOpen(false);
-      fetchProviders(); // Refresh the list
+      resetForm();
+      await fetchProviders();
     } catch (error: any) {
       console.error('Error saving provider:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save provider configuration",
+        description: error.message || "Failed to save provider",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -613,8 +618,12 @@ const SMSProviderConfig = () => {
               </div>
 
               <div className="flex gap-3 pt-4 border-t">
-                <Button onClick={saveProvider} className="flex-1 bg-primary hover:bg-primary/90">
-                  {editingProvider ? 'Update' : 'Add'} Provider
+                <Button 
+                  onClick={saveProvider} 
+                  className="flex-1 bg-primary hover:bg-primary/90"
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving...' : editingProvider ? 'Update' : 'Add'} Provider
                 </Button>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                   Cancel

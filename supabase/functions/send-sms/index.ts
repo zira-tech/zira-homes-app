@@ -294,13 +294,15 @@ const handler = async (req: Request): Promise<Response> => {
 };
 
 async function sendInHouseSMS(phone: string, message: string, provider: any) {
-  // Prefer INHOUSE_SMS_URL from env (HTTPS) over provider.base_url
-  let baseUrl = Deno.env.get('INHOUSE_SMS_URL') || provider.base_url || 'https://api.example.com/sms/';
+  // Prefer provider.base_url from DB, then INHOUSE_SMS_URL from env as fallback
+  let baseUrl = provider.base_url || Deno.env.get('INHOUSE_SMS_URL') || 'https://api.example.com/sms/';
+  const urlSource = provider.base_url ? 'database' : 'environment';
+  
   if (!baseUrl.endsWith('/')) {
     baseUrl += '/';
   }
   
-  console.log('Using InHouse SMS URL:', baseUrl);
+  console.log(`Using InHouse SMS URL from ${urlSource}:`, baseUrl);
   
   // Force POST method for reliable body delivery
   const httpMethod = 'POST';
