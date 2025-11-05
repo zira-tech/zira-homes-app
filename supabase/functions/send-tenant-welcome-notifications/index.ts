@@ -10,11 +10,12 @@ interface NotificationRequest {
   tenantId: string;
   includeEmail?: boolean;
   includeSMS?: boolean;
+  loginUrl?: string;
 }
 
-// Generate a random password
+// Generate a random SMS-safe password (no confusing characters or symbols)
 function generatePassword(length = 12): string {
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+  const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   let password = "";
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
@@ -45,7 +46,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
     });
 
-    const { tenantId, includeEmail = true, includeSMS = true }: NotificationRequest = await req.json();
+    const { tenantId, includeEmail = true, includeSMS = true, loginUrl: loginUrlOverride }: NotificationRequest = await req.json();
 
     if (!tenantId) {
       return new Response(
@@ -96,21 +97,51 @@ const handler = async (req: Request): Promise<Response> => {
     const temporaryPassword = generatePassword(12);
     console.log(`🔑 Generated temporary password for ${tenant.email}`);
 
-    // Create or update auth user with temporary password
-    if (tenant.user_id) {
-      // User already exists, update password
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        tenant.user_id,
-        { password: temporaryPassword }
-      );
+    // Track password update status
+    let passwordUpdated = false;
+    let passwordError: string | null = null;
+    let authUserId: string | null = tenant.user_id ?? null;
+
+    // Attempt to update or create auth user with temporary password
+    if (authUserId) {
+      // Verify the auth user still exists
+      const { data: foundUser, error: getUserErr } = await supabaseAdmin.auth.admin.getUserById(authUserId);
       
-      if (updateError) {
-        console.error("Failed to update user password:", updateError);
+      if (getUserErr || !foundUser?.user) {
+        console.log(`⚠️ User ${authUserId} not found, will create new auth user`);
+        authUserId = null; // Fallback to creation
       } else {
-        console.log(`✅ Updated password for existing user ${tenant.user_id}`);
+        // Ensure email matches tenant record
+        if (foundUser.user.email !== tenant.email) {
+          console.log(`📧 Updating email from ${foundUser.user.email} to ${tenant.email}`);
+          const { error: emailUpdateErr } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            email: tenant.email,
+            email_confirm: true,
+          });
+          if (emailUpdateErr) {
+            console.error("⚠️ Email update failed:", emailUpdateErr);
+          }
+        }
+
+        // Update password
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+          authUserId,
+          { password: temporaryPassword }
+        );
+        
+        if (!updateError) {
+          passwordUpdated = true;
+          console.log(`✅ Updated password for existing user ${authUserId}`);
+        } else {
+          console.error("❌ Password update failed, will try create:", updateError);
+          passwordError = updateError.message;
+          authUserId = null; // Fallback to create
+        }
       }
-    } else {
-      // Create new auth user
+    }
+
+    // Create new auth user if update failed or no user_id exists
+    if (!authUserId) {
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: tenant.email,
         password: temporaryPassword,
@@ -122,8 +153,14 @@ const handler = async (req: Request): Promise<Response> => {
       });
 
       if (createError) {
-        console.error("Failed to create auth user:", createError);
+        console.error("❌ Failed to create auth user:", createError);
+        passwordError = createError.message || "Failed to create auth user";
+        
+        if (createError.message?.includes("already registered")) {
+          passwordError = "Email already registered. Please use 'Forgot Password' instead.";
+        }
       } else if (newUser.user) {
+        passwordUpdated = true;
         console.log(`✅ Created new auth user ${newUser.user.id}`);
         
         // Link tenant to auth user
@@ -139,8 +176,34 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    const loginUrl = `${supabaseUrl.replace('.supabase.co', '')}/auth`;
+    const loginUrl = loginUrlOverride || `${supabaseUrl.replace('.supabase.co', '')}/auth`;
+    console.log(`🔑 passwordUpdated=${passwordUpdated}, loginUrl=${loginUrl}`);
     const results: any = { tenantId, email: null, sms: null };
+
+    // Only send notifications if password was successfully updated
+    if (!passwordUpdated) {
+      console.error("❌ Password not updated, skipping notifications");
+      results.email = includeEmail ? { success: false, error: "Password not updated" } : null;
+      results.sms = includeSMS ? { success: false, error: "Password not updated" } : null;
+      
+      return new Response(
+        JSON.stringify({
+          success: false,
+          passwordUpdated: false,
+          passwordError,
+          results,
+          tenant: {
+            id: tenant.id,
+            email: tenant.email,
+            name: tenantName,
+          },
+        }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
 
     // Send Email
     if (includeEmail) {
@@ -209,6 +272,8 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({
         success: overallSuccess,
+        passwordUpdated: true,
+        passwordError: null,
         results,
         tenant: {
           id: tenant.id,

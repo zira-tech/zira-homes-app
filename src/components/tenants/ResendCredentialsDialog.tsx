@@ -62,52 +62,81 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
 
     setLoading(true);
     try {
+      const loginUrl = `${window.location.origin}/auth`;
+      
       const { data, error } = await supabase.functions.invoke('send-tenant-welcome-notifications', {
         body: {
           tenantId: tenant.id,
           includeEmail,
-          includeSMS
+          includeSMS,
+          loginUrl
         }
       });
 
       if (error) throw error;
 
-      // Parse results to show specific success/failure
-      const results = data?.results || {};
-      const emailSuccess = results.email?.success;
-      const smsSuccess = results.sms?.success;
-
-      if (data?.success) {
-        let description = `New login credentials have been generated and sent to ${tenant.first_name}.`;
-        
-        if (includeEmail && includeEmail) {
-          description += `\n✅ Email: ${emailSuccess ? 'Sent' : 'Failed'}`;
-          description += `\n✅ SMS: ${smsSuccess ? 'Sent' : 'Failed'}`;
-        } else if (includeEmail) {
-          description = emailSuccess 
-            ? `Email sent successfully to ${tenant.email}` 
-            : 'Email sending failed';
-        } else if (includeSMS) {
-          description = smsSuccess 
-            ? `SMS sent successfully to ${tenant.phone}` 
-            : 'SMS sending failed';
-        }
-
+      // Check if password was actually updated
+      if (!data?.passwordUpdated) {
         toast({
-          title: "Credentials Sent Successfully",
-          description,
+          title: "Password Update Failed",
+          description: data?.passwordError || "Could not update the tenant's password in the authentication system. No notifications were sent.",
+          variant: "destructive",
         });
-        
+        return;
+      }
+
+      // Parse results
+      const emailSuccess = data?.results?.email?.success;
+      const smsSuccess = data?.results?.sms?.success;
+      
+      const successMessages: string[] = [];
+      const failureMessages: string[] = [];
+
+      if (includeEmail) {
+        if (emailSuccess) {
+          successMessages.push(`✅ Email sent to ${tenant.email}`);
+        } else {
+          failureMessages.push(`❌ Email failed: ${data?.results?.email?.error || 'Unknown error'}`);
+        }
+      }
+
+      if (includeSMS) {
+        if (smsSuccess) {
+          successMessages.push(`✅ SMS sent to ${tenant.phone}`);
+        } else {
+          failureMessages.push(`❌ SMS failed: ${data?.results?.sms?.error || 'Unknown error'}`);
+        }
+      }
+
+      if (successMessages.length > 0) {
+        toast({
+          title: "Credentials Sent",
+          description: (
+            <div className="space-y-1">
+              <p className="font-medium">New login credentials have been generated and sent:</p>
+              {successMessages.map((msg, i) => (
+                <p key={i} className="text-sm">{msg}</p>
+              ))}
+              {failureMessages.length > 0 && (
+                <>
+                  <p className="text-sm text-muted-foreground mt-2">Partial failures:</p>
+                  {failureMessages.map((msg, i) => (
+                    <p key={i} className="text-sm text-muted-foreground">{msg}</p>
+                  ))}
+                </>
+              )}
+            </div>
+          ),
+        });
         setOpen(false);
       } else {
-        throw new Error(data?.error || 'Failed to send credentials');
+        throw new Error(failureMessages.join(", ") || "All delivery methods failed");
       }
     } catch (error: any) {
       console.error("Error resending credentials:", error);
-      
       toast({
-        title: "Failed to Send Credentials",
-        description: error.message || "Please try again or contact support.",
+        title: "Error",
+        description: error.message || "Failed to resend credentials. Please try again.",
         variant: "destructive",
       });
     } finally {
