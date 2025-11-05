@@ -262,12 +262,30 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         }
       ).catch(console.error);
 
+      // Send welcome notifications (email + SMS) - non-blocking
+      if (tenantId) {
+        console.log('📧 Triggering welcome notifications for tenant:', tenantId);
+        supabase.functions.invoke('send-tenant-welcome-notifications', {
+          body: {
+            tenantId,
+            includeEmail: true,
+            includeSMS: true
+          }
+        }).then(({ data: notifData, error: notifError }) => {
+          if (notifError) {
+            console.error('⚠️ Welcome notification error:', notifError);
+          } else {
+            console.log('✅ Welcome notifications sent:', notifData);
+          }
+        }).catch(console.error);
+      }
+
       const endTime = performance.now();
       console.log(`✅ Tenant created in ${(endTime - startTime).toFixed(0)}ms`);
 
       toast({
         title: 'Tenant Created',
-        description: leaseCreated ? 'Tenant and lease created successfully.' : 'Tenant created successfully.',
+        description: leaseCreated ? 'Tenant and lease created successfully. Welcome notifications sent.' : 'Tenant created successfully. Welcome notifications sent.',
         variant: 'default',
         duration: 3000,
       });

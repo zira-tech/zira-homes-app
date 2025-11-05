@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.admin-assign-plan]
 verify_jwt = true
+
+[functions.send-tenant-welcome-notifications]
+verify_jwt = true
