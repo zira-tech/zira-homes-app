@@ -3584,43 +3584,38 @@ export type Database = {
       user_tour_progress: {
         Row: {
           completed_at: string | null
-          created_at: string
-          current_step: number | null
+          created_at: string | null
           id: string
+          last_step_index: number | null
+          started_at: string | null
           status: string
-          tour_id: string | null
-          updated_at: string
+          tour_name: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           completed_at?: string | null
-          created_at?: string
-          current_step?: number | null
+          created_at?: string | null
           id?: string
+          last_step_index?: number | null
+          started_at?: string | null
           status?: string
-          tour_id?: string | null
-          updated_at?: string
+          tour_name: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           completed_at?: string | null
-          created_at?: string
-          current_step?: number | null
+          created_at?: string | null
           id?: string
+          last_step_index?: number | null
+          started_at?: string | null
           status?: string
-          tour_id?: string | null
-          updated_at?: string
+          tour_name?: string
+          updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_tour_progress_tour_id_fkey"
-            columns: ["tour_id"]
-            isOneToOne: false
-            referencedRelation: "feature_tours"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
