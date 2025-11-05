@@ -28,19 +28,23 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Check SMS provider status
+  // Check SMS provider status using edge function (works for all roles)
   const { data: smsStatus, isLoading: smsStatusLoading } = useQuery({
     queryKey: ['sms-provider-status'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sms_providers')
-        .select('is_active, provider_name')
-        .eq('is_active', true)
-        .maybeSingle();
+      const { data, error } = await supabase.functions.invoke('get-sms-provider');
+      
+      if (error || !data?.success) {
+        console.log('SMS provider not available:', error);
+        return {
+          available: false,
+          providerName: 'Not Configured'
+        };
+      }
       
       return {
-        available: !!data,
-        providerName: data?.provider_name || 'Unknown'
+        available: true,
+        providerName: data.provider?.provider_name || 'Unknown'
       };
     },
     staleTime: 60000, // Cache for 1 minute

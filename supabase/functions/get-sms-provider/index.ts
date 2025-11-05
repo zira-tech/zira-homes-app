@@ -19,7 +19,7 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // SECURITY FIX: Verify user is authenticated and has admin role
+    // Verify user is authenticated
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({
@@ -31,7 +31,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Verify JWT token and check admin role
+    // Verify JWT token
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
@@ -46,15 +46,21 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Check if user has admin role
-    const { data: hasAdminRole, error: roleError } = await supabase
+    // Check if user has Admin, Landlord, or Manager role
+    const { data: hasAdminRole } = await supabase
       .rpc('has_role', { _user_id: user.id, _role: 'Admin' });
+    const { data: hasLandlordRole } = await supabase
+      .rpc('has_role', { _user_id: user.id, _role: 'Landlord' });
+    const { data: hasManagerRole } = await supabase
+      .rpc('has_role', { _user_id: user.id, _role: 'Manager' });
 
-    if (roleError || !hasAdminRole) {
+    const isAuthorized = hasAdminRole || hasLandlordRole || hasManagerRole;
+
+    if (!isAuthorized) {
       console.warn(`Unauthorized SMS provider access attempt by user: ${user.id}`);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Administrative privileges required'
+        error: 'Insufficient privileges to access SMS provider information'
       }), {
         status: 403,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -84,16 +90,21 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Return provider data without sensitive fields
-    const safeProvider = {
+    // Return provider data based on role
+    // Admins get full info, Landlords/Managers get availability only
+    const safeProvider = hasAdminRole ? {
       id: providers.id,
       provider_name: providers.provider_name,
       sender_id: providers.sender_id,
       sender_type: providers.sender_type,
       is_active: providers.is_active,
       is_default: providers.is_default,
-      // Never expose secrets to client
       has_credentials: !!(providers.authorization_token || providers.username)
+    } : {
+      // Limited info for landlords/managers
+      provider_name: providers.provider_name,
+      is_active: providers.is_active,
+      available: true
     };
 
     return new Response(JSON.stringify({
