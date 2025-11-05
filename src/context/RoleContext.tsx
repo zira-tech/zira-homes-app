@@ -85,17 +85,18 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
             return "tenant";
           }
 
-          // Check if user has an active lease (tenant status)
-          const { data: isTenant } = await supabase.rpc('is_user_tenant', { _user_id: user.id });
-          
-          // Check all management roles
+          // OPTIMIZATION: Run tenant and role checks in parallel for faster loading
           const rolesToCheck = ["Admin", "Landlord", "Manager", "Agent"] as const;
-          const roleChecks = await Promise.all(
-            rolesToCheck.map(async (r) => {
+          const [tenantResult, ...roleResults] = await Promise.all([
+            supabase.rpc('is_user_tenant', { _user_id: user.id }),
+            ...rolesToCheck.map(async (r) => {
               const { data } = await supabase.rpc('has_role_safe', { _user_id: user.id, _role: r as any });
               return { role: r.toLowerCase(), has: Boolean(data) } as { role: string; has: boolean };
             })
-          );
+          ]);
+          
+          const isTenant = tenantResult.data;
+          const roleChecks = roleResults;
 
           let allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
           

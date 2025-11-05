@@ -14,10 +14,15 @@ export const RequireAuth = ({ children }: RequireAuthProps) => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="space-y-4 w-full max-w-md">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-8 w-3/4" />
-          <Skeleton className="h-6 w-1/2" />
+        <div className="flex flex-col items-center gap-6 w-full max-w-md">
+          <div className="space-y-4 w-full">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="h-6 w-1/2" />
+          </div>
+          <p className="text-sm text-muted-foreground animate-pulse">
+            Verifying your access...
+          </p>
         </div>
       </div>
     );

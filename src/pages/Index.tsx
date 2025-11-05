@@ -26,14 +26,7 @@ export default function Index() {
   const navigate = useNavigate();
   const { data, loading, error } = useLandlordDashboard();
   const { expiringCount } = useLeaseExpiryCount();
-  const { isTenant } = useRole();
-
-  // Safety redirect: If user is tenant-only, redirect to tenant portal
-  useEffect(() => {
-    if (isTenant) {
-      navigate('/tenant', { replace: true });
-    }
-  }, [isTenant, navigate]);
+  // Removed redundant redirect - RoleBasedRoute handles this
 
   // Extract dashboard stats safely
   const stats = data?.property_stats ? {

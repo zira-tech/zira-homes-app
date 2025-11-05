@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     // Monitor session and auto-refresh before expiry
+    // OPTIMIZATION: Delay first check to avoid interfering with initial load
     const checkSession = setInterval(async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -56,7 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         }
       }
-    }, 60000); // Check every minute
+    }, 120000); // Check every 2 minutes (reduced frequency)
 
     return () => {
       subscription.unsubscribe();
