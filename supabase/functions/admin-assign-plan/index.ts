@@ -86,8 +86,22 @@ serve(async (req) => {
       .select();
 
     if (subscriptionError) {
-      logStep("Subscription update failed", { error: subscriptionError });
-      throw subscriptionError;
+      logStep("Subscription update failed", { 
+        error: subscriptionError,
+        code: subscriptionError.code,
+        message: subscriptionError.message,
+        details: subscriptionError.details
+      });
+      
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: subscriptionError.message,
+        details: subscriptionError.details,
+        hint: subscriptionError.hint
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
     logStep("Subscription updated successfully", { subscriptionId: subscription?.[0]?.id });
 

@@ -488,26 +488,37 @@ const BillingDashboard = () => {
         body: { landlordId, planId }
       });
 
-      if (error) throw error;
-
-      if (data?.success) {
-        console.log('✅ Plan assigned successfully');
+      if (error) {
+        console.error('❌ Edge function error:', error);
         toast({
-          title: "Success",
-          description: "Billing plan assigned successfully",
+          title: "Failed to Assign Plan",
+          description: error.message || "Please check the console for details",
+          variant: "destructive",
         });
-        
-        await fetchBillingData(); // Refresh data
-      } else {
+        throw error;
+      }
+
+      if (!data?.success) {
+        console.error('❌ Assignment failed:', data);
+        toast({
+          title: "Failed to Assign Plan", 
+          description: data?.error || "Unknown error occurred",
+          variant: "destructive",
+        });
         throw new Error(data?.error || 'Failed to assign plan');
       }
+
+      console.log('✅ Plan assigned successfully');
+      toast({
+        title: "Success",
+        description: "Billing plan assigned successfully",
+      });
+      
+      await fetchBillingData(); // Refresh data
     } catch (error) {
       console.error('❌ Error assigning plan:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to assign billing plan",
-        variant: "destructive",
-      });
+      // Error already shown in toast above
+      return;
     }
   };
 
