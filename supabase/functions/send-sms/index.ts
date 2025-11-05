@@ -316,7 +316,8 @@ async function sendInHouseSMS(phone: string, message: string, provider: any) {
   };
 
   // SECURITY: Use environment variables for SMS credentials
-  let authToken = provider.authorization_token;
+  // First try config_data, then direct authorization_token, then environment
+  let authToken = provider.config_data?.authorization_token || provider.authorization_token;
   
   // If credentials are encrypted or missing, use environment variables
   if (!authToken || authToken === '[REDACTED]' || authToken.length < 10) {
@@ -324,8 +325,15 @@ async function sendInHouseSMS(phone: string, message: string, provider: any) {
   }
   
   if (!authToken) {
+    console.error('SMS authentication token missing. Provider config:', {
+      hasConfigData: !!provider.config_data,
+      hasAuthToken: !!provider.authorization_token,
+      providerName: provider.provider_name
+    });
     throw new Error('SMS provider authentication token not configured. Please contact administrator.');
   }
+  
+  console.log('Using auth token from:', provider.config_data?.authorization_token ? 'config_data' : 'environment');
 
   const headers = {
     'Content-Type': 'application/json',

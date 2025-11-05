@@ -106,6 +106,8 @@ export const landlordNav: NavGroup[] = [
       { title: "Sub Users", url: "/sub-users", icon: Users2 },
       { title: "Email Templates", url: "/billing/email-templates", icon: Mail },
       { title: "Message Templates", url: "/billing/message-templates", icon: MessageCircle },
+      { title: "Bulk SMS", url: "/landlord/bulk-messaging", icon: Smartphone },
+      { title: "SMS Usage", url: "/landlord/sms-usage", icon: TrendingUp },
       { title: "Notifications", url: "/notifications", icon: Bell },
     ],
   },

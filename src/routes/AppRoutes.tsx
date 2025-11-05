@@ -51,6 +51,8 @@ import EmailTemplates from "@/pages/landlord/EmailTemplates";
 import LandlordBillingPage from "@/pages/landlord/LandlordBillingPage";
 import MessageTemplates from "@/pages/landlord/MessageTemplates";
 import PaymentSettings from "@/pages/landlord/PaymentSettings";
+import LandlordBulkMessaging from "@/pages/landlord/BulkMessaging";
+import SmsUsage from "@/pages/landlord/SmsUsage";
 import { Navigate } from "react-router-dom";
 
 // Existing settings pages
@@ -234,6 +236,18 @@ export const AppRoutes = () => {
                 <Route path="/billing/message-templates" element={
                   <PermissionGuard permission="send_messages">
                     <MessageTemplates />
+                  </PermissionGuard>
+                } />
+                
+                {/* Landlord SMS Routes */}
+                <Route path="/landlord/bulk-messaging" element={
+                  <PermissionGuard permission="send_messages">
+                    <LandlordBulkMessaging />
+                  </PermissionGuard>
+                } />
+                <Route path="/landlord/sms-usage" element={
+                  <PermissionGuard permission="send_messages">
+                    <SmsUsage />
                   </PermissionGuard>
                 } />
                 
