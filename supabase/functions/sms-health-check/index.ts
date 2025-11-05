@@ -150,19 +150,24 @@ const handler = async (req: Request): Promise<Response> => {
         if (provider && provider.base_url) {
           const startTime = Date.now();
           
-          // Test basic connectivity (HEAD or GET request)
+          // Test basic connectivity (GET request without body)
           const testUrl = provider.base_url.replace(/\/$/, '');
           const response = await fetch(testUrl, {
-            method: 'HEAD',
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Zira-SMS-Health-Check/1.0'
+            },
             signal: AbortSignal.timeout(10000) // 10 second timeout
           }).catch(() => null);
 
           const responseTime = Date.now() - startTime;
 
-          if (response && response.ok) {
+          // Consider 2xx-4xx as reachable (API is up), only 5xx or network failure as down
+          if (response && response.status < 500) {
             healthCheck.checks.api_connectivity = {
               status: 'pass',
-              message: 'API endpoint reachable',
+              message: `API endpoint reachable (HTTP ${response.status})`,
               response_time_ms: responseTime
             };
           } else {
@@ -188,16 +193,23 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         const { data: provider } = await supabase
           .from('sms_providers')
-          .select('auth_token, api_key, provider_name')
+          .select('auth_token, api_key, provider_name, authorization_token, config_data')
           .eq('is_active', true)
           .eq('is_default', true)
           .single();
 
+        // Check multiple token sources (matching send-sms logic)
         const envAuthToken = Deno.env.get("INHOUSE_SMS_AUTH_TOKEN");
         const envApiKey = Deno.env.get("INHOUSE_SMS_API_KEY");
+        const envToken = Deno.env.get("INHOUSE_SMS_TOKEN");
 
-        const hasDbCredentials = !!(provider?.auth_token || provider?.api_key);
-        const hasEnvCredentials = !!(envAuthToken || envApiKey);
+        const hasDbCredentials = !!(
+          provider?.auth_token || 
+          provider?.api_key || 
+          provider?.authorization_token ||
+          provider?.config_data?.authorization_token
+        );
+        const hasEnvCredentials = !!(envAuthToken || envApiKey || envToken);
 
         if (hasDbCredentials || hasEnvCredentials) {
           healthCheck.checks.authentication = {

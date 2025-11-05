@@ -166,7 +166,7 @@ const handler = async (req: Request): Promise<Response> => {
     // SSRF protection - enforce HTTPS and domain allowlist
     if (provider.base_url) {
       const url = new URL(provider.base_url);
-      const allowedDomains = ['advantasms.com', 'twilio.com', 'africastalking.com'];
+      const allowedDomains = ['advantasms.com', 'twilio.com', 'africastalking.com', 'roberms.com', 'endpint.roberms.com'];
       const allowedHttpIPs = ['68.183.101.252']; // Trusted InHouse SMS provider
       
       // Allow HTTPS domains or specific trusted HTTP IPs
@@ -280,7 +280,15 @@ const handler = async (req: Request): Promise<Response> => {
 };
 
 async function sendInHouseSMS(phone: string, message: string, provider: any) {
-  const url = provider.base_url || Deno.env.get('INHOUSE_SMS_URL') || 'https://api.example.com/sms/';
+  // Normalize base_url to ensure trailing slash
+  let baseUrl = provider.base_url || Deno.env.get('INHOUSE_SMS_URL') || 'https://api.example.com/sms/';
+  if (!baseUrl.endsWith('/')) {
+    baseUrl += '/';
+  }
+  
+  // Determine HTTP method (default to GET for roberms bulk_api)
+  const httpMethod = provider.config_data?.http_method || 
+    (baseUrl.includes('roberms.com') ? 'GET' : 'POST');
   
   // Enhanced phone number validation and formatting
   let formattedPhone = phone.replace(/\D/g, '');
@@ -337,19 +345,21 @@ async function sendInHouseSMS(phone: string, message: string, provider: any) {
 
   const headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'Authorization': `Token ${authToken}`,
     'User-Agent': 'Zira-Homes-SMS-Service/1.0'
   };
 
   console.log('InHouse SMS Request:', {
-    url,
+    url: baseUrl,
+    method: httpMethod,
     phone: formattedPhone,
     messageLength: message.length,
     headers: { ...headers, Authorization: 'Token ***' }
   });
 
-  const response = await fetch(url, {
-    method: 'POST',
+  const response = await fetch(baseUrl, {
+    method: httpMethod,
     headers: headers,
     body: JSON.stringify(requestBody),
   });
