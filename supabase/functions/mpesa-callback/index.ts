@@ -219,17 +219,75 @@ serve(async (req) => {
       console.log('Processing successful payment for transaction:', transaction.id);
       
       try {
+        // Check if this is an SMS bundle purchase
+        const isSMSBundle = transaction.payment_type === 'sms_bundle' || 
+                           (transaction.metadata && transaction.metadata.payment_type === 'sms_bundle');
+        
         // Check if this is a service charge payment
         const isServiceCharge = transaction.payment_type === 'service-charge' || 
                                (transaction.metadata && transaction.metadata.payment_type === 'service-charge')
 
         console.log('Payment type determination:', {
+          isSMSBundle,
           isServiceCharge,
           payment_type: transaction.payment_type,
           metadata: transaction.metadata
         });
 
-        if (isServiceCharge) {
+        if (isSMSBundle) {
+          console.log('Processing SMS bundle purchase');
+          const landlordId = transaction.metadata?.landlord_id;
+          const smsCount = transaction.metadata?.sms_count || 0;
+
+          if (landlordId && smsCount > 0) {
+            console.log('Updating SMS credits for landlord:', landlordId, 'Credits:', smsCount);
+            
+            // Update landlord's SMS credits balance
+            const { data: subscription, error: subError } = await supabase
+              .from('landlord_subscriptions')
+              .select('sms_credits_balance')
+              .eq('landlord_id', landlordId)
+              .single();
+
+            if (subscription && !subError) {
+              const newBalance = (subscription.sms_credits_balance || 0) + smsCount;
+              
+              const { error: updateError } = await supabase
+                .from('landlord_subscriptions')
+                .update({ 
+                  sms_credits_balance: newBalance,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('landlord_id', landlordId);
+
+              if (updateError) {
+                console.error('Error updating SMS credits:', updateError);
+              } else {
+                console.log('SMS credits updated successfully. New balance:', newBalance);
+                
+                // Send SMS confirmation
+                try {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('phone, first_name')
+                    .eq('id', landlordId)
+                    .single();
+
+                  if (profile?.phone) {
+                    await supabase.functions.invoke('send-sms', {
+                      body: {
+                        phone_number: profile.phone,
+                        message: `SMS bundle purchase successful! ${smsCount} credits added. New balance: ${newBalance}. Receipt: ${transactionId} - Zira Homes`
+                      }
+                    });
+                  }
+                } catch (smsError) {
+                  console.error('Error sending SMS bundle confirmation:', smsError);
+                }
+              }
+            }
+          }
+        } else if (isServiceCharge) {
           console.log('Processing service charge payment');
           // Handle service charge payment
           const serviceChargeInvoiceId = transaction.metadata?.service_charge_invoice_id

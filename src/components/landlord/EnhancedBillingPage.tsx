@@ -593,6 +593,41 @@ export const EnhancedBillingPage = () => {
           variant: "destructive",
         });
       }
+    } else if (methodType === 'bank_transfer' || methodType === 'bank') {
+      // Bank Transfer - Show instructions
+      toast({
+        title: "Bank Transfer Instructions",
+        description: "Bank details will be displayed. Please transfer and submit proof of payment.",
+      });
+      // TODO: Implement bank transfer dialog with account details and receipt upload
+    } else if (methodType === 'cash') {
+      // Cash Payment - Record manual payment
+      try {
+        const { data, error } = await supabase
+          .from('payment_transactions')
+          .insert({
+            landlord_id: user?.id,
+            amount: amount,
+            payment_method: 'cash',
+            status: 'pending_verification',
+            transaction_id: `CASH-${Date.now()}`
+          });
+
+        if (error) throw error;
+
+        toast({
+          title: "Cash Payment Recorded",
+          description: "Your cash payment has been recorded and is pending admin verification.",
+        });
+        fetchBillingData();
+      } catch (error) {
+        console.error('Error recording cash payment:', error);
+        toast({
+          title: "Error",
+          description: "Failed to record cash payment",
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "Payment Method",

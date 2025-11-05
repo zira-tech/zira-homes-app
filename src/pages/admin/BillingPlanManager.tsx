@@ -40,6 +40,7 @@ export default function BillingPlanManager() {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchBillingPlans();
@@ -54,6 +55,26 @@ export default function BillingPlanManager() {
         .order('price', { ascending: true });
 
       if (error) throw error;
+
+      // Fetch subscription counts
+      const { data: subscriptions, error: subError } = await supabase
+        .from('landlord_subscriptions')
+        .select('billing_plan_id, status')
+        .eq('status', 'active');
+
+      if (subError) {
+        console.error('Error fetching subscription counts:', subError);
+      }
+
+      // Count subscriptions by plan
+      const counts: Record<string, number> = {};
+      subscriptions?.forEach(sub => {
+        if (sub.billing_plan_id) {
+          counts[sub.billing_plan_id] = (counts[sub.billing_plan_id] || 0) + 1;
+        }
+      });
+
+      setSubscriptionCounts(counts);
 
       const processedPlans: BillingPlan[] = (data || []).map(plan => ({
         id: plan.id,
@@ -363,7 +384,7 @@ export default function BillingPlanManager() {
                     <span>Created: {new Date(plan.created_at).toLocaleDateString()}</span>
                     <div className="flex items-center gap-1">
                       <Users className="h-3 w-3" />
-                      <span>0 users</span> {/* TODO: Add subscription count */}
+                      <span>{subscriptionCounts[plan.id] || 0} users</span>
                     </div>
                   </div>
                 </div>

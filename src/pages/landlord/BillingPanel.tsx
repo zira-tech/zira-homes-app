@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   CreditCard, 
   DollarSign, 
@@ -26,7 +28,8 @@ import {
   ArrowRight,
   Zap,
   Star,
-  Crown
+  Crown,
+  Phone
 } from "lucide-react";
 
 interface SubscriptionData {
@@ -74,6 +77,10 @@ const BillingPanel = () => {
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [smsBundles, setSmsBundles] = useState<SMSBundle[]>([]);
   const [selectedBundle, setSelectedBundle] = useState<SMSBundle | null>(null);
+  const [showSMSPaymentDialog, setShowSMSPaymentDialog] = useState(false);
+  const [selectedSMSBundle, setSelectedSMSBundle] = useState<SMSBundle | null>(null);
+  const [smsPhoneNumber, setSmsPhoneNumber] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -157,28 +164,58 @@ const BillingPanel = () => {
     return Math.max(0, Math.min(100, ((totalDays - remainingDays) / totalDays) * 100));
   };
 
-  const handlePurchaseSMS = async (bundle: SMSBundle) => {
+  const handlePurchaseSMS = (bundle: SMSBundle) => {
+    setSelectedSMSBundle(bundle);
+    setShowSMSPaymentDialog(true);
+  };
+
+  const initiateSMSBundlePayment = async () => {
+    if (!smsPhoneNumber || !selectedSMSBundle) return;
+    
+    setProcessingPayment(true);
     try {
-      // This would integrate with payment gateway
-      toast({
-        title: "Coming Soon",
-        description: "SMS bundle purchase will be available soon",
+      const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
+        body: {
+          amount: selectedSMSBundle.price,
+          phone_number: smsPhoneNumber,
+          payment_type: 'sms_bundle',
+          metadata: {
+            bundle_id: selectedSMSBundle.id,
+            bundle_name: selectedSMSBundle.name,
+            sms_count: selectedSMSBundle.sms_count,
+            landlord_id: user?.id
+          }
+        }
       });
-    } catch (error) {
-      console.error("Error purchasing SMS bundle:", error);
+
+      if (error) throw error;
+
       toast({
-        title: "Error",
-        description: "Failed to purchase SMS bundle",
+        title: "Payment Initiated",
+        description: "Please check your phone and enter your M-Pesa PIN",
+      });
+
+      setShowSMSPaymentDialog(false);
+      setSmsPhoneNumber('');
+      
+      // Refresh billing data after a short delay to allow callback processing
+      setTimeout(() => {
+        fetchBillingData();
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error initiating SMS bundle payment:", error);
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Failed to initiate payment",
         variant: "destructive",
       });
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
   const handleUpgradePlan = () => {
-    toast({
-      title: "Coming Soon",
-      description: "Plan upgrade will be available soon",
-    });
+    navigate('/upgrade');
   };
 
   const getStatusBadge = (status: string) => {
@@ -517,6 +554,75 @@ const BillingPanel = () => {
           </Card>
         )}
       </div>
+
+      {/* SMS Bundle Payment Dialog */}
+      <Dialog open={showSMSPaymentDialog} onOpenChange={setShowSMSPaymentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Purchase SMS Bundle</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-accent/50 rounded-lg">
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Bundle:</span>
+                <span className="font-medium">{selectedSMSBundle?.name}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-muted-foreground">SMS Credits:</span>
+                <span className="font-medium">{selectedSMSBundle?.sms_count}</span>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex justify-between font-bold">
+                <span>Total Amount:</span>
+                <span>KES {selectedSMSBundle?.price}</span>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="sms-phone">M-Pesa Phone Number</Label>
+              <Input
+                id="sms-phone"
+                placeholder="254712345678"
+                value={smsPhoneNumber}
+                onChange={(e) => setSmsPhoneNumber(e.target.value)}
+                disabled={processingPayment}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your M-Pesa registered phone number
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowSMSPaymentDialog(false);
+                  setSmsPhoneNumber('');
+                }}
+                disabled={processingPayment}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={initiateSMSBundlePayment}
+                disabled={!smsPhoneNumber || processingPayment}
+                className="flex-1"
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                {processingPayment ? 'Processing...' : 'Pay with M-Pesa'}
+              </Button>
+            </div>
+
+            <Alert>
+              <MessageSquare className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                You will receive an STK push on your phone. Enter your M-Pesa PIN to complete the payment.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
