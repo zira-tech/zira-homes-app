@@ -179,39 +179,22 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     const startTime = performance.now();
     console.log('⏱️ Tenant creation started');
 
-    // Prepare request payload
-    const requestPayload = {
-      tenantData: {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        phone: data.phone,
-        national_id: data.national_id,
-        employment_status: data.employment_status,
-        profession: data.profession,
-        employer_name: data.employer_name,
-        monthly_income: data.monthly_income ? parseFloat(data.monthly_income.toString()) : undefined,
-        emergency_contact_name: data.emergency_contact_name,
-        emergency_contact_phone: data.emergency_contact_phone,
-        previous_address: data.previous_address
-      },
-      unitId: data.unit_id,
-      propertyId: data.property_id,
-      leaseData: data.unit_id ? {
-        lease_start_date: data.lease_start_date,
-        lease_end_date: data.lease_end_date,
-        monthly_rent: data.monthly_rent != null ? parseFloat(data.monthly_rent.toString()) : undefined,
-        security_deposit: data.security_deposit != null ? parseFloat(data.security_deposit.toString()) : undefined
-      } : undefined,
-      force: true
-    };
+    // Watchdog timer for long operations
+    const watchdog = setTimeout(() => {
+      toast({
+        title: "Taking longer than usual",
+        description: "Still working on creating the tenant. You can wait or cancel and try again.",
+      });
+    }, 12000);
 
-    try { await logActivity('tenant_create_attempt', 'tenant', undefined, { property_id: data.property_id, unit_id: data.unit_id, has_lease: !!data.unit_id }); } catch {}
-
-    console.log("Submitting tenant creation request:", requestPayload);
-
-    // Direct creation without Edge Functions
     try {
+      // Non-blocking activity log
+      logActivity('tenant_create_attempt', 'tenant', undefined, { 
+        property_id: data.property_id, 
+        unit_id: data.unit_id, 
+        has_lease: !!data.unit_id 
+      }).catch(console.error);
+
       const looksLikeCryptoMissing = (e: any) => {
         const msg = (e && (e.message || e.error || e.details || e.toString?.())) || '';
         return /digest\(|encrypt\(|pgcrypto|function\s+.*does\s+not\s+exist|42883/i.test(String(msg));
@@ -219,7 +202,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       const isActiveLeaseConstraint = (m: any) => /idx_unique_active_lease_per_unit|unique\s+.*active\s+lease\s+.*unit/i.test(String(m || ''));
 
-      // Attempt insert with property_id; fallback without if column doesn't exist
+      // Prepare insert data
       const insertBase: any = {
         first_name: data.first_name,
         last_name: data.last_name,
@@ -240,12 +223,11 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         .insert({
           ...insertBase,
           ...(withProperty ? { property_id: data.property_id || null } : {}),
-          // Pre-fill encrypted columns with plaintext to bypass DB triggers when crypto is missing
           phone_encrypted: data.phone || null,
           national_id_encrypted: data.national_id || null,
           emergency_contact_phone_encrypted: data.emergency_contact_phone || null,
         })
-        .select()
+        .select('id, first_name, last_name, email')
         .single();
 
       const insertNormal = (withProperty: boolean) => supabase
@@ -254,13 +236,13 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           ...insertBase,
           ...(withProperty ? { property_id: data.property_id || null } : {}),
         })
-        .select()
+        .select('id, first_name, last_name, email')
         .single();
 
+      // Attempt tenant insert
       let attempt = await insertNormal(true);
 
       if (attempt.error && /property_id/i.test(attempt.error.message || '')) {
-        // Retry without property_id for schemas that don't have this column
         attempt = await insertNormal(false);
       }
 
@@ -269,28 +251,32 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         attempt = await insertWithPlainEncrypted(Boolean(data.property_id));
       }
 
-      const tenantInserted: any = attempt.data;
-      const tenantError: any = attempt.error;
+      if (attempt.error) {
+        throw new Error(attempt.error.message);
+      }
 
-      if (tenantError) throw new Error(tenantError.message);
+      const tenantInserted = attempt.data;
 
-      let leaseCreated: any = null;
+      // Create lease if unit selected
+      let leaseCreated = false;
       if (data.unit_id) {
         if (!data.lease_start_date || !data.lease_end_date || !data.monthly_rent) {
           throw new Error("Missing lease fields (start, end, monthly rent).");
         }
-        const { data: leaseRow, error: leaseError } = await supabase
+        
+        const { error: leaseError } = await supabase
           .from('leases')
           .insert({
-            tenant_id: (tenantInserted as any).id,
+            tenant_id: tenantInserted.id,
             unit_id: data.unit_id,
             monthly_rent: Number(data.monthly_rent),
             lease_start_date: data.lease_start_date,
             lease_end_date: data.lease_end_date,
             security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null
           })
-          .select()
+          .select('id')
           .single();
+          
         if (leaseError) {
           if (isActiveLeaseConstraint(leaseError.message)) {
             toast({
@@ -298,21 +284,22 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
               description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
               variant: 'destructive',
             });
-            setLoading(false);
             return;
           }
           throw new Error(leaseError.message);
         }
-        leaseCreated = leaseRow;
+        
+        leaseCreated = true;
 
-        try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
+        // Non-blocking unit status sync
+        void supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id });
       }
 
-      // Log activity (async, non-blocking)
+      // Non-blocking activity log
       logActivity(
         'tenant_created',
         'tenant',
-        (tenantInserted as any).id,
+        tenantInserted.id,
         {
           tenant_name: `${data.first_name} ${data.last_name}`,
           tenant_email: data.email,
@@ -335,209 +322,25 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       reset();
       handleOpenChange(false);
       onTenantAdded();
-      return;
-    } catch (e) {
-      throw e as any;
-    }
-    
-    try {
-      // Call the edge function to create tenant account
-      // Prefer same-origin server proxy to avoid browser CORS
-      let invokeResponse: any = null;
-      try {
-        const res = await fetch('/api/edge/create-tenant-account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, force: true })
-        });
-        const text = await res.text();
-        let data: any; try { data = JSON.parse(text); } catch { data = text; }
-        if (res.ok) {
-          invokeResponse = { data, error: null };
-        } else {
-          invokeResponse = { data: null, error: { message: 'Proxy call failed', status: res.status, details: data } };
-        }
-      } catch (proxyErr: any) {
-        console.warn('Server proxy failed, attempting direct fetch:', proxyErr);
-        try {
-          const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = await import("@/integrations/supabase/client");
-          const fnUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/create-tenant-account`;
-          const res = await fetch(fnUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_PUBLISHABLE_KEY,
-              'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-              'x-force-create': 'true',
-              'x-requested-with': 'XMLHttpRequest',
-            },
-            body: JSON.stringify(requestPayload)
-          });
-          const text = await res.text();
-          let data: any; try { data = JSON.parse(text); } catch { data = text; }
-          if (res.ok) {
-            invokeResponse = { data, error: null };
-          } else {
-            invokeResponse = { data: null, error: { message: 'Edge function fetch failed', status: res.status, details: data } };
-          }
-        } catch (directErr: any) {
-          console.warn('Direct function fetch failed, falling back to supabase-js invoke:', directErr);
-          try {
-            invokeResponse = await supabase.functions.invoke('create-tenant-account', { body: requestPayload, headers: { 'x-force-create': 'true' } });
-          } catch (fnErr: any) {
-            console.error("Edge function threw an error:", fnErr);
-            let details = fnErr?.message || "Edge function invocation failed";
-            try {
-              if (fnErr?.response && typeof fnErr.response.text === 'function') {
-                const txt = await fnErr.response.text();
-                try {
-                  const parsed = JSON.parse(txt);
-                  details = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
-                } catch (e) {
-                  details = txt;
-                }
-              }
-            } catch (e) {
-              console.warn('Failed to extract error response body', e);
-            }
-
-            toast({
-              title: "Tenant Creation Failed",
-              description: details,
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
-        }
-      }
-
-      const result = invokeResponse?.data ?? invokeResponse;
-      const error = invokeResponse?.error ?? null;
-
-      console.log("Response from create-tenant-account function:", { result, error });
-
-      if (error) {
-        console.error("Edge function returned error:", error);
-        let errorMessage = "Failed to create tenant account";
-        let errorDetails = "";
-
-        if (typeof error === 'string') {
-          errorMessage = error;
-        } else if (error.message) {
-          errorMessage = error.message;
-          if (error.details) errorDetails = ` Details: ${error.details}`;
-        } else if (error.error) {
-          errorMessage = error.error;
-        } else if (error.details) {
-          errorMessage = error.details;
-        }
-
-        console.error("Processed error message:", errorMessage + errorDetails);
-
-        toast({
-          title: "Tenant Creation Failed",
-          description: errorMessage + errorDetails,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Check if we have a valid result
-      if (!result) {
-        console.error("No result data received from edge function");
-        toast({
-          title: "Tenant Creation Failed",
-          description: "No response received from server",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      console.log("Processing successful response:", result);
-
-      if (result?.success) {
-        // Log the activity
-        await logActivity(
-          'tenant_created',
-          'tenant',
-          result.tenant?.id,
-          {
-            tenant_name: `${data.first_name} ${data.last_name}`,
-            tenant_email: data.email,
-            unit_id: data.unit_id,
-            property_id: data.property_id,
-            has_lease: !!data.unit_id
-          }
-        );
-
-        // Enhanced communication status reporting
-        const commStatus = result.communicationStatus;
-        let statusMessage = "✅ Tenant account created successfully!";
-        let communicationDetails = [];
-        
-        if (commStatus?.emailSent && commStatus?.smsSent) {
-          statusMessage += "\n\n📧 Email sent ✓\n📱 SMS sent ✓";
-          communicationDetails.push("Email notification delivered", "SMS notification delivered");
-        } else if (commStatus?.emailSent) {
-          statusMessage += "\n\n📧 Email sent ✓\n📱 SMS failed ⚠️";
-          communicationDetails.push("Email notification delivered", "SMS delivery failed");
-        } else if (commStatus?.smsSent) {
-          statusMessage += "\n\n�� Email failed ⚠️\n📱 SMS sent ✓";
-          communicationDetails.push("Email delivery failed", "SMS notification delivered");
-        } else {
-          statusMessage += "\n\n⚠️ Both email and SMS delivery failed";
-          communicationDetails.push("Email delivery failed", "SMS delivery failed");
-        }
-
-        // Always show login details for manual sharing if needed
-        if (commStatus?.errors?.length > 0 || (!commStatus?.emailSent && !commStatus?.smsSent)) {
-          statusMessage += `\n\n🔑 Manual sharing required:\nEmail: ${result.loginDetails?.email}\nPassword: ${result.loginDetails?.temporaryPassword}\nLogin: ${result.loginDetails?.loginUrl}`;
-        }
-
-        // Show communication errors if any
-        if (commStatus?.errors?.length > 0) {
-          statusMessage += `\n\n❌ Delivery issues:\n${commStatus.errors.join('\n')}`;
-        }
-
-        toast({
-          title: commStatus?.emailSent || commStatus?.smsSent ? "Tenant Created Successfully" : "Tenant Created - Manual Action Required",
-          description: statusMessage,
-          variant: commStatus?.emailSent || commStatus?.smsSent ? "default" : "destructive",
-          duration: 8000, // Longer duration for important information
-        });
-        
-        reset();
-        handleOpenChange(false);
-        onTenantAdded();
-      } else {
-        throw new Error(result?.error || "Failed to create tenant account");
-      }
+      
     } catch (error: any) {
       console.error("Error creating tenant:", error);
       
-      // Extract meaningful error message
-      let errorMessage = "An unexpected error occurred";
-      
-      if (error?.message) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error?.error) {
-        errorMessage = error.error;
-      }
-      
-      try { await logActivity('tenant_create_failed', 'tenant', undefined, { message: errorMessage }); } catch {}
-
       toast({
         title: "Tenant Creation Failed",
-        description: errorMessage,
+        description: error?.message || "An unexpected error occurred",
         variant: "destructive",
       });
+      
+      // Non-blocking failure log
+      logActivity('tenant_creation_failed', 'tenant', undefined, {
+        error: error?.message,
+        property_id: data.property_id,
+        unit_id: data.unit_id
+      }).catch(console.error);
+      
     } finally {
+      clearTimeout(watchdog);
       setLoading(false);
     }
   };
