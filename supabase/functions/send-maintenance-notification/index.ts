@@ -263,61 +263,25 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send SMS Notification
+    // Send SMS Notification using unified SMS system
     if (smsEnabled && tenant.phone) {
-      const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-      const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-      const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
-
-      if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
-        try {
-          console.log("Sending SMS notification");
-          
-          const authString = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
-          
-          const smsResponse = await fetch(
-            `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Basic ${authString}`,
-                "Content-Type": "application/x-www-form-urlencoded",
-              },
-              body: new URLSearchParams({
-                From: twilioPhoneNumber,
-                To: tenant.phone,
-                Body: smsContent,
-              }),
+      try {
+        console.log("Sending SMS notification via unified SMS system");
+        
+        // Use send-sms-with-logging edge function
+        const { data: smsResult, error: smsError } = await supabase.functions.invoke(
+          'send-sms-with-logging',
+          {
+            body: {
+              phone_number: tenant.phone,
+              message: smsContent,
+              user_id: tenant_id,
             }
-          );
-
-          const smsResult = await smsResponse.json();
-          
-          if (smsResponse.ok) {
-            console.log("SMS sent successfully:", smsResult.sid);
-            notifications.push({
-              user_id: tenant_id,
-              maintenance_request_id,
-              notification_type: "sms",
-              status: "sent",
-              subject: subject,
-              message: smsContent,
-              sent_at: new Date().toISOString()
-            });
-          } else {
-            console.error("SMS sending failed:", smsResult);
-            notifications.push({
-              user_id: tenant_id,
-              maintenance_request_id,
-              notification_type: "sms",
-              status: "failed",
-              subject: subject,
-              message: smsContent,
-              error_message: smsResult.message || "SMS sending failed"
-            });
           }
-        } catch (smsError) {
-          console.error("SMS error:", smsError);
+        );
+
+        if (smsError) {
+          console.error("SMS sending failed:", smsError);
           notifications.push({
             user_id: tenant_id,
             maintenance_request_id,
@@ -325,11 +289,33 @@ const handler = async (req: Request): Promise<Response> => {
             status: "failed",
             subject: subject,
             message: smsContent,
-            error_message: smsError.message
+            error_message: smsError.message || "SMS sending failed"
+          });
+        } else if (smsResult?.success) {
+          console.log("SMS sent successfully:", smsResult.log_id);
+          notifications.push({
+            user_id: tenant_id,
+            maintenance_request_id,
+            notification_type: "sms",
+            status: "sent",
+            subject: subject,
+            message: smsContent,
+            sent_at: new Date().toISOString()
+          });
+        } else {
+          console.error("SMS sending failed:", smsResult);
+          notifications.push({
+            user_id: tenant_id,
+            maintenance_request_id,
+            notification_type: "sms",
+            status: "failed",
+            subject: subject,
+            message: smsContent,
+            error_message: smsResult?.error || "SMS sending failed"
           });
         }
-      } else {
-        console.log("Twilio credentials not configured - skipping SMS");
+      } catch (smsError: any) {
+        console.error("SMS error:", smsError);
         notifications.push({
           user_id: tenant_id,
           maintenance_request_id,
@@ -337,7 +323,7 @@ const handler = async (req: Request): Promise<Response> => {
           status: "failed",
           subject: subject,
           message: smsContent,
-          error_message: "Twilio credentials not configured"
+          error_message: smsError.message
         });
       }
     }

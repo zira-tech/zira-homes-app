@@ -168,7 +168,7 @@ Please change your password after first login.
 
 Need help? Contact support.`;
 
-      const { data: smsResult, error } = await supabase.functions.invoke('send-sms', {
+      const { data: smsResult, error } = await supabase.functions.invoke('send-sms-with-logging', {
         body: {
           provider_name: smsConfig.provider_name,
           phone_number: tenant.phone,

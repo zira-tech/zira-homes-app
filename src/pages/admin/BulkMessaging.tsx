@@ -526,7 +526,7 @@ const BulkMessaging = () => {
             
             console.log('📤 SMS Payload:', { ...smsPayload, provider_config: { ...smsPayload.provider_config, authorization_token: '***' } });
             
-            const { data, error } = await supabase.functions.invoke('send-sms', {
+            const { data, error } = await supabase.functions.invoke('send-sms-with-logging', {
               body: smsPayload
             });
             

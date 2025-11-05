@@ -315,7 +315,7 @@ const SMSProviderConfig = () => {
     
     try {
       // Call the actual SMS edge function
-      const { data, error } = await supabase.functions.invoke('send-sms', {
+      const { data, error } = await supabase.functions.invoke('send-sms-with-logging', {
         body: {
           provider_name: provider.provider_name.toLowerCase(), // Convert to lowercase for backend
           phone_number: testPhone,
