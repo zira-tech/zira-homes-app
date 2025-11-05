@@ -13,18 +13,49 @@ serve(async (req) => {
   }
 
   try {
-    // Get authorization header for user authentication
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      console.error('❌ AUTH FAIL: No authorization header provided', {
-        headers: Object.keys(Object.fromEntries(req.headers)),
+    // Early environment sanity check
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    
+    console.log('🔍 ENV CHECK:', {
+      hasUrl: !!supabaseUrl,
+      hasAnonKey: !!supabaseAnonKey,
+      hasServiceRoleKey: !!supabaseServiceRoleKey,
+      url: supabaseUrl
+    });
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ CRITICAL: Missing Supabase environment variables');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Server configuration error',
+          errorId: 'AUTH_SUPABASE_ENV_MISSING',
+          hint: 'Supabase URL or ANON KEY is not configured. Contact support.'
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Get authorization header - check both lowercase and uppercase variants
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('❌ AUTH FAIL: No valid authorization header', {
+        hasAuthHeader: !!authHeader,
+        headerPrefix: authHeader?.substring(0, 10),
+        headers: Array.from(req.headers.keys()),
         method: req.method,
         url: req.url
       });
       return new Response(
         JSON.stringify({ 
           error: 'Authorization required',
-          hint: 'No authorization header found in request. Please ensure you are logged in.'
+          errorId: 'AUTH_MISSING_TOKEN',
+          hint: 'No valid Bearer token found. Please ensure you are logged in.'
         }),
         { 
           status: 401, 
@@ -33,34 +64,46 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Authorization header present:', authHeader.substring(0, 20) + '...');
+    // Extract token explicitly
+    const token = authHeader.replace('Bearer ', '').trim();
+    console.log('✅ Authorization token extracted:', token.substring(0, 20) + '...');
 
-    // Initialize Supabase client with user auth
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { 
-        global: { 
-          headers: { 
-            authorization: authHeader 
-          } 
-        } 
-      }
-    )
-
-    // Verify user authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Create user-scoped client and pass token explicitly to getUser
+    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser(token);
+    
     if (authError || !user) {
-      console.error('❌ AUTH FAIL: Invalid token or user not found', {
+      console.error('❌ AUTH FAIL: Token validation failed', {
         authError: authError?.message,
-        hasAuthHeader: !!authHeader,
-        tokenPrefix: authHeader?.substring(0, 25) + '...',
+        authErrorName: authError?.name,
+        authErrorStatus: authError?.status,
+        hasToken: !!token,
+        tokenPrefix: token.substring(0, 20) + '...',
         timestamp: new Date().toISOString()
       });
+
+      // Attempt to decode JWT for debugging (fallback)
+      let decodedUserId = null;
+      try {
+        const payload = token.split('.')[1];
+        if (payload) {
+          const decoded = JSON.parse(atob(payload));
+          decodedUserId = decoded.sub;
+          console.log('🔓 JWT decoded (fallback):', { sub: decoded.sub, exp: decoded.exp });
+        }
+      } catch (decodeError) {
+        console.error('Failed to decode JWT:', decodeError);
+      }
+
       return new Response(
         JSON.stringify({ 
           error: 'Invalid authentication',
-          hint: authError?.message || 'User session is not valid. Please log in again.'
+          errorId: 'AUTH_INVALID_JWT',
+          hint: authError?.message || 'User session is not valid. Please log in again.',
+          debug: {
+            hasToken: !!token,
+            decodedUserId
+          }
         }),
         { 
           status: 401, 
@@ -69,13 +112,19 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ User authenticated:', user.id);
+    console.log('✅ User authenticated successfully:', user.id);
 
-    // Initialize admin client only for cross-table operations after auth passes
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    // Initialize admin client after auth passes for privileged operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    
+    // Also create a user-scoped client for operations that should respect RLS
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    });
 
   const requestBody = await req.json();
   
