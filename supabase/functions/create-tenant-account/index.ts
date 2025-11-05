@@ -461,14 +461,29 @@ const handler = async (req: Request): Promise<Response> => {
         console.log("Using default communication preferences");
       }
 
-      // Initialize communication status
-      let emailSent = false;
-      let smsSent = false;
-      let communicationErrors = [];
+      // Return success immediately, send notifications asynchronously
+      const tenantCreated = {
+        success: true,
+        tenant: tenant,
+        lease: lease,
+        loginDetails: isNewUser ? {
+          email: tenantData.email,
+          temporaryPassword: temporaryPassword,
+          loginUrl: `${Deno.env.get("SUPABASE_URL")}/auth/v1/verify`
+        } : undefined,
+        isNewUser,
+        communicationStatus: {
+          emailSent: false,
+          smsSent: false,
+          errors: [],
+          status: 'queued'
+        }
+      };
 
-      // Send welcome email if enabled
-      if (commPrefs.email_enabled) {
-        try {
+      // Send notifications in background (non-blocking)
+      Promise.all([
+        commPrefs.email_enabled && isNewUser ? (async () => {
+          try {
           console.log("Sending welcome email...");
           const origin = req.headers.get("origin") || "";
           const loginUrl = `${origin}/auth`;
@@ -489,123 +504,75 @@ const handler = async (req: Request): Promise<Response> => {
             loginUrl
           };
           
-          const { data: emailData, error: emailError } = await supabaseAdmin.functions.invoke('send-welcome-email', {
-            body: emailBody
-          });
-
-          if (emailError) {
-            console.error("Error sending welcome email:", emailError);
-            communicationErrors.push(`Email failed: ${emailError.message}`);
-          } else {
+            const origin = req.headers.get("origin") || "";
+            const loginUrl = `${origin}/auth`;
+            
+            await supabaseAdmin.functions.invoke('send-welcome-email', {
+              body: emailBody
+            });
             console.log("Welcome email sent successfully");
-            emailSent = true;
+          } catch (emailErr) {
+            console.error("Failed to send welcome email:", emailErr);
           }
-        } catch (emailErr) {
-          console.error("Failed to send welcome email:", emailErr);
-          communicationErrors.push(`Email failed: ${emailErr.message}`);
-        }
-      }
+        })() : Promise.resolve(),
+        
+        commPrefs.sms_enabled && tenantData.phone && isNewUser ? (async () => {
+          try {
+            // Get SMS provider configuration
+            const { data: providerData } = await supabaseAdmin
+              .from('sms_providers')
+              .select('*')
+              .eq('is_active', true)
+              .eq('is_default', true)
+              .single();
+            
+            const smsConfig = providerData || {
+              provider_name: "InHouse SMS",
+              base_url: "http://68.183.101.252:803/bulk_api/",
+              username: "ZIRA TECH",
+              unique_identifier: "77",
+              sender_id: "ZIRA TECH",
+              sender_type: "10",
+              authorization_token: "your-default-token"
+            };
 
-      // Get SMS provider configuration before attempting to send SMS
-      let smsConfig = null;
-      if (commPrefs.sms_enabled) {
-        try {
-          const { data: providerData } = await supabaseAdmin
-            .from('sms_providers')
-            .select('*')
-            .eq('is_active', true)
-            .eq('is_default', true)
-            .single();
-          
-          smsConfig = providerData;
-        } catch (err) {
-          console.log("No SMS provider configured, using fallback config");
-          // Fallback configuration for InHouse SMS
-          smsConfig = {
-            provider_name: "InHouse SMS",
-            base_url: "http://68.183.101.252:803/bulk_api/",
-            username: "ZIRA TECH",
-            unique_identifier: "77",
-            sender_id: "ZIRA TECH",
-            sender_type: "10",
-            authorization_token: "your-default-token"
-          };
-        }
-      }
+            console.log(`Sending welcome SMS to: ${tenantData.phone}`);
+            const origin = req.headers.get("origin") || "";
+            const loginUrl = `${origin}/auth`;
 
-      // Send SMS with login credentials if enabled
-      if (commPrefs.sms_enabled && tenantData.phone && smsConfig) {
-        try {
-          console.log(`Sending welcome SMS to: ${tenantData.phone}`);
-          const origin = req.headers.get("origin") || "";
-          const loginUrl = `${origin}/auth`;
+            const smsMessage = `Welcome to Zira Homes!\n\nYour login details:\nEmail: ${tenantData.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}\n\nPlease change your password after first login.\n\nSupport: +254 757 878 023`;
 
-          // Enhanced SMS message template
-          const smsMessage = `Welcome to Zira Homes!\n\nYour login details:\nEmail: ${tenantData.email}\nPassword: ${temporaryPassword}\nLogin: ${loginUrl}\n\nPlease change your password after first login.\n\nSupport: +254 757 878 023`;
-
-          const { data: smsData, error: smsError } = await supabaseAdmin.functions.invoke('send-sms-with-logging', {
-            body: {
-              phone_number: tenantData.phone,
-              message: smsMessage,
-              message_type: 'credentials',
-              user_id: userId,
-              landlord_id: user?.id || null,
-              provider_name: smsConfig.provider_name || 'InHouse SMS',
-              provider_config: {
-                base_url: smsConfig.base_url,
-                username: smsConfig.username,
-                unique_identifier: smsConfig.unique_identifier,
-                sender_id: smsConfig.sender_id,
-                sender_type: smsConfig.sender_type,
-                authorization_token: smsConfig.authorization_token,
-                config_data: smsConfig.config_data
-              }
-            }
-          });
-
-          if (smsError) {
-            console.error("Error sending welcome SMS:", smsError);
-            communicationErrors.push(`SMS delivery failed: ${smsError.message}`);
-
-            // Retry logic for failed SMS
-            console.log("Attempting SMS retry...");
-            try {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-              const retryResult = await supabaseAdmin.functions.invoke('send-sms', {
-                body: {
-                  provider_name: smsConfig.provider_name || 'InHouse SMS',
-                  phone_number: tenantData.phone,
-                  message: smsMessage,
-                  landlord_id: user?.id || null,
-                  provider_config: {
-                    base_url: smsConfig.base_url,
-                    username: smsConfig.username,
-                    unique_identifier: smsConfig.unique_identifier,
-                    sender_id: smsConfig.sender_id,
-                    sender_type: smsConfig.sender_type,
-                    authorization_token: smsConfig.authorization_token,
-                    config_data: smsConfig.config_data
-                  }
+            await supabaseAdmin.functions.invoke('send-sms-with-logging', {
+              body: {
+                phone_number: tenantData.phone,
+                message: smsMessage,
+                message_type: 'credentials',
+                user_id: userId,
+                landlord_id: user?.id || null,
+                provider_name: smsConfig.provider_name || 'InHouse SMS',
+                provider_config: {
+                  base_url: smsConfig.base_url,
+                  username: smsConfig.username,
+                  unique_identifier: smsConfig.unique_identifier,
+                  sender_id: smsConfig.sender_id,
+                  sender_type: smsConfig.sender_type,
+                  authorization_token: smsConfig.authorization_token,
+                  config_data: smsConfig.config_data
                 }
-              });
-
-              if (!retryResult.error) {
-                console.log("SMS retry successful");
-                smsSent = true;
-                communicationErrors = communicationErrors.filter(err => err.includes('SMS delivery failed'));
               }
-            } catch (retryErr) {
-              console.error("SMS retry also failed:", retryErr);
-            }
-          } else {
+            });
+            
             console.log(`Welcome SMS sent successfully to: ${tenantData.phone}`);
-            smsSent = true;
+          } catch (smsErr) {
+            console.error("Failed to send welcome SMS:", smsErr);
           }
-        } catch (smsErr) {
-          console.error("Failed to send welcome SMS:", smsErr);
-          communicationErrors.push(`SMS system error: ${smsErr.message}`);
-        }
-      }
+        })() : Promise.resolve()
+      ]).then(() => {
+        console.log('Background notifications completed');
+      }).catch(err => {
+        console.error('Background notification error:', err);
+      });
+
 
       // Audit: record tenant creation and optional lease
       try {
@@ -638,32 +605,8 @@ const handler = async (req: Request): Promise<Response> => {
         console.error('Audit logging failed for tenant creation:', auditErr);
       }
 
-      return new Response(JSON.stringify({
-        success: true,
-        tenant,
-        lease,
-        temporaryPassword: isNewUser ? temporaryPassword : null,
-        isNewUser,
-        communicationStatus: {
-          emailSent,
-          smsSent,
-          errors: communicationErrors
-        },
-        loginDetails: {
-          email: tenantData.email,
-          temporaryPassword: isNewUser ? temporaryPassword : null,
-          loginUrl: `${req.headers.get("origin")}/auth`,
-          instructions: isNewUser
-            ? "Share these credentials with the tenant and ask them to change their password on first login."
-            : "The tenant can use their existing credentials to log in."
-        },
-        notices: [
-          "Database encryption functions were unavailable. Sensitive PII was stored as plaintext in both normal and *_encrypted columns to bypass triggers. Update your DB (enable pgcrypto) and backfill/rotate data ASAP.",
-        ],
-        message: isNewUser
-          ? "Tenant account created successfully with new login credentials."
-          : "Tenant account created successfully. User already had an account."
-      }), {
+      // Return success immediately
+      return new Response(JSON.stringify(tenantCreated), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

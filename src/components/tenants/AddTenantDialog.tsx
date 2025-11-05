@@ -175,38 +175,9 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       return;
     }
 
-    // Non-blocking backend health probe; proceed regardless, fallbacks will handle connectivity
-    try {
-      const health = await checkBackendReady();
-      if (!health.ok) {
-        console.warn("Backend health check failed, proceeding with fallback paths:", health.reason);
-      }
-    } catch (e) {
-      console.warn("Backend health probe error, proceeding:", e);
-    }
-
     setLoading(true);
-
-    // Safety check: prevent creating a lease if an active one already exists for the unit
-    if (data.unit_id) {
-      try {
-        const { data: existingActive, error: activeErr } = await supabase
-          .from('leases')
-          .select('id')
-          .eq('unit_id', data.unit_id)
-          .eq('status', 'active')
-          .limit(1);
-        if (!activeErr && Array.isArray(existingActive) && existingActive.length > 0) {
-          toast({
-            title: 'Unit Already Occupied',
-            description: 'The selected unit already has an active lease. Please choose a different unit or end the current lease first.',
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
-        }
-      } catch {}
-    }
+    const startTime = performance.now();
+    console.log('⏱️ Tenant creation started');
 
     // Prepare request payload
     const requestPayload = {
@@ -337,7 +308,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         try { await supabase.rpc('sync_unit_status', { p_unit_id: data.unit_id }); } catch {}
       }
 
-      await logActivity(
+      // Log activity (async, non-blocking)
+      logActivity(
         'tenant_created',
         'tenant',
         (tenantInserted as any).id,
@@ -348,13 +320,16 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           property_id: data.property_id,
           has_lease: !!data.unit_id
         }
-      );
+      ).catch(console.error);
+
+      const endTime = performance.now();
+      console.log(`✅ Tenant created in ${(endTime - startTime).toFixed(0)}ms`);
 
       toast({
         title: "Tenant Created",
         description: leaseCreated ? "Tenant and lease created successfully." : "Tenant created successfully.",
         variant: "default",
-        duration: 6000,
+        duration: 3000,
       });
 
       reset();
