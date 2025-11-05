@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { parseMpesaError } from '@/utils/mpesaErrorHandler';
 import { Loader2, Smartphone, CreditCard, Info, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -221,29 +222,21 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       });
 
       if (error) {
-        console.error('STK push error:', error);
+        console.error('STK push error - FULL ERROR OBJECT:', JSON.stringify(error, null, 2));
         
-        // Parse error for specific error IDs
-        let errorMessage = 'Failed to initiate payment';
-        const errorStr = error.message || JSON.stringify(error);
-        
-        if (errorStr.includes('AUTH_INVALID_JWT')) {
-          errorMessage = 'Your session has expired. Please log in again.';
-        } else if (errorStr.includes('AUTH_NOT_AUTHORIZED')) {
-          errorMessage = 'You are not authorized to make this payment.';
-        } else if (errorStr.includes('AUTH_INVOICE_NOT_FOUND')) {
-          errorMessage = 'Invoice not found. Please refresh and try again.';
-        } else if (errorStr.includes('MPESA_CONFIG_MISSING')) {
-          errorMessage = 'M-Pesa is not configured for this property. Please contact your landlord.';
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
+        const mpesaError = parseMpesaError(error);
         
         setStatus('error');
-        setStatusMessage(errorMessage);
+        
+        if (mpesaError.requiresAction) {
+          setStatusMessage(`${mpesaError.userMessage}\n\n${mpesaError.requiresAction}`);
+        } else {
+          setStatusMessage(mpesaError.userMessage);
+        }
+        
         toast({
           title: "Payment Failed",
-          description: errorMessage,
+          description: mpesaError.userMessage,
           variant: "destructive",
         });
         return;

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { parseMpesaError } from "@/utils/mpesaErrorHandler";
 import { Smartphone, DollarSign, Loader2, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 import { cn } from "@/lib/utils";
@@ -173,27 +174,19 @@ export function MpesaPaymentModal({
       });
 
       if (error) {
-        console.error('STK push error:', error);
+        console.error('STK push error - FULL ERROR OBJECT:', JSON.stringify(error, null, 2));
         
-        // Parse error for specific error IDs
-        let errorMessage = 'Failed to initiate payment';
-        const errorStr = error.message || JSON.stringify(error);
-        
-        if (errorStr.includes('AUTH_INVALID_JWT')) {
-          errorMessage = 'Your session has expired. Please log in again.';
-        } else if (errorStr.includes('AUTH_NOT_AUTHORIZED')) {
-          errorMessage = 'You are not authorized to make this payment.';
-        } else if (errorStr.includes('AUTH_INVOICE_NOT_FOUND')) {
-          errorMessage = 'Invoice not found. Please refresh and try again.';
-        } else if (errorStr.includes('MPESA_CONFIG_MISSING')) {
-          errorMessage = 'M-Pesa is not configured for this property. Please contact your landlord.';
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
+        const mpesaError = parseMpesaError(error);
         
         setStatus('error');
-        setStatusMessage(errorMessage);
-        toast.error(errorMessage);
+        
+        if (mpesaError.requiresAction) {
+          setStatusMessage(`${mpesaError.userMessage}\n\n${mpesaError.requiresAction}`);
+        } else {
+          setStatusMessage(mpesaError.userMessage);
+        }
+        
+        toast.error(mpesaError.userMessage);
         return;
       }
 
