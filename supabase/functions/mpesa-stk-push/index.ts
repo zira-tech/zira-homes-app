@@ -16,14 +16,24 @@ serve(async (req) => {
     // Get authorization header for user authentication
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
+      console.error('❌ AUTH FAIL: No authorization header provided', {
+        headers: Object.keys(Object.fromEntries(req.headers)),
+        method: req.method,
+        url: req.url
+      });
       return new Response(
-        JSON.stringify({ error: 'Authorization required' }),
+        JSON.stringify({ 
+          error: 'Authorization required',
+          hint: 'No authorization header found in request. Please ensure you are logged in.'
+        }),
         { 
           status: 401, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
+
+    console.log('✅ Authorization header present:', authHeader.substring(0, 20) + '...');
 
     // Initialize Supabase client with user auth
     const supabase = createClient(
@@ -41,14 +51,25 @@ serve(async (req) => {
     // Verify user authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+      console.error('❌ AUTH FAIL: Invalid token or user not found', {
+        authError: authError?.message,
+        hasAuthHeader: !!authHeader,
+        tokenPrefix: authHeader?.substring(0, 25) + '...',
+        timestamp: new Date().toISOString()
+      });
       return new Response(
-        JSON.stringify({ error: 'Invalid authentication' }),
+        JSON.stringify({ 
+          error: 'Invalid authentication',
+          hint: authError?.message || 'User session is not valid. Please log in again.'
+        }),
         { 
           status: 401, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
+
+    console.log('✅ User authenticated:', user.id);
 
     // Initialize admin client only for cross-table operations after auth passes
     const supabaseAdmin = createClient(

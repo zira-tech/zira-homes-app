@@ -93,6 +93,37 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
     setLoading(true);
 
     try {
+      // Pre-flight auth check
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        toast({
+          title: "Session Expired",
+          description: "Your session has expired. Please log in again.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        window.location.href = "/auth";
+        return;
+      }
+      
+      // Refresh token if close to expiry (within 5 minutes)
+      const expiresAt = session.expires_at;
+      const now = Math.floor(Date.now() / 1000);
+      if (expiresAt && (expiresAt - now) < 300) {
+        console.log('🔄 Refreshing session before M-Pesa payment...');
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          toast({
+            title: "Session Refresh Failed",
+            description: "Failed to refresh session. Please log in again.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+      
       // Use phoneFormatter for consistent formatting
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
         body: {

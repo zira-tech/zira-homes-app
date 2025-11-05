@@ -36,7 +36,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Monitor session and auto-refresh before expiry
+    const checkSession = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at;
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilExpiry = expiresAt - now;
+        
+        // Refresh if within 5 minutes of expiry
+        if (timeUntilExpiry < 300 && timeUntilExpiry > 0) {
+          console.log('🔄 Auto-refreshing session (expires in', timeUntilExpiry, 'seconds)');
+          const { error } = await supabase.auth.refreshSession();
+          if (error) {
+            console.error('❌ Auto-refresh failed:', error);
+          } else {
+            console.log('✅ Session auto-refreshed successfully');
+          }
+        }
+      }
+    }, 60000); // Check every minute
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(checkSession);
+    };
   }, []);
 
   const signOut = async () => {
