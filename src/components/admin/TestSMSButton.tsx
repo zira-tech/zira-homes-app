@@ -4,7 +4,12 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, Loader2 } from "lucide-react";
 
-export function TestSMSButton() {
+interface TestSMSButtonProps {
+  phoneNumber: string;
+  disabled?: boolean;
+}
+
+export function TestSMSButton({ phoneNumber, disabled = false }: TestSMSButtonProps) {
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
@@ -12,9 +17,11 @@ export function TestSMSButton() {
     setIsSending(true);
     
     try {
-      console.log("🧪 Triggering test SMS to 254722241745...");
+      console.log(`🧪 Triggering test SMS to ${phoneNumber}...`);
       
-      const { data, error } = await supabase.functions.invoke('test-sms');
+      const { data, error } = await supabase.functions.invoke('test-sms', {
+        body: { phone_number: phoneNumber }
+      });
       
       if (error) {
         console.error("❌ Test SMS failed:", error);
@@ -25,7 +32,7 @@ export function TestSMSButton() {
       
       toast({
         title: "Test SMS Sent! 🎉",
-        description: `SMS sent to 254722241745. Check your phone and the SMS logs.`,
+        description: `SMS sent to ${phoneNumber}. Check your phone and the SMS logs.`,
       });
       
     } catch (error: any) {
@@ -43,7 +50,7 @@ export function TestSMSButton() {
   return (
     <Button 
       onClick={sendTestSMS} 
-      disabled={isSending}
+      disabled={isSending || disabled}
       size="lg"
       className="w-full md:w-auto"
     >
@@ -55,7 +62,7 @@ export function TestSMSButton() {
       ) : (
         <>
           <Send className="mr-2 h-4 w-4" />
-          Send Test SMS to 254722241745
+          Send Test SMS to {phoneNumber}
         </>
       )}
     </Button>

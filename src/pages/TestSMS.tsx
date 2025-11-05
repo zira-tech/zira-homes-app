@@ -1,9 +1,40 @@
+import { useState } from "react";
 import { TestSMSButton } from "@/components/admin/TestSMSButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { MessageSquare, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MessageSquare, CheckCircle2, Phone } from "lucide-react";
+
+const formatPhoneNumber = (phone: string): string => {
+  // Remove all non-numeric characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Handle local format (07XX or 01XX)
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    return '254' + cleaned.substring(1);
+  }
+  
+  // Handle international format with +
+  if (cleaned.startsWith('254')) {
+    return cleaned;
+  }
+  
+  return cleaned;
+};
+
+const isValidPhoneNumber = (phone: string): boolean => {
+  const cleaned = phone.replace(/\D/g, '');
+  // Valid if it's 254XXXXXXXXX (12 digits) or 07XX/01XX (10 digits)
+  return (cleaned.startsWith('254') && cleaned.length === 12) || 
+         (cleaned.startsWith('0') && cleaned.length === 10);
+};
 
 export default function TestSMS() {
+  const [phoneNumber, setPhoneNumber] = useState("254722241745");
+  const formattedNumber = formatPhoneNumber(phoneNumber);
+  const isValid = isValidPhoneNumber(phoneNumber);
+
   return (
     <div className="container mx-auto p-6 max-w-2xl">
       <Card>
@@ -13,14 +44,39 @@ export default function TestSMS() {
           </div>
           <CardTitle className="text-3xl">SMS Testing</CardTitle>
           <CardDescription>
-            Send a test SMS to 254722241745 to verify the SMS system is working
+            Send a test SMS to verify the SMS system is working
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="phone-number" className="flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Phone Number
+            </Label>
+            <Input
+              id="phone-number"
+              type="text"
+              placeholder="254722241745 or 0722241745"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className={!isValid && phoneNumber ? "border-destructive" : ""}
+            />
+            {!isValid && phoneNumber && (
+              <p className="text-sm text-destructive">
+                Please enter a valid Kenyan phone number (254XXXXXXXXX or 07XX/01XX)
+              </p>
+            )}
+            {isValid && (
+              <p className="text-sm text-muted-foreground">
+                Will send to: <strong>{formattedNumber}</strong>
+              </p>
+            )}
+          </div>
+
           <Alert>
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
-              This will send a test message to <strong>254722241745</strong> using the configured SMS provider.
+              This will send a test message to <strong>{formattedNumber}</strong> using the configured SMS provider.
               The message will be logged in the SMS Logs for tracking.
             </AlertDescription>
           </Alert>
@@ -51,7 +107,7 @@ export default function TestSMS() {
               </ul>
             </div>
 
-            <TestSMSButton />
+            <TestSMSButton phoneNumber={formattedNumber} disabled={!isValid} />
           </div>
         </CardContent>
       </Card>

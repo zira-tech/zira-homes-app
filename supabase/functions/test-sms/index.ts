@@ -21,8 +21,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("🧪 Testing SMS functionality...");
 
-    // Test phone number
-    const testPhone = "254722241745";
+    // Get phone number from request body or use default
+    const body = await req.json().catch(() => ({}));
+    const testPhone = body.phone_number || "254722241745";
+    
     const testMessage = `🧪 Test SMS from ZIRA Property Management System
 
 This is a test message sent at ${new Date().toLocaleString('en-US', { timeZone: 'Africa/Nairobi' })}.
