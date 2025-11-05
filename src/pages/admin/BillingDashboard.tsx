@@ -72,6 +72,9 @@ interface PropertyStakeholderSubscription {
   sms_credits_balance: number;
   daysRemaining: number;
   role: string;
+  property_count?: number;
+  unit_count?: number;
+  tenant_count?: number;
   billing_plan?: {
     id: string;
     name: string;
@@ -229,6 +232,73 @@ const BillingDashboard = () => {
       }
       console.log('✅ Fetched subscriptions:', subscriptionsData?.length);
 
+      // Fetch property counts for each landlord
+      const { data: propertiesData, error: propertiesError } = await supabase
+        .from('properties')
+        .select('id, owner_id');
+      
+      if (propertiesError) {
+        console.error('❌ Error fetching properties:', propertiesError);
+      }
+
+      // Fetch unit counts
+      const { data: unitsData, error: unitsError } = await supabase
+        .from('units')
+        .select('id, property_id');
+      
+      if (unitsError) {
+        console.error('❌ Error fetching units:', unitsError);
+      }
+
+      // Fetch active tenant counts via leases
+      const { data: leasesData, error: leasesError } = await supabase
+        .from('leases')
+        .select('tenant_id, unit_id, status')
+        .eq('status', 'active');
+      
+      if (leasesError) {
+        console.error('❌ Error fetching leases:', leasesError);
+      }
+
+      // Create lookup maps for counts per landlord
+      const propertyCounts = new Map<string, number>();
+      const unitCounts = new Map<string, number>();
+      const tenantCounts = new Map<string, number>();
+
+      // Count properties per landlord
+      propertiesData?.forEach(property => {
+        propertyCounts.set(property.owner_id, (propertyCounts.get(property.owner_id) || 0) + 1);
+      });
+
+      // Count units per landlord (via properties)
+      unitsData?.forEach(unit => {
+        const property = propertiesData?.find(p => p.id === unit.property_id);
+        if (property) {
+          unitCounts.set(property.owner_id, (unitCounts.get(property.owner_id) || 0) + 1);
+        }
+      });
+
+      // Count active tenants per landlord (via units -> properties)
+      const uniqueTenantsByLandlord = new Map<string, Set<string>>();
+      leasesData?.forEach(lease => {
+        const unit = unitsData?.find(u => u.id === lease.unit_id);
+        if (unit) {
+          const property = propertiesData?.find(p => p.id === unit.property_id);
+          if (property) {
+            if (!uniqueTenantsByLandlord.has(property.owner_id)) {
+              uniqueTenantsByLandlord.set(property.owner_id, new Set());
+            }
+            uniqueTenantsByLandlord.get(property.owner_id)?.add(lease.tenant_id);
+          }
+        }
+      });
+
+      uniqueTenantsByLandlord.forEach((tenants, landlordId) => {
+        tenantCounts.set(landlordId, tenants.size);
+      });
+
+      console.log('✅ Calculated counts - Properties:', propertyCounts.size, 'Units:', unitCounts.size, 'Tenants:', tenantCounts.size);
+
       // Combine stakeholder profiles with their subscription data and roles
       const combinedData = stakeholderProfiles?.map(profile => {
         const subscription = subscriptionsData?.find(sub => sub.landlord_id === profile.id);
@@ -253,6 +323,9 @@ const BillingDashboard = () => {
           billing_plan: subscription?.billing_plan || null,
           daysRemaining,
           role: userRole?.role || 'Unknown',
+          property_count: propertyCounts.get(profile.id) || 0,
+          unit_count: unitCounts.get(profile.id) || 0,
+          tenant_count: tenantCounts.get(profile.id) || 0,
           profiles: {
             first_name: profile.first_name,
             last_name: profile.last_name,

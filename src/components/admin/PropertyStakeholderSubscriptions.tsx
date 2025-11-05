@@ -23,6 +23,9 @@ interface PropertyStakeholderSubscription {
   sms_credits_balance: number;
   daysRemaining: number;
   role: string;
+  property_count?: number;
+  unit_count?: number;
+  tenant_count?: number;
   billing_plan?: {
     id: string;
     name: string;
@@ -215,6 +218,9 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
               <TableRow className="border-border">
                 <TableHead className="text-primary">Stakeholder</TableHead>
                 <TableHead className="text-primary">Role</TableHead>
+                <TableHead className="text-primary">Properties</TableHead>
+                <TableHead className="text-primary">Units</TableHead>
+                <TableHead className="text-primary">Tenants</TableHead>
                 <TableHead className="text-primary">Plan</TableHead>
                 <TableHead className="text-primary">Status</TableHead>
                 <TableHead className="text-primary">Trial Progress</TableHead>
@@ -239,6 +245,27 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
                     <Badge className={getRoleBadgeColor(subscription.role)}>
                       {subscription.role}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={subscription.property_count === 0 ? "secondary" : "default"}>
+                        {subscription.property_count || 0}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={subscription.unit_count === 0 ? "secondary" : "default"}>
+                        {subscription.unit_count || 0}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={subscription.tenant_count === 0 ? "secondary" : "default"}>
+                        {subscription.tenant_count || 0}
+                      </Badge>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div>

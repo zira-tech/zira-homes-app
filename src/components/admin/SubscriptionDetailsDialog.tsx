@@ -20,6 +20,9 @@ interface SubscriptionDetailsDialogProps {
     sms_credits_balance: number;
     daysRemaining: number;
     role: string;
+    property_count?: number;
+    unit_count?: number;
+    tenant_count?: number;
     billing_plan?: {
       id: string;
       name: string;
@@ -239,12 +242,34 @@ export const SubscriptionDetailsDialog: React.FC<SubscriptionDetailsDialogProps>
                 <CardHeader>
                   <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Building className="h-4 w-4" />
-                    Quick Stats
+                    Portfolio Stats
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>Detailed usage statistics coming soon</p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Properties</span>
+                      <span className="font-medium text-primary text-xl">{subscription.property_count || 0}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Units</span>
+                      <span className="font-medium text-primary text-xl">{subscription.unit_count || 0}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Active Tenants</span>
+                      <span className="font-medium text-primary text-xl">{subscription.tenant_count || 0}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Occupancy Rate</span>
+                      <span className="font-medium text-primary text-xl">
+                        {subscription.unit_count && subscription.unit_count > 0 
+                          ? `${Math.round((subscription.tenant_count || 0) / subscription.unit_count * 100)}%`
+                          : 'N/A'}
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
