@@ -226,19 +226,31 @@ const EmailTemplateEditor = () => {
       {editingTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-6xl max-h-[90vh] flex flex-col">
-            <CardHeader className="flex-shrink-0">
+            <CardHeader className="flex-shrink-0 sticky top-0 z-20 bg-white/95 backdrop-blur border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>Edit Email Template</CardTitle>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleClose}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={saveTemplate}
+                    disabled={saving || !hasUnsavedChanges}
+                    title={!hasUnsavedChanges ? "No changes to save" : ""}
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    {saving ? "Saving..." : "Save"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleClose}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col space-y-6 overflow-y-auto">
+            <CardContent className="flex-1 min-h-0 flex flex-col space-y-6 overflow-y-auto">
               <div className="grid gap-4 md:grid-cols-2 flex-shrink-0">
                 <div className="space-y-2">
                   <Label htmlFor="template-name">Template Name</Label>
@@ -299,7 +311,7 @@ const EmailTemplateEditor = () => {
                 </TabsContent>
               </Tabs>
 
-              <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t pt-4 mt-4 flex justify-end space-x-2 z-10">
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t shadow-sm pt-4 mt-4 flex justify-end space-x-2 z-10">
                 <Button
                   variant="outline"
                   onClick={handleClose}
