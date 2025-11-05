@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Edit, Phone, Mail, User, Shield, Calendar, DollarSign } from "lucide-react";
+import { Eye, Edit, Phone, Mail, User, Shield, Calendar, DollarSign, Send } from "lucide-react";
 import { TenantEditForm } from "@/components/forms/TenantEditForm";
+import { ResendCredentialsDialog } from "./ResendCredentialsDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Tenant {
   id: string;
@@ -30,6 +32,7 @@ interface TenantDetailsDialogProps {
 export function TenantDetailsDialog({ tenant, mode, trigger }: TenantDetailsDialogProps) {
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === 'edit');
+  const { hasPermission } = usePermissions();
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -234,6 +237,22 @@ export function TenantDetailsDialog({ tenant, mode, trigger }: TenantDetailsDial
             <Button variant="outline" onClick={() => setOpen(false)} className="border-modal-view-accent/20 text-modal-view-accent hover:bg-modal-view-accent/10">
               Close
             </Button>
+            {hasPermission('manage_tenants') && (
+              <ResendCredentialsDialog 
+                tenant={{
+                  id: tenant.id,
+                  email: tenant.email,
+                  first_name: tenant.first_name,
+                  last_name: tenant.last_name,
+                  phone: tenant.phone || ''
+                }}
+              >
+                <Button variant="outline" className="border-modal-view-accent/20 text-modal-view-accent hover:bg-modal-view-accent/10">
+                  <Send className="h-4 w-4 mr-1" />
+                  Resend Login
+                </Button>
+              </ResendCredentialsDialog>
+            )}
             <Button onClick={() => setIsEditing(true)} className="bg-modal-view-accent hover:bg-modal-view-accent/90 text-white">
               <Edit className="h-4 w-4 mr-1" />
               Edit Tenant

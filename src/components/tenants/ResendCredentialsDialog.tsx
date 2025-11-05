@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Send, Copy, Mail, MessageSquare } from "lucide-react";
+import { Send, Copy, Mail, MessageSquare, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useQuery } from "@tanstack/react-query";
 
 interface ResendCredentialsDialogProps {
   tenant: {
@@ -24,6 +27,24 @@ export function ResendCredentialsDialog({ tenant, children }: ResendCredentialsD
   const [resendingSMS, setResendingSMS] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Check SMS provider status
+  const { data: smsStatus, isLoading: smsStatusLoading } = useQuery({
+    queryKey: ['sms-provider-status'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sms_providers')
+        .select('is_active, provider_name')
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      return {
+        available: !!data,
+        providerName: data?.provider_name || 'Unknown'
+      };
+    },
+    staleTime: 60000, // Cache for 1 minute
+  });
 
   const generateNewPassword = () => {
     // Enhanced password generation matching backend
@@ -191,6 +212,8 @@ Need help? Contact support.`;
     }
   };
 
+  const smsAvailable = smsStatus?.available && !smsStatusLoading;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -202,6 +225,26 @@ Need help? Contact support.`;
         </DialogHeader>
         
         <div className="space-y-6">
+          {/* SMS Provider Status Indicator */}
+          <div className="flex items-center gap-2">
+            {smsStatusLoading ? (
+              <Badge variant="outline" className="text-xs">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Checking SMS status...
+              </Badge>
+            ) : smsAvailable ? (
+              <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                SMS Available ({smsStatus.providerName})
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/20">
+                <XCircle className="h-3 w-3 mr-1" />
+                SMS Unavailable - Email only
+              </Badge>
+            )}
+          </div>
+
           <div className="bg-muted/50 p-4 rounded-lg">
             <h4 className="font-medium text-primary mb-2">Tenant Details</h4>
             <p className="text-sm text-muted-foreground">
@@ -211,7 +254,7 @@ Need help? Contact support.`;
               <strong>Email:</strong> {tenant.email}
             </p>
             <p className="text-sm text-muted-foreground">
-              <strong>Phone:</strong> {tenant.phone}
+              <strong>Phone:</strong> {tenant.phone || 'Not provided'}
             </p>
           </div>
 
@@ -253,14 +296,33 @@ Need help? Contact support.`;
 
             <Button
               onClick={resendSMS}
-              disabled={resendingSMS}
+              disabled={resendingSMS || !tenant.phone || !smsAvailable}
               className="w-full"
               variant="outline"
+              title={!smsAvailable ? "SMS provider not configured" : !tenant.phone ? "No phone number" : ""}
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               {resendingSMS ? "Sending..." : "Resend via SMS"}
             </Button>
           </div>
+
+          {!tenant.phone && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No phone number available for this tenant. SMS cannot be sent.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {!smsAvailable && tenant.phone && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                SMS provider not configured. Please contact your administrator or use email/manual sharing.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20">
             <p className="text-xs text-destructive">

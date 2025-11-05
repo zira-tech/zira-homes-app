@@ -11,8 +11,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AddTenantDialog } from "@/components/tenants/AddTenantDialog";
 import { TenantDetailsDialog } from "@/components/tenants/TenantDetailsDialog";
+import { ResendCredentialsDialog } from "@/components/tenants/ResendCredentialsDialog";
 import { BulkUploadDropdown } from "@/components/bulk-upload/BulkUploadDropdown";
-import { Users, Phone, Mail, Search, Filter, Edit, Eye, Briefcase, LayoutGrid, List, Building2, MapPin } from "lucide-react";
+import { Users, Phone, Mail, Search, Filter, Edit, Eye, Briefcase, LayoutGrid, List, Building2, MapPin, MoreVertical, Send } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { usePermissions } from "@/hooks/usePermissions";
 import { KpiGrid } from "@/components/kpi/KpiGrid";
 import { KpiStatCard } from "@/components/kpi/KpiStatCard";
 import { TablePaginator } from "@/components/ui/table-paginator";
@@ -64,6 +67,7 @@ const Tenants = () => {
   const [backendReason, setBackendReason] = useState<string>("");
   const { isSubUser, landlordId } = useRole();
   const { currentStep, dismissStep } = useGettingStarted();
+  const { hasPermission } = usePermissions();
 
   useEffect(() => {
     (async () => {
@@ -572,16 +576,45 @@ const Tenants = () => {
 
                     <div className="flex gap-2 mt-4">
                       <TenantDetailsDialog tenant={tenant} mode="view" />
-                      <TenantDetailsDialog 
-                        tenant={tenant} 
-                        mode="edit" 
-                        trigger={
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="flex-1">
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
+                            <MoreVertical className="h-4 w-4" />
                           </Button>
-                        }
-                      />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <TenantDetailsDialog 
+                            tenant={tenant} 
+                            mode="edit" 
+                            trigger={
+                              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Tenant
+                              </DropdownMenuItem>
+                            }
+                          />
+                          {hasPermission('manage_tenants') && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <ResendCredentialsDialog 
+                                tenant={{
+                                  id: tenant.id,
+                                  email: tenant.email,
+                                  first_name: tenant.first_name,
+                                  last_name: tenant.last_name,
+                                  phone: tenant.phone || ''
+                                }}
+                              >
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <Send className="h-4 w-4 mr-2" />
+                                  Resend Login
+                                </DropdownMenuItem>
+                              </ResendCredentialsDialog>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardContent>
                 </Card>
