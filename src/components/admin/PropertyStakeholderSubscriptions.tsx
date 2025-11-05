@@ -298,7 +298,10 @@ export const PropertyStakeholderSubscriptions: React.FC<PropertyStakeholderSubsc
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Select onValueChange={(planId) => handlePlanChange(subscription.landlord_id, planId, subscription)}>
+                      <Select 
+                        value={subscription.billing_plan?.id || ""} 
+                        onValueChange={(planId) => handlePlanChange(subscription.landlord_id, planId, subscription)}
+                      >
                         <SelectTrigger className="w-32 h-8 border-border bg-card">
                           <SelectValue placeholder="Change Plan" />
                         </SelectTrigger>
