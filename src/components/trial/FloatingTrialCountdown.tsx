@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { TRIAL_DEFAULTS, TRIAL_URGENCY } from "@/constants/trialDefaults";
 
 export function FloatingTrialCountdown() {
   console.log('🚀 FloatingTrialCountdown component rendering...');
@@ -60,14 +61,14 @@ export function FloatingTrialCountdown() {
   }
 
   // Calculate trial progress dynamically based on actual trial period
-  const totalTrialDays = trialStatus?.totalTrialDays || 30;
+  const totalTrialDays = trialStatus?.totalTrialDays || TRIAL_DEFAULTS.TRIAL_PERIOD_DAYS;
   const trialProgress = ((totalTrialDays - trialDaysRemaining) / totalTrialDays) * 100;
   
   // Improved percentage-based urgency levels based on days remaining
-  const urgencyLevel = trialDaysRemaining <= 3 ? 'critical' :    // Days 3-0: Red
-                      trialDaysRemaining <= 10 ? 'warning' :     // Days 10-4: Orange
-                      trialDaysRemaining <= 20 ? 'info' :        // Days 20-11: Blue
-                      'early';                                   // Days 30-21: Green
+  const urgencyLevel = trialDaysRemaining <= TRIAL_URGENCY.CRITICAL ? 'critical' :
+                      trialDaysRemaining <= TRIAL_URGENCY.WARNING ? 'warning' :
+                      trialDaysRemaining <= TRIAL_URGENCY.INFO ? 'info' :
+                      'early';
   
   const getUrgencyStyles = () => {
     switch (urgencyLevel) {

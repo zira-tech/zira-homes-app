@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { TRIAL_DEFAULTS } from "@/constants/trialDefaults";
 
 interface TrialStatus {
   status: string;
@@ -191,7 +192,7 @@ export function useTrialManagement() {
         
         let daysRemaining = 0;
         let gracePeriodDays = 0;
-        let totalTrialDays = 30;
+        let totalTrialDays = TRIAL_DEFAULTS.TRIAL_PERIOD_DAYS;
         
         if (effectiveSubscription.trial_end_date) {
           const trialEndDate = new Date(effectiveSubscription.trial_end_date);
@@ -209,7 +210,7 @@ export function useTrialManagement() {
           
           // Calculate grace period
           if (actualStatus === 'trial_expired') {
-            const gracePeriodEnd = new Date(trialEndDate.getTime() + (7 * 24 * 60 * 60 * 1000));
+            const gracePeriodEnd = new Date(trialEndDate.getTime() + (TRIAL_DEFAULTS.GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000));
             gracePeriodDays = Math.max(0, Math.ceil((gracePeriodEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
           }
 

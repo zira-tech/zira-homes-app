@@ -370,10 +370,19 @@ const TrialManagement = () => {
         });
       }
 
+      // Validate numeric values before saving
+      const validTrialDays = Number.isInteger(settings.trial_period_days) && settings.trial_period_days > 0
+        ? settings.trial_period_days 
+        : 70;
+      
+      const validGraceDays = Number.isInteger(settings.grace_period_days) && settings.grace_period_days >= 0
+        ? settings.grace_period_days
+        : 7;
+
       const newSettingValue = {
         ...existingValue,
-        trial_period_days: settings.trial_period_days,
-        grace_period_days: settings.grace_period_days,
+        trial_period_days: validTrialDays,
+        grace_period_days: validGraceDays,
         payment_reminder_days: settings.reminder_days,
         auto_invoice_generation: existingValue.auto_invoice_generation ?? true,
         default_sms_credits: existingValue.default_sms_credits ?? 200,
@@ -625,13 +634,20 @@ const TrialManagement = () => {
                     <Input
                       id="trial-days"
                       type="number"
+                      min="1"
+                      max="365"
                       value={settings?.trial_period_days || 70}
-                      onChange={(e) => setSettings(prev => prev ? 
-                        { ...prev, trial_period_days: parseInt(e.target.value) } : null
-                      )}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value) && value > 0) {
+                          setSettings(prev => prev ? 
+                            { ...prev, trial_period_days: value } : null
+                          );
+                        }
+                      }}
                     />
                     <p className="text-sm text-muted-foreground">
-                      Default trial duration for new landlords
+                      Default trial duration for new landlords (1-365 days)
                     </p>
                   </div>
 
@@ -640,13 +656,20 @@ const TrialManagement = () => {
                     <Input
                       id="grace-days"
                       type="number"
+                      min="0"
+                      max="90"
                       value={settings?.grace_period_days || 7}
-                      onChange={(e) => setSettings(prev => prev ? 
-                        { ...prev, grace_period_days: parseInt(e.target.value) } : null
-                      )}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value) && value >= 0) {
+                          setSettings(prev => prev ? 
+                            { ...prev, grace_period_days: value } : null
+                          );
+                        }
+                      }}
                     />
                     <p className="text-sm text-muted-foreground">
-                      Grace period before account suspension
+                      Grace period before account suspension (0-90 days)
                     </p>
                   </div>
                 </div>
