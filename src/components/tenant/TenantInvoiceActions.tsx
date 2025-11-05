@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MpesaPaymentModal } from "./MpesaPaymentModal";
 import { MoreHorizontal, Smartphone, Download, Eye } from "lucide-react";
+import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
 
 interface TenantInvoiceActionsProps {
   invoice: {
@@ -17,6 +18,7 @@ interface TenantInvoiceActionsProps {
 
 export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoiceActionsProps) {
   const [mpesaModalOpen, setMpesaModalOpen] = useState(false);
+  const { isChecking, checkAvailability } = useMpesaAvailability();
 
   const handleDownload = () => {
     // TODO: Implement invoice download functionality
@@ -26,6 +28,14 @@ export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoic
   const handleView = () => {
     // TODO: Implement invoice view functionality
     console.log("View invoice:", invoice.invoice_number);
+  };
+
+  const handleMpesaPayment = async () => {
+    // Check M-Pesa availability before opening the dialog
+    const isAvailable = await checkAvailability(invoice.id);
+    if (isAvailable) {
+      setMpesaModalOpen(true);
+    }
   };
 
   const canPay = invoice.status === 'pending' || invoice.status === 'overdue';
@@ -49,11 +59,12 @@ export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoic
           </DropdownMenuItem>
           {canPay && (
             <DropdownMenuItem 
-              onClick={() => setMpesaModalOpen(true)}
+              onClick={handleMpesaPayment}
+              disabled={isChecking}
               className="text-green-600"
             >
               <Smartphone className="h-4 w-4 mr-2" />
-              Pay with M-Pesa
+              {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

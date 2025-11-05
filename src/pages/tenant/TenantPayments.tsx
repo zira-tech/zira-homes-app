@@ -33,6 +33,7 @@ import { TenantPaymentSettings } from "@/components/tenant/TenantPaymentSettings
 import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getInvoiceDescription, linkPaymentToInvoice } from "@/utils/invoiceFormat";
 import { fmtCurrency, fmtDate } from "@/lib/format";
 import { measureApiCall } from "@/utils/performanceMonitor";
+import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
 
 // Lazy load dialog components for better performance
 const MpesaPaymentDialog = lazy(() => import("@/components/tenant/MpesaPaymentDialog").then(module => ({ default: module.MpesaPaymentDialog })));
@@ -62,6 +63,7 @@ interface TenantPaymentsRpcResult {
 export default function TenantPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isChecking, checkAvailability } = useMpesaAvailability();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -415,6 +417,15 @@ export default function TenantPayments() {
     }
   };
 
+  const handleMpesaPayment = async (invoice: any) => {
+    // Check M-Pesa availability before opening the dialog
+    const isAvailable = await checkAvailability(invoice.id);
+    if (isAvailable) {
+      setSelectedInvoice(invoice);
+      setMpesaDialogOpen(true);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "paid":
@@ -568,15 +579,15 @@ export default function TenantPayments() {
                 <Button 
                   size="lg" 
                   className="bg-green-600 hover:bg-green-700"
+                  disabled={isChecking}
                   onClick={() => {
                     if (pendingInvoices.length > 0) {
-                      setSelectedInvoice(pendingInvoices[0]);
-                      setMpesaDialogOpen(true);
+                      handleMpesaPayment(pendingInvoices[0]);
                     }
                   }}
                 >
                   <Smartphone className="h-4 w-4 mr-2" />
-                  Pay with M-Pesa
+                  {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
                 </Button>
               </div>
             </div>
@@ -789,10 +800,7 @@ export default function TenantPayments() {
                               {!invoice.isInferred && (
                                 <TenantInvoiceDetailsDialog 
                                   invoice={invoice}
-                                  onPayNow={(inv) => {
-                                    setSelectedInvoice(inv);
-                                    setMpesaDialogOpen(true);
-                                  }}
+                                  onPayNow={handleMpesaPayment}
                                   trigger={
                                     <Button variant="outline" size="sm">
                                       <Eye className="h-3 w-3 mr-1" />
@@ -815,13 +823,11 @@ export default function TenantPayments() {
                                 <Button
                                   size="sm"
                                   className="bg-green-600 hover:bg-green-700 text-white"
-                                  onClick={() => {
-                                    setSelectedInvoice(invoice);
-                                    setMpesaDialogOpen(true);
-                                  }}
+                                  disabled={isChecking}
+                                  onClick={() => handleMpesaPayment(invoice)}
                                 >
                                   <Smartphone className="h-3 w-3 mr-1" />
-                                  Pay
+                                  {isChecking ? 'Checking...' : 'Pay'}
                                 </Button>
                               )}
                               {invoice.isInferred && (
@@ -977,13 +983,10 @@ export default function TenantPayments() {
                                  Receipt
                                </Button>
                                {payment.linkedInvoice && (
-                                 <TenantInvoiceDetailsDialog 
-                                   invoice={payment.linkedInvoice}
-                                   onPayNow={(inv) => {
-                                     setSelectedInvoice(inv);
-                                     setMpesaDialogOpen(true);
-                                   }}
-                                   trigger={
+                                  <TenantInvoiceDetailsDialog 
+                                    invoice={payment.linkedInvoice}
+                                    onPayNow={handleMpesaPayment}
+                                    trigger={
                                      <Button variant="ghost" size="sm">
                                        <Eye className="h-3 w-3 mr-1" />
                                        View Invoice
