@@ -53,16 +53,16 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     is_active: true,
   });
 
-  // Load existing config
+  // Load existing config - SECURITY: Only fetch non-sensitive metadata
   useEffect(() => {
     const loadConfig = async () => {
       if (!user?.id) return;
 
       try {
-        // Check if config exists
+        // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active')
+          .select('id, callback_url, environment, is_active, business_shortcode')
           .eq('landlord_id', user.id)
           .maybeSingle();
 
@@ -72,12 +72,19 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         }
 
         if (data) {
+          // SECURITY: Never populate credential fields from database
+          // Users must re-enter credentials to update them
           setConfig(prev => ({
             ...prev,
             id: data.id,
             callback_url: data.callback_url || '',
             environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
             is_active: data.is_active,
+            business_shortcode: data.business_shortcode || '',
+            // Explicitly clear sensitive fields for security
+            consumer_key: '',
+            consumer_secret: '',
+            passkey: ''
           }));
           setUsePlatformDefaults(false);
           setHasConfig(true);
@@ -303,31 +310,46 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
           {!usePlatformDefaults && (
             <div className="space-y-4">
+              {/* SECURITY NOTICE */}
+              {hasConfig && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2">
+                    <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      <p className="font-medium">Credentials are encrypted</p>
+                      <p>For security, stored credentials are never displayed. Re-enter credentials to update them.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Consumer Key *
+                    Consumer Key * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
                   </Label>
                   <Input 
-                    type="text"
-                    placeholder="Enter M-Pesa Consumer Key"
+                    type="password"
+                    placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Key"}
                     value={config.consumer_key}
                     onChange={(e) => setConfig(prev => ({ ...prev, consumer_key: e.target.value }))}
                     className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
+                  <p className="text-xs text-muted-foreground">Never shared or stored in plain text</p>
                 </div>
                 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Consumer Secret *
+                    Consumer Secret * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
                   </Label>
                   <Input 
                     type="password"
-                    placeholder="Enter M-Pesa Consumer Secret"
+                    placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Secret"}
                     value={config.consumer_secret}
                     onChange={(e) => setConfig(prev => ({ ...prev, consumer_secret: e.target.value }))}
                     className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
+                  <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -371,15 +393,16 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Passkey *
+                    Passkey * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
                   </Label>
                   <Input 
                     type="password"
-                    placeholder="Enter M-Pesa Passkey"
+                    placeholder={hasConfig ? "••••••••••••••••••••••••" : "Enter M-Pesa Passkey"}
                     value={config.passkey}
                     onChange={(e) => setConfig(prev => ({ ...prev, passkey: e.target.value }))}
                     className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
+                  <p className="text-xs text-muted-foreground">Stored with end-to-end encryption</p>
                 </div>
                 
                 <div className="space-y-2">

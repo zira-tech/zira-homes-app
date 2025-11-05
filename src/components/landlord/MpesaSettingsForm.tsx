@@ -51,11 +51,12 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
 
   const fetchMpesaConfig = async () => {
     try {
-      // SECURITY FIX: Add landlord_id filter to prevent cross-tenant access
       const { data: user } = await supabase.auth.getUser();
+      
+      // SECURITY: Only fetch non-sensitive metadata, NEVER fetch encrypted credentials
       const { data, error } = await supabase
         .from("landlord_mpesa_configs")
-        .select("*")
+        .select("id, business_shortcode, callback_url, environment, is_active")
         .eq("landlord_id", user.user?.id)
         .single();
 
@@ -65,11 +66,12 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
 
       if (data) {
         setConfigExists(true);
+        // SECURITY: Never populate credential fields from database
         form.reset({
-          consumer_key: data.consumer_key,
-          consumer_secret: data.consumer_secret,
+          consumer_key: "", // Never fetch credentials
+          consumer_secret: "", // Never fetch credentials
           business_shortcode: data.business_shortcode,
-          passkey: data.passkey,
+          passkey: "", // Never fetch credentials
           callback_url: data.callback_url || "",
           environment: data.environment as "sandbox" | "production",
           is_active: data.is_active
@@ -83,49 +85,38 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
   const onSubmit = async (data: MpesaConfigFormData) => {
     setLoading(true);
     try {
-      if (configExists) {
-        // For updates, exclude landlord_id
-        const updateData = {
+      // SECURITY: Use edge function to encrypt and save credentials securely
+      const { data: result, error } = await supabase.functions.invoke('save-mpesa-credentials', {
+        body: {
           consumer_key: data.consumer_key,
           consumer_secret: data.consumer_secret,
-          business_shortcode: data.business_shortcode, 
+          shortcode: data.business_shortcode,
           passkey: data.passkey,
           callback_url: data.callback_url || null,
           environment: data.environment,
           is_active: data.is_active
-        };
+        }
+      });
 
-        const { data: user } = await supabase.auth.getUser();
-        const { error } = await supabase
-          .from("landlord_mpesa_configs")
-          .update(updateData)
-          .eq("landlord_id", user.user?.id);
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
 
-        if (error) throw error;
-        toast.success("M-Pesa settings updated successfully!");
-      } else {
-        // For inserts, use type assertion to bypass TypeScript restrictions
-        const insertData = {
-          consumer_key: data.consumer_key,
-          consumer_secret: data.consumer_secret,
-          business_shortcode: data.business_shortcode,
-          passkey: data.passkey,
-          callback_url: data.callback_url || null,
-          environment: data.environment,
-          is_active: data.is_active
-        } as any; // Type assertion to bypass strict typing
+      // Clear sensitive data from form for security
+      form.reset({
+        consumer_key: "",
+        consumer_secret: "",
+        business_shortcode: data.business_shortcode,
+        passkey: "",
+        callback_url: data.callback_url,
+        environment: data.environment,
+        is_active: data.is_active
+      });
 
-        const { error } = await supabase
-          .from("landlord_mpesa_configs")
-          .insert([insertData]);
-
-        if (error) throw error;
-        toast.success("M-Pesa settings created successfully!");
-        setConfigExists(true);
-      }
+      setConfigExists(true);
+      toast.success(configExists ? "M-Pesa settings updated securely!" : "M-Pesa settings created securely!");
     } catch (error) {
       console.error("Error saving M-Pesa config:", error);
-      toast.error("Failed to save M-Pesa settings");
+      toast.error(error instanceof Error ? error.message : "Failed to save M-Pesa settings");
     } finally {
       setLoading(false);
     }
@@ -173,15 +164,25 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
               <h3 className="font-medium">API Credentials</h3>
             </div>
             
+            {configExists && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm text-amber-800 dark:text-amber-200 mb-4">
+                <Shield className="h-4 w-4 inline mr-2" />
+                Credentials are encrypted and never displayed. Re-enter to update.
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="consumer_key">Consumer Key</Label>
+                <Label htmlFor="consumer_key">
+                  Consumer Key {configExists && <span className="text-xs text-muted-foreground">(re-enter to update)</span>}
+                </Label>
                 <Input
                   id="consumer_key"
                   type="password"
                   {...form.register("consumer_key")}
-                  placeholder="Your M-Pesa consumer key"
+                  placeholder={configExists ? "••••••••••••••••" : "Your M-Pesa consumer key"}
                 />
+                <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
                 {form.formState.errors.consumer_key && (
                   <p className="text-xs text-red-500">
                     {form.formState.errors.consumer_key.message}
@@ -190,13 +191,16 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="consumer_secret">Consumer Secret</Label>
+                <Label htmlFor="consumer_secret">
+                  Consumer Secret {configExists && <span className="text-xs text-muted-foreground">(re-enter to update)</span>}
+                </Label>
                 <Input
                   id="consumer_secret"
                   type="password"
                   {...form.register("consumer_secret")}
-                  placeholder="Your M-Pesa consumer secret"
+                  placeholder={configExists ? "••••••••••••••••" : "Your M-Pesa consumer secret"}
                 />
+                <p className="text-xs text-muted-foreground">Never stored in plain text</p>
                 {form.formState.errors.consumer_secret && (
                   <p className="text-xs text-red-500">
                     {form.formState.errors.consumer_secret.message}
@@ -221,13 +225,16 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="passkey">Passkey</Label>
+                <Label htmlFor="passkey">
+                  Passkey {configExists && <span className="text-xs text-muted-foreground">(re-enter to update)</span>}
+                </Label>
                 <Input
                   id="passkey"
                   type="password"
                   {...form.register("passkey")}
-                  placeholder="Your M-Pesa passkey"
+                  placeholder={configExists ? "••••••••••••••••••••••••" : "Your M-Pesa passkey"}
                 />
+                <p className="text-xs text-muted-foreground">Encrypted at rest and in transit</p>
                 {form.formState.errors.passkey && (
                   <p className="text-xs text-red-500">
                     {form.formState.errors.passkey.message}
