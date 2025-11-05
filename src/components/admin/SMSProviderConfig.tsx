@@ -160,6 +160,9 @@ const SMSProviderConfig = () => {
       if (newProvider.authorization_token) config_data.authorization_token = newProvider.authorization_token;
       if (newProvider.unique_identifier) config_data.unique_identifier = newProvider.unique_identifier;
       if (newProvider.sender_type) config_data.sender_type = newProvider.sender_type;
+      if (newProvider.api_key) config_data.api_key = newProvider.api_key;
+      if (newProvider.api_secret) config_data.api_secret = newProvider.api_secret;
+      if (newProvider.country_code) config_data.country_code = newProvider.country_code;
       if (newProvider.additional_config) {
         try {
           Object.assign(config_data, JSON.parse(newProvider.additional_config));
@@ -175,15 +178,8 @@ const SMSProviderConfig = () => {
 
       const providerData = {
         provider_name: newProvider.provider_name,
-        api_key: newProvider.api_key || null,
-        api_secret: newProvider.api_secret || null,
-        authorization_token: newProvider.authorization_token || null,
-        username: newProvider.username || null,
         sender_id: newProvider.sender_id || null,
         base_url: newProvider.base_url || null,
-        unique_identifier: newProvider.unique_identifier || null,
-        sender_type: newProvider.sender_type || null,
-        country_code: newProvider.country_code || 'KE',
         is_active: editingProvider ? editingProvider.is_active : (providers.length === 0),
         is_default: editingProvider ? editingProvider.is_default : (providers.length === 0),
         config_data
@@ -383,8 +379,8 @@ const SMSProviderConfig = () => {
     setEditingProvider(provider);
     setNewProvider({
       provider_name: provider.provider_name,
-      api_key: provider.api_key || '',
-      api_secret: provider.api_secret || '',
+      api_key: provider.config_data?.api_key || '',
+      api_secret: provider.config_data?.api_secret || '',
       sender_id: provider.sender_id || '',
       base_url: provider.base_url || '',
       username: provider.config_data?.username || '',
@@ -392,7 +388,7 @@ const SMSProviderConfig = () => {
       unique_identifier: provider.config_data?.unique_identifier || '',
       sender_type: provider.config_data?.sender_type || '10',
       additional_config: JSON.stringify(provider.config_data || {}, null, 2),
-      country_code: 'KE' // Default value when editing
+      country_code: provider.config_data?.country_code || 'KE'
     });
     setIsDialogOpen(true);
   };
