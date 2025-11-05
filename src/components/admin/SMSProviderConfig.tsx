@@ -167,10 +167,10 @@ const SMSProviderConfig = () => {
       if (newProvider.additional_config) {
         try {
           Object.assign(config_data, JSON.parse(newProvider.additional_config));
-        } catch {
+        } catch (e: any) {
           toast({
             title: "Invalid JSON",
-            description: "Additional config must be valid JSON",
+            description: `Additional config must be valid JSON: ${e.message}`,
             variant: "destructive",
           });
           setIsSaving(false);
@@ -187,13 +187,24 @@ const SMSProviderConfig = () => {
         config_data
       };
 
-      // Use the secure edge function instead of direct DB update
-      const { data: result, error: functionError } = await supabase.functions.invoke('admin-upsert-sms-provider', {
+      console.log('Saving provider:', providerData);
+
+      // Add timeout to prevent infinite "Saving..."
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout after 12 seconds')), 12000)
+      );
+
+      const invokePromise = supabase.functions.invoke('admin-upsert-sms-provider', {
         body: {
           id: editingProvider?.id,
           ...providerData
         }
       });
+
+      const { data: result, error: functionError } = await Promise.race([
+        invokePromise,
+        timeoutPromise
+      ]) as any;
 
       if (functionError) {
         console.error('Function error:', functionError);
@@ -201,8 +212,10 @@ const SMSProviderConfig = () => {
       }
       
       if (!result?.success) {
+        const errorMsg = result?.error || 'Unknown error occurred';
+        const details = result?.details ? ` (${result.details})` : '';
         console.error('Save failed:', result);
-        throw new Error(result?.error || 'Failed to save provider');
+        throw new Error(errorMsg + details);
       }
 
       toast({
@@ -210,17 +223,25 @@ const SMSProviderConfig = () => {
         description: `Provider ${editingProvider ? 'updated' : 'added'} successfully`,
       });
 
-      // Close dialog and reset form BEFORE refetching
+      // Update local state optimistically
+      const savedProvider = result.provider;
+      if (editingProvider) {
+        setProviders(prev => prev.map(p => p.id === editingProvider.id ? savedProvider : p));
+      } else {
+        setProviders(prev => [...prev, savedProvider]);
+      }
+
+      // Close dialog and reset form immediately
       setIsDialogOpen(false);
       resetForm();
       
-      // Refetch providers to show updated data
-      await fetchProviders();
+      // Refetch in background to ensure consistency
+      fetchProviders();
     } catch (error: any) {
       console.error('Error saving provider:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save provider",
+        description: error.message || "Failed to save SMS provider",
         variant: "destructive",
       });
     } finally {
