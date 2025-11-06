@@ -45,6 +45,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const [showForm, setShowForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const hasInitializedRef = useRef(false);
+  const hasDraftRef = useRef(false);
   
   const [config, setConfig] = useState<MpesaConfig>({
     consumer_key: '',
@@ -63,13 +64,51 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     is_active: true,
   });
 
+  // SessionStorage keys for draft persistence
+  const EDIT_KEY = `mpesa_editing_v1_${user?.id || 'guest'}`;
+  const DRAFT_KEY = `mpesa_draft_v1_${user?.id || 'guest'}`;
+  const DRAFT_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+  // Draft persistence helpers
+  const loadDraft = () => {
+    try {
+      const draftStr = sessionStorage.getItem(DRAFT_KEY);
+      if (!draftStr) return null;
+      const draft = JSON.parse(draftStr);
+      if (Date.now() - draft.savedAt > DRAFT_EXPIRY_MS) {
+        clearDraft();
+        return null;
+      }
+      return draft.fields;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveDraft = (fields: Partial<MpesaConfig>) => {
+    try {
+      const draft = {
+        fields,
+        savedAt: Date.now()
+      };
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+    }
+  };
+
+  const clearDraft = () => {
+    sessionStorage.removeItem(EDIT_KEY);
+    sessionStorage.removeItem(DRAFT_KEY);
+  };
+
   // Load existing config - SECURITY: Only fetch non-sensitive metadata
   const loadConfig = async () => {
     if (!user?.id) return;
 
-    // CRITICAL FIX: Don't reload config while user is editing to prevent field clearing
-    if (showForm) {
-      console.log('Skipping config reload - user is editing');
+    // CRITICAL FIX: Don't reload config while user is editing or has draft to prevent field clearing
+    if (showForm || hasDraftRef.current) {
+      console.log('Skipping config reload - user is editing or has draft');
       return;
     }
 
@@ -134,9 +173,37 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   };
 
   useEffect(() => {
+    // Restore draft on mount
+    const isEditing = sessionStorage.getItem(EDIT_KEY) === '1';
+    const draftFields = loadDraft();
+    
+    if (isEditing && draftFields) {
+      console.log('Restoring draft from sessionStorage');
+      hasDraftRef.current = true;
+      setShowForm(true);
+      setIsOpen(true);
+      setConfig(prev => ({
+        ...prev,
+        ...draftFields
+      }));
+    }
+    
     loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]); // FIXED: Removed onConfigChange from dependencies to prevent re-renders
+  }, [user?.id]);
+
+  // Warn before navigation if unsaved changes exist
+  useEffect(() => {
+    if (!showForm) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [showForm]);
 
   const handleDeleteConfig = async () => {
     if (!user?.id || !config.id) return;
@@ -236,6 +303,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       setHasConfig(true);
       setShowForm(false); // Return to summary view
+      hasDraftRef.current = false;
+      clearDraft(); // Clear draft after successful save
       onConfigChange(true);
       
       // Clear sensitive data from local state for security
@@ -378,7 +447,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         </li>
                       </ul>
                       <Button 
-                        onClick={() => setShowForm(true)}
+                        onClick={() => {
+                          setShowForm(true);
+                          setIsOpen(true);
+                          sessionStorage.setItem(EDIT_KEY, '1');
+                        }}
                         className="w-full"
                       >
                         <Settings className="h-4 w-4 mr-2" />
@@ -500,7 +573,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   <div className="flex gap-3">
                     <Button 
                       variant="default"
-                      onClick={() => setShowForm(true)}
+                      onClick={() => {
+                        setShowForm(true);
+                        setIsOpen(true);
+                        sessionStorage.setItem(EDIT_KEY, '1');
+                      }}
                       className="flex-1"
                     >
                       <Settings className="h-4 w-4 mr-2" />
@@ -552,11 +629,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   value={config.shortcode_type}
                   onValueChange={(value: 'paybill' | 'till_safaricom' | 'till_kopokopo') => {
                     // Update shortcode_type and till_provider in a single setState
-                    setConfig(prev => ({
-                      ...prev,
+                    const newConfig = {
+                      ...config,
                       shortcode_type: value,
-                      till_provider: value === 'till_kopokopo' ? 'kopokopo' : 'safaricom'
-                    }));
+                      till_provider: value === 'till_kopokopo' ? 'kopokopo' as const : 'safaricom' as const
+                    };
+                    setConfig(newConfig);
+                    saveDraft(newConfig);
                   }}
                 >
                   <SelectTrigger>
@@ -603,7 +682,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       type="text"
                       placeholder="e.g., 855087"
                       value={config.till_number || ''}
-                      onChange={(e) => setConfig(prev => ({ ...prev, till_number: e.target.value }))}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setConfig(prev => ({ ...prev, till_number: newValue }));
+                        saveDraft({ till_number: newValue });
+                      }}
                     />
                     <p className="text-xs text-muted-foreground">
                       Your Kopo Kopo till number
@@ -616,7 +699,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       type="text"
                       placeholder="Enter your Kopo Kopo Client ID"
                       value={config.kopokopo_client_id || ''}
-                      onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_client_id: e.target.value }))}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setConfig(prev => ({ ...prev, kopokopo_client_id: newValue }));
+                        saveDraft({ kopokopo_client_id: newValue });
+                      }}
                     />
                     <p className="text-xs text-muted-foreground">Get this from your Kopo Kopo dashboard</p>
                   </div>
@@ -639,9 +726,22 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       type="password"
                       placeholder={hasConfig ? "••••••••••••••••" : "Enter your Kopo Kopo Client Secret"}
                       value={config.kopokopo_client_secret || ''}
-                      onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_client_secret: e.target.value }))}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setConfig(prev => ({ ...prev, kopokopo_client_secret: newValue }));
+                        saveDraft({ kopokopo_client_secret: newValue });
+                      }}
                     />
                     <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM before storage</p>
+                  </div>
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-2">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                      <p className="text-xs text-blue-800 dark:text-blue-200">
+                        Draft values are temporarily saved in your browser until you save or cancel. Safe to switch tabs to copy credentials.
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -665,7 +765,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Key"}
                     value={config.consumer_key}
-                    onChange={(e) => setConfig(prev => ({ ...prev, consumer_key: e.target.value }))}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setConfig(prev => ({ ...prev, consumer_key: newValue }));
+                      saveDraft({ consumer_key: newValue });
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">Never shared or stored in plain text</p>
                 </div>
@@ -688,7 +792,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Secret"}
                     value={config.consumer_secret}
-                    onChange={(e) => setConfig(prev => ({ ...prev, consumer_secret: e.target.value }))}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setConfig(prev => ({ ...prev, consumer_secret: newValue }));
+                      saveDraft({ consumer_secret: newValue });
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
                 </div>
@@ -701,7 +809,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     type="text"
                     placeholder={config.shortcode_type === 'paybill' ? "e.g., 4155923" : "e.g., 5071852"}
                     value={config.business_shortcode}
-                    onChange={(e) => setConfig(prev => ({ ...prev, business_shortcode: e.target.value }))}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setConfig(prev => ({ ...prev, business_shortcode: newValue }));
+                      saveDraft({ business_shortcode: newValue });
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
                     Your {config.shortcode_type === 'paybill' ? 'paybill' : 'till'} number where payments are received
@@ -726,7 +838,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••••••••••" : "Enter M-Pesa Passkey"}
                     value={config.passkey}
-                    onChange={(e) => setConfig(prev => ({ ...prev, passkey: e.target.value }))}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setConfig(prev => ({ ...prev, passkey: newValue }));
+                      saveDraft({ passkey: newValue });
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">Stored with end-to-end encryption</p>
                 </div>
@@ -738,9 +854,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   <Label>Environment</Label>
                   <Select 
                     value={config.environment}
-                    onValueChange={(value: 'sandbox' | 'production') => 
-                      setConfig(prev => ({ ...prev, environment: value }))
-                    }
+                    onValueChange={(value: 'sandbox' | 'production') => {
+                      setConfig(prev => ({ ...prev, environment: value }));
+                      saveDraft({ environment: value });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -760,7 +877,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     type="tel"
                     placeholder="+254701234567"
                     value={config.phone_number || ''}
-                    onChange={(e) => setConfig(prev => ({ ...prev, phone_number: e.target.value }))}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setConfig(prev => ({ ...prev, phone_number: newValue }));
+                      saveDraft({ phone_number: newValue });
+                    }}
                     className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                 </div>
@@ -773,6 +894,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   {saving ? 'Saving...' : 'Save Credentials'}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setShowForm(false);
+                    hasDraftRef.current = false;
+                    clearDraft();
+                    loadConfig();
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
                 </Button>
                 
                 {hasConfig && config.phone_number && (
