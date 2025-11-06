@@ -3,7 +3,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, CreditCard, CheckCircle, AlertTriangle, Settings } from "lucide-react";
+import { Shield, CreditCard, CheckCircle, AlertTriangle, Settings, ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -80,14 +81,27 @@ export default function PlatformPaymentConfig() {
     <DashboardLayout>
       <div className="container mx-auto p-6 max-w-6xl space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Settings className="h-8 w-8" />
-            Platform Payment Configuration
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Manage platform-wide M-Pesa settings and monitor usage
-          </p>
+        <div className="space-y-3">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            asChild
+          >
+            <Link to="/admin/payment-configuration" className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Payment Configuration
+            </Link>
+          </Button>
+
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <Settings className="h-8 w-8" />
+              Platform Payment Configuration
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Manage platform-wide M-Pesa settings and monitor usage
+            </p>
+          </div>
         </div>
 
         {/* Platform M-Pesa Status Card */}
