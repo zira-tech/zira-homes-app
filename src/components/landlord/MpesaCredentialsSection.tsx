@@ -322,8 +322,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       if (data?.error) throw new Error(data.error);
 
       setHasConfig(true);
-      setShowForm(false); // Return to summary view
-      setIsOpen(true); // Keep section open to show summary
+      setShowForm(false); // Exit form
+      setIsOpen(false); // Collapse section to return to main page
       hasDraftRef.current = false;
       clearDraft(); // Clear draft after successful save
       onConfigChange(true);
