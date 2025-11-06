@@ -103,7 +103,24 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         return false;
       }
 
-      const available = !!mpesaConfig;
+      let available = !!mpesaConfig;
+
+      // If no custom config, check for platform default preference
+      if (!available) {
+        const { data: paymentPrefs, error: prefsError } = await supabase
+          .from('landlord_payment_preferences')
+          .select('mpesa_config_preference')
+          .eq('landlord_id', landlordId)
+          .maybeSingle();
+
+        if (prefsError) {
+          console.error('Error checking payment preferences:', prefsError);
+        } else {
+          // Platform default is considered available
+          available = paymentPrefs?.mpesa_config_preference === 'platform_default';
+        }
+      }
+
       setIsAvailable(available);
 
       if (!available) {
