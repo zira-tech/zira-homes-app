@@ -20,15 +20,15 @@ const mpesaConfigSchema = z.object({
   passkey: z.string().optional(),
   till_number: z.string().optional(),
   till_provider: z.enum(["safaricom", "kopokopo"]).optional(),
-  kopokopo_api_key: z.string().optional(),
-  kopokopo_merchant_id: z.string().optional(),
+  kopokopo_client_id: z.string().optional(),
+  kopokopo_client_secret: z.string().optional(),
   callback_url: z.string().url().optional().or(z.literal("")),
   environment: z.enum(["sandbox", "production"]),
   is_active: z.boolean()
 }).refine((data) => {
   // Validate based on shortcode type
   if (data.shortcode_type === 'till_kopokopo') {
-    return data.till_number && data.kopokopo_api_key && data.kopokopo_merchant_id;
+    return data.till_number && data.kopokopo_client_id && data.kopokopo_client_secret;
   } else {
     return data.consumer_key && data.consumer_secret && data.business_shortcode && data.passkey;
   }
@@ -56,8 +56,8 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
       passkey: "",
       till_number: "",
       till_provider: "safaricom",
-      kopokopo_api_key: "",
-      kopokopo_merchant_id: "",
+      kopokopo_client_id: "",
+      kopokopo_client_secret: "",
       callback_url: "",
       environment: "sandbox",
       is_active: true
@@ -75,7 +75,7 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
       // SECURITY: Only fetch non-sensitive metadata, NEVER fetch encrypted credentials
       const { data, error } = await supabase
         .from("landlord_mpesa_configs")
-        .select("id, business_shortcode, till_number, shortcode_type, till_provider, kopokopo_merchant_id, callback_url, environment, is_active")
+        .select("id, business_shortcode, till_number, shortcode_type, till_provider, kopokopo_client_id, callback_url, environment, is_active")
         .eq("landlord_id", user.user?.id)
         .single();
 
@@ -94,8 +94,8 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
           passkey: "", // Never fetch credentials
           till_number: data.till_number || "",
           till_provider: (data.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
-          kopokopo_api_key: "", // Never fetch credentials
-          kopokopo_merchant_id: data.kopokopo_merchant_id || "",
+          kopokopo_client_id: data.kopokopo_client_id || "",
+          kopokopo_client_secret: "", // Never fetch credentials
           callback_url: data.callback_url || "",
           environment: data.environment as "sandbox" | "production",
           is_active: data.is_active
@@ -119,8 +119,8 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
           passkey: data.passkey,
           till_number: data.till_number,
           till_provider: data.till_provider,
-          kopokopo_api_key: data.kopokopo_api_key,
-          kopokopo_merchant_id: data.kopokopo_merchant_id,
+          kopokopo_client_id: data.kopokopo_client_id,
+          kopokopo_client_secret: data.kopokopo_client_secret,
           callback_url: data.callback_url || null,
           environment: data.environment,
           is_active: data.is_active
@@ -139,8 +139,8 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
         passkey: "",
         till_number: data.till_number,
         till_provider: data.till_provider,
-        kopokopo_api_key: "",
-        kopokopo_merchant_id: data.kopokopo_merchant_id,
+        kopokopo_client_id: data.kopokopo_client_id,
+        kopokopo_client_secret: "",
         callback_url: data.callback_url,
         environment: data.environment,
         is_active: data.is_active
@@ -251,37 +251,38 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="till_number">Till Number *</Label>
                   <Input
                     id="till_number"
                     {...form.register("till_number")}
-                    placeholder="e.g., 5071852"
+                    placeholder="e.g., 855087"
                   />
                   <p className="text-xs text-muted-foreground">Your Kopo Kopo till number</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="kopokopo_merchant_id">Merchant ID *</Label>
+                  <Label htmlFor="kopokopo_client_id">Kopo Kopo Client ID *</Label>
                   <Input
-                    id="kopokopo_merchant_id"
-                    {...form.register("kopokopo_merchant_id")}
-                    placeholder="merchant_12345"
+                    id="kopokopo_client_id"
+                    {...form.register("kopokopo_client_id")}
+                    placeholder="Enter your Kopo Kopo Client ID"
                   />
+                  <p className="text-xs text-muted-foreground">Get this from your Kopo Kopo dashboard</p>
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="kopokopo_api_key">
-                    Kopo Kopo API Key * {configExists && <span className="text-xs text-muted-foreground">(re-enter to update)</span>}
+                <div className="space-y-2">
+                  <Label htmlFor="kopokopo_client_secret">
+                    Kopo Kopo Client Secret * {configExists && <span className="text-xs text-muted-foreground">(re-enter to update)</span>}
                   </Label>
                   <Input
-                    id="kopokopo_api_key"
+                    id="kopokopo_client_secret"
                     type="password"
-                    {...form.register("kopokopo_api_key")}
-                    placeholder={configExists ? "••••••••••••••••" : "Enter API key"}
+                    {...form.register("kopokopo_client_secret")}
+                    placeholder={configExists ? "••••••••••••••••" : "Enter your Kopo Kopo Client Secret"}
                   />
-                  <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
+                  <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM before storage</p>
                 </div>
               </div>
             </div>
