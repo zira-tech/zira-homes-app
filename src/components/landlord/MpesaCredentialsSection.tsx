@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const [hasConfig, setHasConfig] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const hasInitializedRef = useRef(false);
   
   const [config, setConfig] = useState<MpesaConfig>({
     consumer_key: '',
@@ -63,60 +64,79 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   });
 
   // Load existing config - SECURITY: Only fetch non-sensitive metadata
-  useEffect(() => {
-    const loadConfig = async () => {
-      if (!user?.id) return;
+  const loadConfig = async () => {
+    if (!user?.id) return;
 
-      try {
-        // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
-        const { data, error } = await supabase
-          .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number')
-          .eq('landlord_id', user.id)
-          .maybeSingle();
+    // CRITICAL FIX: Don't reload config while user is editing to prevent field clearing
+    if (showForm) {
+      console.log('Skipping config reload - user is editing');
+      return;
+    }
 
-        if (error) {
-          console.error('Error loading M-Pesa config:', error);
-          return;
-        }
+    try {
+      // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
+      const { data, error } = await supabase
+        .from('landlord_mpesa_configs')
+        .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number')
+        .eq('landlord_id', user.id)
+        .maybeSingle();
 
-        if (data) {
-          // SECURITY: Never populate credential fields from database
-          // Users must re-enter credentials to update them
-          setConfig(prev => ({
-            ...prev,
-            id: data.id,
-            callback_url: data.callback_url || '',
-            environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
-            is_active: data.is_active,
-            business_shortcode: data.business_shortcode || '',
-            shortcode_type: (data.shortcode_type || 'paybill') as 'paybill' | 'till_safaricom' | 'till_kopokopo',
-            till_provider: (data.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
-            till_number: data.till_number || '',
-            kopokopo_client_id: data.kopokopo_client_id || '',
-            // Explicitly clear sensitive fields for security
-            consumer_key: '',
-            consumer_secret: '',
-            passkey: '',
-            kopokopo_client_secret: ''
-          }));
-          setHasConfig(true);
-          setIsOpen(true);
-          setShowForm(false); // Show summary view by default
-          onConfigChange(true);
-        } else {
-          setHasConfig(false);
-          setIsOpen(true);
-          setShowForm(false); // Show selection view
-          onConfigChange(false);
-        }
-      } catch (error) {
+      if (error) {
         console.error('Error loading M-Pesa config:', error);
+        return;
       }
-    };
 
+      if (data) {
+        // SECURITY: Never populate credential fields from database
+        // Users must re-enter credentials to update them
+        setConfig(prev => ({
+          ...prev,
+          id: data.id,
+          callback_url: data.callback_url || '',
+          environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
+          is_active: data.is_active,
+          business_shortcode: data.business_shortcode || '',
+          shortcode_type: (data.shortcode_type || 'paybill') as 'paybill' | 'till_safaricom' | 'till_kopokopo',
+          till_provider: (data.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
+          till_number: data.till_number || '',
+          kopokopo_client_id: data.kopokopo_client_id || '',
+          // Explicitly clear sensitive fields for security
+          consumer_key: '',
+          consumer_secret: '',
+          passkey: '',
+          kopokopo_client_secret: ''
+        }));
+        setHasConfig(true);
+        setIsOpen(true);
+        
+        // Only set showForm to false on initial load
+        if (!hasInitializedRef.current) {
+          setShowForm(false);
+          hasInitializedRef.current = true;
+        }
+        
+        onConfigChange(true);
+      } else {
+        setHasConfig(false);
+        setIsOpen(true);
+        
+        // Only set showForm to false on initial load
+        if (!hasInitializedRef.current) {
+          setShowForm(false);
+          hasInitializedRef.current = true;
+        }
+        
+        onConfigChange(false);
+      }
+    } catch (error) {
+      console.error('Error loading M-Pesa config:', error);
+    }
+  };
+
+  useEffect(() => {
     loadConfig();
-  }, [user?.id, onConfigChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // FIXED: Removed onConfigChange from dependencies to prevent re-renders
 
   const handleDeleteConfig = async () => {
     if (!user?.id || !config.id) return;
@@ -531,13 +551,12 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 <Select 
                   value={config.shortcode_type}
                   onValueChange={(value: 'paybill' | 'till_safaricom' | 'till_kopokopo') => {
-                    setConfig(prev => ({ ...prev, shortcode_type: value }));
-                    // Set till_provider when selecting till types
-                    if (value === 'till_safaricom') {
-                      setConfig(prev => ({ ...prev, till_provider: 'safaricom' }));
-                    } else if (value === 'till_kopokopo') {
-                      setConfig(prev => ({ ...prev, till_provider: 'kopokopo' }));
-                    }
+                    // Update shortcode_type and till_provider in a single setState
+                    setConfig(prev => ({
+                      ...prev,
+                      shortcode_type: value,
+                      till_provider: value === 'till_kopokopo' ? 'kopokopo' : 'safaricom'
+                    }));
                   }}
                 >
                   <SelectTrigger>
