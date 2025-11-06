@@ -488,7 +488,7 @@ serve(async (req) => {
       // Use global fallback credentials from secrets
       consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
       consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
-      shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
+      shortcode = Deno.env.get('MPESA_SHORTCODE') || '4155923';
       passkey = Deno.env.get('MPESA_PASSKEY');
       console.log('Using global fallback M-Pesa credentials');
     }

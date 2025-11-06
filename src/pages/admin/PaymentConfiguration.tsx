@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { toast } from "sonner";
-import { CreditCard, Plus, Settings, Trash2 } from "lucide-react";
+import { CreditCard, Plus, Settings, Trash2, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
 
 interface PaymentMethod {
   id: string;
@@ -146,7 +147,7 @@ const PaymentConfiguration = () => {
           <div>
             <h1 className="text-3xl font-bold text-primary">Payment Configuration</h1>
             <p className="text-muted-foreground">
-              Manage available payment methods for all landlords
+              Manage payment methods and platform-wide payment settings
             </p>
           </div>
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -226,6 +227,56 @@ const PaymentConfiguration = () => {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Platform M-Pesa Configuration Summary */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                <CardTitle>Platform M-Pesa Configuration</CardTitle>
+              </div>
+              <Badge variant="default">Active</Badge>
+            </div>
+            <CardDescription>
+              Default M-Pesa credentials for tenant payments
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-3 bg-background rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Platform Shortcode</p>
+                  <p className="text-lg font-mono font-bold">4155923</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Paybill Number</p>
+                </div>
+                <div className="p-3 bg-background rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Environment</p>
+                  <p className="text-lg font-bold">Production</p>
+                  <Badge variant="outline" className="mt-1">Live Payments</Badge>
+                </div>
+                <div className="p-3 bg-background rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Security</p>
+                  <p className="text-lg font-bold">AES-256-GCM</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Encrypted Storage</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-sm text-muted-foreground">
+                  Landlords without custom M-Pesa configs automatically use these platform defaults
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/admin/platform-payment-config" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Manage Platform Config
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Payment Methods Table */}
         <Card>

@@ -71,6 +71,7 @@ import LandlordManagement from "@/pages/admin/LandlordManagement";
 import AdminMessageTemplates from "@/pages/admin/MessageTemplates";
 import PDFTemplateManager from "@/pages/admin/PDFTemplateManager";
 import PaymentConfiguration from "@/pages/admin/PaymentConfiguration";
+import PlatformPaymentConfig from "@/pages/admin/PlatformPaymentConfig";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import AdminSupportCenter from "@/pages/admin/SupportCenter";
 import SystemConfiguration from "@/pages/admin/SystemConfiguration";
@@ -297,6 +298,7 @@ export const AppRoutes = () => {
                 <Route path="/message-templates" element={<AdminMessageTemplates />} />
                 <Route path="/pdf-templates" element={<PDFTemplateManager />} />
                 <Route path="/payment-config" element={<PaymentConfiguration />} />
+                <Route path="/platform-payment-config" element={<PlatformPaymentConfig />} />
                 <Route path="/analytics" element={<PlatformAnalytics />} />
                 <Route path="/support" element={<AdminSupportCenter />} />
                 <Route path="/system" element={<SystemConfiguration />} />

@@ -359,9 +359,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                           <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                           <span>Platform manages integration</span>
                         </li>
-                        <li className="flex items-start gap-2">
+                         <li className="flex items-start gap-2">
                           <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                          <span className="text-blue-600 dark:text-blue-400">Using Shortcode: 174379</span>
+                          <span className="text-blue-600 dark:text-blue-400">Using Shortcode: 4155923</span>
                         </li>
                       </ul>
                       <Button 
@@ -370,7 +370,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         onClick={() => {
                           toast({
                             title: "Using Platform Defaults",
-                            description: "Tenants can pay via M-Pesa using platform shortcode 174379",
+                            description: "Tenants can pay via M-Pesa using platform shortcode 4155923",
                           });
                         }}
                       >
@@ -555,7 +555,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   </Label>
                   <Input 
                     type="text"
-                    placeholder={config.shortcode_type === 'paybill' ? "e.g., 174379" : "e.g., 5071852"}
+                    placeholder={config.shortcode_type === 'paybill' ? "e.g., 4155923" : "e.g., 5071852"}
                     value={config.business_shortcode}
                     onChange={(e) => setConfig(prev => ({ ...prev, business_shortcode: e.target.value }))}
                   />
@@ -657,7 +657,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               <p className="font-medium">What this means:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Your API credentials will be permanently deleted</li>
-                <li>Tenant payments will use platform shortcode (174379)</li>
+                <li>Tenant payments will use platform shortcode (4155923)</li>
                 <li>You can reconfigure your own credentials anytime</li>
               </ul>
             </AlertDialogDescription>

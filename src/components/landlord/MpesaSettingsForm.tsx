@@ -215,7 +215,7 @@ export function MpesaSettingsForm({ landlordId }: MpesaSettingsFormProps) {
                 <Input
                   id="business_shortcode"
                   {...form.register("business_shortcode")}
-                  placeholder="e.g., 174379"
+                  placeholder="e.g., 4155923"
                 />
                 {form.formState.errors.business_shortcode && (
                   <p className="text-xs text-red-500">
