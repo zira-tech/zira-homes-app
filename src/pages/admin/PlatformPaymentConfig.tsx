@@ -87,7 +87,7 @@ export default function PlatformPaymentConfig() {
             size="sm" 
             asChild
           >
-            <Link to="/admin/payment-configuration" className="flex items-center gap-2">
+            <Link to="/admin/payment-config" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Payment Configuration
             </Link>
