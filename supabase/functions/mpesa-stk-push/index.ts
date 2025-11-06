@@ -398,8 +398,29 @@ serve(async (req) => {
       }
     }
 
-    let mpesaConfig = null;
+    // Check landlord's M-Pesa configuration preference
+    let mpesaConfigPreference = 'platform_default'; // default
+    let shouldLoadLandlordConfig = false;
+
     if (landlordConfigId) {
+      const { data: paymentPrefs } = await supabaseAdmin
+        .from('landlord_payment_preferences')
+        .select('mpesa_config_preference')
+        .eq('landlord_id', landlordConfigId)
+        .maybeSingle();
+
+      mpesaConfigPreference = paymentPrefs?.mpesa_config_preference || 'platform_default';
+      shouldLoadLandlordConfig = mpesaConfigPreference === 'custom';
+
+      console.log('💳 Landlord payment preference:', {
+        landlordId: landlordConfigId,
+        preference: mpesaConfigPreference,
+        willUseLandlordConfig: shouldLoadLandlordConfig
+      });
+    }
+
+    let mpesaConfig = null;
+    if (shouldLoadLandlordConfig && landlordConfigId) {
       const { data: config } = await supabaseAdmin
         .from('landlord_mpesa_configs')
         .select('*')
@@ -411,8 +432,11 @@ serve(async (req) => {
       console.log('Landlord M-Pesa config found:', !!mpesaConfig);
       
       if (!mpesaConfig) {
-        console.warn('⚠️ No landlord M-Pesa config found for landlordId:', landlordConfigId);
+        console.warn('⚠️ Landlord prefers custom M-Pesa but no config found for landlordId:', landlordConfigId);
+        console.warn('⚠️ Falling back to platform defaults');
       }
+    } else if (landlordConfigId) {
+      console.log('✅ Using platform default M-Pesa config (landlord preference)');
     }
 
     // Helper function to decrypt credentials
