@@ -24,8 +24,8 @@ interface MpesaConfig {
   paybill_number?: string;
   till_number?: string;
   till_provider?: 'safaricom' | 'kopokopo';
-  kopokopo_api_key?: string;
-  kopokopo_merchant_id?: string;
+  kopokopo_client_id?: string;
+  kopokopo_client_secret?: string;
   environment: 'sandbox' | 'production';
   callback_url?: string;
   is_active: boolean;
@@ -55,8 +55,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     paybill_number: '',
     till_number: '',
     till_provider: 'safaricom',
-    kopokopo_api_key: '',
-    kopokopo_merchant_id: '',
+    kopokopo_client_id: '',
+    kopokopo_client_secret: '',
     environment: 'sandbox',
     callback_url: '',
     is_active: true,
@@ -71,7 +71,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_merchant_id, till_number')
+          .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number')
           .eq('landlord_id', user.id)
           .maybeSingle();
 
@@ -93,12 +93,12 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
             shortcode_type: (data.shortcode_type || 'paybill') as 'paybill' | 'till_safaricom' | 'till_kopokopo',
             till_provider: (data.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
             till_number: data.till_number || '',
-            kopokopo_merchant_id: data.kopokopo_merchant_id || '',
+            kopokopo_client_id: data.kopokopo_client_id || '',
             // Explicitly clear sensitive fields for security
             consumer_key: '',
             consumer_secret: '',
             passkey: '',
-            kopokopo_api_key: ''
+            kopokopo_client_secret: ''
           }));
           setHasConfig(true);
           setIsOpen(true);
@@ -140,8 +140,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         paybill_number: '',
         till_number: '',
         till_provider: 'safaricom',
-        kopokopo_api_key: '',
-        kopokopo_merchant_id: '',
+        kopokopo_client_id: '',
+        kopokopo_client_secret: '',
         environment: 'sandbox',
         callback_url: '',
         is_active: true,
@@ -172,10 +172,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
     // Validate required fields based on shortcode type
     if (config.shortcode_type === 'till_kopokopo') {
-      if (!config.till_number || !config.kopokopo_api_key || !config.kopokopo_merchant_id) {
+      if (!config.till_number || !config.kopokopo_client_id || !config.kopokopo_client_secret) {
         toast({
           title: "Validation Error",
-          description: "Please fill in all required Kopo Kopo credentials.",
+          description: "Please fill in all required Kopo Kopo credentials: Till Number, Client ID, and Client Secret.",
           variant: "destructive",
         });
         return;
@@ -202,8 +202,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           shortcode_type: config.shortcode_type,
           till_number: config.till_number,
           till_provider: config.till_provider,
-          kopokopo_api_key: config.kopokopo_api_key,
-          kopokopo_merchant_id: config.kopokopo_merchant_id,
+          kopokopo_client_id: config.kopokopo_client_id,
+          kopokopo_client_secret: config.kopokopo_client_secret,
           passkey: config.passkey,
           callback_url: config.callback_url,
           environment: config.environment,
@@ -224,7 +224,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         consumer_key: '',
         consumer_secret: '',
         passkey: '',
-        kopokopo_api_key: ''
+        kopokopo_client_secret: ''
       }));
 
       toast({
@@ -451,8 +451,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     </div>
                     {config.shortcode_type === 'till_kopokopo' && (
                       <div>
-                        <p className="text-xs text-muted-foreground">Merchant ID</p>
-                        <p className="font-medium">{config.kopokopo_merchant_id}</p>
+                        <p className="text-xs text-muted-foreground">Client ID</p>
+                        <p className="font-medium">{config.kopokopo_client_id}</p>
                       </div>
                     )}
                     <div>
@@ -499,7 +499,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               </Card>
             )}
 
-            {/* Form State - Edit/Create Credentials */}
+              {/* Form State - Edit/Create Credentials */}
             {showForm && (
               <div className="space-y-4">
                 {/* SECURITY NOTICE */}
@@ -515,8 +515,118 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 </div>
               )}
 
-              {/* Conditional credential fields */}
-              {config.shortcode_type !== 'till_kopokopo' && (
+              {/* Shortcode Type Selection - Always show first */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Payment Type *</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">Paybill: Business account. Till Safaricom: Direct M-Pesa. Till Kopo Kopo: Payment gateway</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select 
+                  value={config.shortcode_type}
+                  onValueChange={(value: 'paybill' | 'till_safaricom' | 'till_kopokopo') => {
+                    setConfig(prev => ({ ...prev, shortcode_type: value }));
+                    // Set till_provider when selecting till types
+                    if (value === 'till_safaricom') {
+                      setConfig(prev => ({ ...prev, till_provider: 'safaricom' }));
+                    } else if (value === 'till_kopokopo') {
+                      setConfig(prev => ({ ...prev, till_provider: 'kopokopo' }));
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paybill">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Paybill Number</span>
+                        <span className="text-xs text-muted-foreground">Best for businesses collecting rent</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="till_safaricom">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Till Number - Safaricom Direct</span>
+                        <span className="text-xs text-muted-foreground">Direct M-Pesa till from Safaricom</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="till_kopokopo">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Till Number - Kopo Kopo</span>
+                        <span className="text-xs text-muted-foreground">Kopo Kopo payment gateway integration</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose your M-Pesa payment type based on your business setup
+                </p>
+              </div>
+
+              {/* Conditional credential fields based on payment type */}
+              {config.shortcode_type === 'till_kopokopo' ? (
+                // Kopo Kopo Till Fields
+                <div className="grid grid-cols-1 gap-4 p-4 bg-accent/50 rounded-lg border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-primary" />
+                    <h3 className="font-medium">Kopo Kopo OAuth Credentials</h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Till Number *</Label>
+                    <Input 
+                      type="text"
+                      placeholder="e.g., 855087"
+                      value={config.till_number || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, till_number: e.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Your Kopo Kopo till number
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Kopo Kopo Client ID *</Label>
+                    <Input 
+                      type="text"
+                      placeholder="Enter your Kopo Kopo Client ID"
+                      value={config.kopokopo_client_id || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_client_id: e.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground">Get this from your Kopo Kopo dashboard</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label>
+                        Kopo Kopo Client Secret * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
+                      </Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">OAuth client secret from your Kopo Kopo dashboard</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <Input 
+                      type="password"
+                      placeholder={hasConfig ? "••••••••••••••••" : "Enter your Kopo Kopo Client Secret"}
+                      value={config.kopokopo_client_secret || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_client_secret: e.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM before storage</p>
+                  </div>
+                </div>
+              ) : (
+                // Standard M-Pesa Fields
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -565,126 +675,19 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label>Shortcode Type *</Label>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-xs">Paybill: Business account. Till: Personal/shop till number</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <Select 
-                    value={config.shortcode_type}
-                    onValueChange={(value: 'paybill' | 'till_safaricom' | 'till_kopokopo') => {
-                      setConfig(prev => ({ ...prev, shortcode_type: value }));
-                      // Set till_provider when selecting till types
-                      if (value === 'till_safaricom') {
-                        setConfig(prev => ({ ...prev, till_provider: 'safaricom' }));
-                      } else if (value === 'till_kopokopo') {
-                        setConfig(prev => ({ ...prev, till_provider: 'kopokopo' }));
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paybill">
-                        <div className="flex flex-col">
-                          <span className="font-medium">Paybill Number</span>
-                          <span className="text-xs text-muted-foreground">Best for businesses collecting rent</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="till_safaricom">
-                        <div className="flex flex-col">
-                          <span className="font-medium">Till Number - Safaricom Direct</span>
-                          <span className="text-xs text-muted-foreground">Direct M-Pesa till from Safaricom</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="till_kopokopo">
-                        <div className="flex flex-col">
-                          <span className="font-medium">Till Number - Kopo Kopo</span>
-                          <span className="text-xs text-muted-foreground">Kopo Kopo payment gateway integration</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>
+                    {config.shortcode_type === 'paybill' ? 'Paybill Number' : 'Till Number'} *
+                  </Label>
+                  <Input 
+                    type="text"
+                    placeholder={config.shortcode_type === 'paybill' ? "e.g., 4155923" : "e.g., 5071852"}
+                    value={config.business_shortcode}
+                    onChange={(e) => setConfig(prev => ({ ...prev, business_shortcode: e.target.value }))}
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Choose your M-Pesa payment type based on your business setup
+                    Your {config.shortcode_type === 'paybill' ? 'paybill' : 'till'} number where payments are received
                   </p>
                 </div>
-                
-                {/* Conditional fields based on shortcode type */}
-                {(config.shortcode_type as 'paybill' | 'till_safaricom' | 'till_kopokopo') === 'till_kopokopo' ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Till Number *</Label>
-                      <Input 
-                        type="text"
-                        placeholder="e.g., 5071852"
-                        value={config.till_number || ''}
-                        onChange={(e) => setConfig(prev => ({ ...prev, till_number: e.target.value }))}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Your Kopo Kopo till number
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Label>
-                          Kopo Kopo API Key * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
-                        </Label>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-xs">Get this from your Kopo Kopo dashboard</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <Input 
-                        type="password"
-                        placeholder={hasConfig ? "••••••••••••••••" : "Enter Kopo Kopo API Key"}
-                        value={config.kopokopo_api_key || ''}
-                        onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_api_key: e.target.value }))}
-                      />
-                      <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Kopo Kopo Merchant ID *</Label>
-                      <Input 
-                        type="text"
-                        placeholder="e.g., merchant_12345"
-                        value={config.kopokopo_merchant_id || ''}
-                        onChange={(e) => setConfig(prev => ({ ...prev, kopokopo_merchant_id: e.target.value }))}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Your Kopo Kopo merchant identifier
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>
-                      {config.shortcode_type === 'paybill' ? 'Paybill Number' : 'Till Number'} *
-                    </Label>
-                    <Input 
-                      type="text"
-                      placeholder={config.shortcode_type === 'paybill' ? "e.g., 4155923" : "e.g., 5071852"}
-                      value={config.business_shortcode}
-                      onChange={(e) => setConfig(prev => ({ ...prev, business_shortcode: e.target.value }))}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Your {config.shortcode_type === 'paybill' ? 'paybill' : 'till'} number where payments are received
-                    </p>
-                  </div>
-                )}
                 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
