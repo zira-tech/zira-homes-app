@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePlatformConfig } from "@/hooks/usePlatformConfig";
 
 interface MpesaConfig {
   id?: string;
@@ -38,6 +39,7 @@ interface MpesaCredentialsSectionProps {
 export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = ({ onConfigChange }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { mpesaShortcode, mpesaDisplayName } = usePlatformConfig();
   const [isOpen, setIsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -252,7 +254,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       toast({
         title: "Platform Defaults Confirmed",
-        description: "Tenants can now pay via M-Pesa using platform shortcode 4155923",
+        description: `Tenants can now pay via M-Pesa using ${mpesaDisplayName || 'platform'} shortcode ${mpesaShortcode || '4155923'}`,
       });
       
       // Optionally close the section
@@ -571,7 +573,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         </li>
                          <li className="flex items-start gap-2">
                           <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                          <span className="text-blue-600 dark:text-blue-400">Using Shortcode: 4155923</span>
+                          <span className="text-blue-600 dark:text-blue-400">Using Shortcode: {mpesaShortcode || '4155923'}</span>
                         </li>
                       </ul>
                       <Button 

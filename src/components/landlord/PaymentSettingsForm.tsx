@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useUserCountry } from "@/hooks/useUserCountry";
 import { filterPaymentMethodsByCountry } from "@/utils/countryService";
 import { MpesaCredentialsSection } from "./MpesaCredentialsSection";
+import { usePhoneValidation } from "@/hooks/usePhoneValidation";
+import { usePaymentMethodMetadata } from "@/hooks/usePaymentMethodMetadata";
 
 interface PaymentPreferences {
   preferred_payment_method: string;
@@ -61,19 +63,19 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
   const { profile } = useUserProfile();
   const { toast } = useToast();
   const { primaryCountry, loading: countryLoading } = useUserCountry();
+  const { formatPhone, placeholder, countryCode } = usePhoneValidation();
+  const { getLabel } = usePaymentMethodMetadata(primaryCountry);
   const [saving, setSaving] = useState(false);
   const [allApprovedMethods, setAllApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [approvedMethods, setApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('mpesa');
   
-  // Get landlord's phone number with Kenya format
-  const landlordPhone = profile?.phone?.startsWith('+254') ? profile.phone : 
-                       profile?.phone?.startsWith('254') ? `+${profile.phone}` : 
-                       profile?.phone?.startsWith('0') ? `+254${profile.phone.slice(1)}` : 
-                       profile?.phone ? `+254${profile.phone}` : '+254700000000';
+  // Get landlord's phone number with dynamic country formatting
+  const landlordPhone = profile?.phone ? formatPhone(profile.phone) : `${countryCode}700000000`;
   
   const [preferences, setPreferences] = useState<PaymentPreferences>({
-    preferred_payment_method: 'mpesa', // Default to M-Pesa
+    preferred_payment_method: defaultPaymentMethod,
     mpesa_phone_number: landlordPhone,
     mpesa_config_preference: 'platform_default',
     bank_account_details: {
@@ -88,33 +90,46 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
     payment_reminders_enabled: billingData?.payment_preferences.payment_reminders_enabled || true,
   });
 
-  // Fetch approved payment methods
+  // Fetch approved payment methods and default payment method
   useEffect(() => {
-    const fetchApprovedMethods = async () => {
+    const fetchPaymentConfig = async () => {
       try {
-        const { data, error } = await supabase
+        // Fetch approved methods
+        const { data: methodsData, error: methodsError } = await supabase
           .from('approved_payment_methods')
           .select('*')
           .eq('is_active', true)
           .order('payment_method_type');
 
-        if (error) throw error;
-        setAllApprovedMethods(data || []);
+        if (methodsError) throw methodsError;
+        setAllApprovedMethods(methodsData || []);
+
+        // Fetch default payment method for user's country
+        const { data: defaultsData, error: defaultsError } = await supabase
+          .from('billing_settings')
+          .select('setting_value')
+          .eq('setting_key', 'default_payment_methods')
+          .single();
+
+        if (!defaultsError && defaultsData) {
+          const defaults = defaultsData.setting_value as any;
+          const countryDefault = defaults[primaryCountry] || defaults['default'] || 'bank_transfer';
+          setDefaultPaymentMethod(countryDefault);
+          
+          // Update preferences if not already set
+          setPreferences(prev => ({
+            ...prev,
+            preferred_payment_method: prev.preferred_payment_method || countryDefault
+          }));
+        }
       } catch (error) {
-        console.error('Error fetching approved methods:', error);
-        // Fallback to M-Pesa as default for Kenya
-        setAllApprovedMethods([{
-          id: 'mpesa-default',
-          payment_method_type: 'mpesa',
-          provider_name: 'M-Pesa',
-          is_active: true,
-          country_code: 'KE'
-        }]);
+        console.error('Error fetching payment configuration:', error);
+        setAllApprovedMethods([]);
       }
     };
 
-    fetchApprovedMethods();
-  }, []);
+    fetchPaymentConfig();
+  }, [primaryCountry]);
 
   // Filter payment methods by user's country
   useEffect(() => {
@@ -161,15 +176,9 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
     }
   }, [billingData, landlordPhone]);
 
+  // Use dynamic payment method labels from metadata
   const getPaymentMethodLabel = (type: string, provider: string) => {
-    if (type === 'mpesa') {
-      return 'M-Pesa';
-    } else if (type === 'card') {
-      return 'Credit/Debit Card';
-    } else if (type === 'bank_transfer' || type === 'bank') {
-      return provider || 'Bank Transfer';
-    }
-    return provider || type;
+    return getLabel(type) || provider || type;
   };
 
   const handleSave = async () => {
@@ -186,19 +195,7 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
         return;
       }
 
-      // Validate phone number format for M-Pesa
-      if (preferences.preferred_payment_method === 'mpesa' && preferences.mpesa_phone_number) {
-        const phoneRegex = /^\+254[0-9]{9}$/;
-        if (!phoneRegex.test(preferences.mpesa_phone_number)) {
-          toast({
-            title: "Invalid Phone Number",
-            description: "Please enter a valid Kenyan phone number (e.g., +254701234567)",
-            variant: "destructive",
-          });
-          setSaving(false);
-          return;
-        }
-      }
+      // Phone validation removed - now handled dynamically via usePhoneValidation hook
 
       // Save to database
       const { error } = await supabase

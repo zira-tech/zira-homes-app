@@ -130,22 +130,15 @@ const PaymentSettings = () => {
 
   const getPaymentMethodIcon = (type: string) => {
     switch (type) {
-      case 'mpesa':
-        return '📱';
-      case 'card':
-        return '💳';
-      case 'bank_transfer':
-        return '🏦';
-      default:
-        return '💰';
+      case 'mpesa': return '📱';
+      case 'card': return '💳';
+      case 'bank_transfer': return '🏦';
+      default: return '💰';
     }
   };
 
   const getPaymentMethodLabel = (type: string, provider: string) => {
-    if (type === 'mpesa') return 'M-Pesa';
-    if (type === 'card') return 'Credit/Debit Card';
-    if (type === 'bank_transfer' || type === 'bank') return provider || 'Bank Transfer';
-    return provider || type;
+    return getLabel(type) || provider || type;
   };
 
   // Check if M-Pesa is available as a payment method
