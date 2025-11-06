@@ -303,6 +303,7 @@ const PaymentSettings = () => {
                   }}
                   onSave={handleSavePreferences}
                   onCancel={() => setShowEditForm(false)}
+                  hasMpesaConfig={hasMpesaConfig}
                 />
               ) : preferences ? (
                 <div className="space-y-4">

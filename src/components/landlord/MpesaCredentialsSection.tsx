@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,12 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const hasInitializedRef = useRef(false);
   const hasDraftRef = useRef(false);
+  
+  // Refs for autofocus
+  const consumerKeyRef = useRef<HTMLInputElement>(null);
+  const businessShortcodeRef = useRef<HTMLInputElement>(null);
+  const kopoTillRef = useRef<HTMLInputElement>(null);
+  const kopoClientIdRef = useRef<HTMLInputElement>(null);
   
   const [config, setConfig] = useState<MpesaConfig>({
     consumer_key: '',
@@ -191,6 +197,20 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+  
+  // Autofocus logic when form opens
+  useEffect(() => {
+    if (showForm && isOpen) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        if (config.shortcode_type === 'till_kopokopo') {
+          kopoTillRef.current?.focus();
+        } else {
+          consumerKeyRef.current?.focus();
+        }
+      }, 100);
+    }
+  }, [showForm, isOpen, config.shortcode_type]);
 
   // Warn before navigation if unsaved changes exist
   useEffect(() => {
@@ -303,6 +323,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       setHasConfig(true);
       setShowForm(false); // Return to summary view
+      setIsOpen(true); // Keep section open to show summary
       hasDraftRef.current = false;
       clearDraft(); // Clear draft after successful save
       onConfigChange(true);
@@ -320,6 +341,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         title: "Success",
         description: "M-Pesa credentials saved securely.",
       });
+      
+      // Reload config to refresh summary view with latest data
+      await loadConfig();
     } catch (error: any) {
       console.error('Error saving M-Pesa config:', error);
       toast({
@@ -679,6 +703,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   <div className="space-y-2">
                     <Label>Till Number *</Label>
                     <Input 
+                      ref={kopoTillRef}
                       type="text"
                       placeholder="e.g., 855087"
                       value={config.till_number || ''}
@@ -687,6 +712,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         setConfig(prev => ({ ...prev, till_number: newValue }));
                         saveDraft({ till_number: newValue });
                       }}
+                      autoFocus
                     />
                     <p className="text-xs text-muted-foreground">
                       Your Kopo Kopo till number
@@ -696,6 +722,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   <div className="space-y-2">
                     <Label>Kopo Kopo Client ID *</Label>
                     <Input 
+                      ref={kopoClientIdRef}
                       type="text"
                       placeholder="Enter your Kopo Kopo Client ID"
                       value={config.kopokopo_client_id || ''}
@@ -762,6 +789,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     </Tooltip>
                   </div>
                   <Input 
+                    ref={consumerKeyRef}
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Key"}
                     value={config.consumer_key}
@@ -770,6 +798,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       setConfig(prev => ({ ...prev, consumer_key: newValue }));
                       saveDraft({ consumer_key: newValue });
                     }}
+                    autoFocus
                   />
                   <p className="text-xs text-muted-foreground">Never shared or stored in plain text</p>
                 </div>
@@ -806,6 +835,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     {config.shortcode_type === 'paybill' ? 'Paybill Number' : 'Till Number'} *
                   </Label>
                   <Input 
+                    ref={businessShortcodeRef}
                     type="text"
                     placeholder={config.shortcode_type === 'paybill' ? "e.g., 4155923" : "e.g., 5071852"}
                     value={config.business_shortcode}

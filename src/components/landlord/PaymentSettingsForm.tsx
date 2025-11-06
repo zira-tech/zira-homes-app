@@ -47,12 +47,14 @@ interface PaymentSettingsFormProps {
   billingData: BillingData | null;
   onSave: (preferences: PaymentPreferences) => void;
   onCancel: () => void;
+  hasMpesaConfig?: boolean;
 }
 
 export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
   billingData,
   onSave,
-  onCancel
+  onCancel,
+  hasMpesaConfig = false
 }) => {
   const { user } = useAuth();
   const { profile } = useUserProfile();
@@ -62,7 +64,6 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
   const [allApprovedMethods, setAllApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [approvedMethods, setApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [bankDetailsOpen, setBankDetailsOpen] = useState(false);
-  const [hasMpesaConfig, setHasMpesaConfig] = useState(false);
   
   // Get landlord's phone number with Kenya format
   const landlordPhone = profile?.phone?.startsWith('+254') ? profile.phone : 
@@ -236,16 +237,13 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
                 M-Pesa Configuration Required
               </h4>
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                Configure your M-Pesa API credentials below to enable direct payments from tenants. 
+                Configure your M-Pesa API credentials in the M-Pesa Integration Setup section above to enable direct payments from tenants. 
                 You can also use platform defaults if you don't have your own M-Pesa integration.
               </p>
             </div>
           </div>
         </div>
       )}
-
-      {/* M-Pesa API Credentials Section */}
-      <MpesaCredentialsSection onConfigChange={setHasMpesaConfig} />
 
       {/* Preferred Payment Method */}
       <div className="space-y-3">
