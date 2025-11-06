@@ -87,6 +87,9 @@ verify_jwt = false
 [functions.save-mpesa-credentials]
 verify_jwt = true
 
+[functions.kopokopo-callback]
+verify_jwt = false
+
 [functions.send-sms-with-logging]
 verify_jwt = false
 

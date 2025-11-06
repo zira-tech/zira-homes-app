@@ -1,0 +1,194 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    console.log('=== KOPO KOPO CALLBACK RECEIVED ===');
+    console.log('Request method:', req.method);
+    console.log('Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2));
+
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Parse callback data
+    const callbackData = await req.json();
+    console.log('Callback data:', JSON.stringify(callbackData, null, 2));
+
+    // Extract data from Kopo Kopo callback structure
+    const attributes = callbackData?.data?.attributes;
+    if (!attributes) {
+      console.error('❌ Invalid callback structure - missing data.attributes');
+      return new Response(
+        JSON.stringify({ error: 'Invalid callback structure' }), 
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const event = attributes.event || {};
+    const resource = event.resource || {};
+    const metadata = attributes.metadata || {};
+    const status = attributes.status; // 'Success' or 'Failed'
+
+    // Extract payment details
+    const transactionId = resource.id || '';
+    const reference = metadata.reference || '';
+    const phoneNumber = resource.sender_phone_number || '';
+    const amount = parseFloat(resource.amount || '0');
+    const senderFirstName = resource.sender_first_name || '';
+    const senderLastName = resource.sender_last_name || '';
+    const invoiceId = metadata.invoice_id || '';
+    const paymentType = metadata.payment_type || 'rent';
+    const landlordId = metadata.landlord_id || '';
+
+    console.log('📊 Payment Details:');
+    console.log(`   Status: ${status}`);
+    console.log(`   Reference: ${reference}`);
+    console.log(`   Transaction ID: ${transactionId}`);
+    console.log(`   Phone: ${phoneNumber}`);
+    console.log(`   Amount: ${amount}`);
+    console.log(`   Invoice ID: ${invoiceId}`);
+    console.log(`   Payment Type: ${paymentType}`);
+
+    // Determine final status
+    const finalStatus = status?.toLowerCase() === 'success' ? 'completed' : 'failed';
+
+    // Check if transaction already processed (idempotency)
+    const { data: existingTransaction } = await supabase
+      .from('mpesa_transactions')
+      .select('*')
+      .eq('checkout_request_id', reference)
+      .maybeSingle();
+
+    if (existingTransaction) {
+      console.log('⚠️ Transaction already processed:', reference);
+      return new Response(
+        JSON.stringify({ status: 'ok', message: 'Already processed' }), 
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Insert transaction record
+    console.log('💾 Inserting transaction record...');
+    const { error: transactionError } = await supabase
+      .from('mpesa_transactions')
+      .insert({
+        merchant_request_id: reference,
+        checkout_request_id: reference,
+        result_code: status === 'Success' ? '0' : '1',
+        result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
+        transaction_id: transactionId,
+        phone_number: phoneNumber,
+        amount: amount,
+        status: finalStatus,
+        provider: 'kopokopo',
+        raw_callback: callbackData
+      });
+
+    if (transactionError) {
+      console.error('❌ Failed to insert transaction:', transactionError);
+    } else {
+      console.log('✅ Transaction record inserted');
+    }
+
+    // If successful, update invoice and create payment record
+    if (finalStatus === 'completed' && invoiceId) {
+      console.log(`📝 Processing successful payment for invoice ${invoiceId}`);
+
+      // Update invoice status
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .update({ 
+          status: 'paid',
+          payment_date: new Date().toISOString()
+        })
+        .eq('id', invoiceId);
+
+      if (invoiceError) {
+        console.error('❌ Failed to update invoice:', invoiceError);
+      } else {
+        console.log('✅ Invoice status updated to paid');
+      }
+
+      // Get invoice details for payment record
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('lease_id, tenant_id')
+        .eq('id', invoiceId)
+        .single();
+
+      // Create payment record
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          invoice_id: invoiceId,
+          lease_id: invoice?.lease_id,
+          tenant_id: invoice?.tenant_id,
+          landlord_id: landlordId || null,
+          amount: amount,
+          payment_date: new Date().toISOString(),
+          payment_method: 'mpesa_kopokopo',
+          status: 'completed',
+          payment_reference: transactionId,
+          mpesa_receipt_number: transactionId
+        });
+
+      if (paymentError) {
+        console.error('❌ Failed to create payment record:', paymentError);
+      } else {
+        console.log('✅ Payment record created');
+      }
+
+      // Handle service charge invoice generation if applicable
+      if (paymentType === 'rent') {
+        console.log('🏢 Triggering service charge invoice generation...');
+        // This would be handled by the existing trigger or logic
+      }
+
+      // Send SMS confirmation (if SMS functionality exists)
+      console.log('📱 Payment confirmation SMS would be sent here');
+    } else if (finalStatus === 'failed') {
+      console.log('❌ Payment failed - no further action taken');
+    }
+
+    console.log('=== KOPO KOPO CALLBACK PROCESSED SUCCESSFULLY ===');
+
+    return new Response(
+      JSON.stringify({ status: 'ok', message: 'Callback processed' }), 
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+
+  } catch (error) {
+    console.error('❌ Kopo Kopo callback error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    return new Response(
+      JSON.stringify({ 
+        error: 'Callback processing failed',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }), 
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});

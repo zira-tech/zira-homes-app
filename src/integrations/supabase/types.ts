@@ -818,6 +818,8 @@ export type Database = {
           id: string
           is_active: boolean
           kopokopo_api_key_encrypted: string | null
+          kopokopo_client_id: string | null
+          kopokopo_client_secret_encrypted: string | null
           kopokopo_merchant_id: string | null
           landlord_id: string
           passkey_encrypted: string
@@ -838,6 +840,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           kopokopo_api_key_encrypted?: string | null
+          kopokopo_client_id?: string | null
+          kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id: string
           passkey_encrypted: string
@@ -858,6 +862,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           kopokopo_api_key_encrypted?: string | null
+          kopokopo_client_id?: string | null
+          kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id?: string
           passkey_encrypted?: string

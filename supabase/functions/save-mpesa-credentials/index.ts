@@ -89,8 +89,8 @@ serve(async (req) => {
       passkey,
       till_number,
       till_provider,
-      kopokopo_api_key,
-      kopokopo_merchant_id,
+      kopokopo_client_id,
+      kopokopo_client_secret,
       callback_url,
       environment,
       is_active
@@ -107,13 +107,13 @@ serve(async (req) => {
     // Validate required fields based on shortcode type
     if (shortcode_type === 'till_kopokopo') {
       // Kopo Kopo Till validation
-      if (!till_number || !kopokopo_api_key || !kopokopo_merchant_id) {
+      if (!till_number || !kopokopo_client_id || !kopokopo_client_secret) {
         return new Response(
-          JSON.stringify({ error: 'Missing required Kopo Kopo credentials: till_number, kopokopo_api_key, kopokopo_merchant_id' }),
+          JSON.stringify({ error: 'Missing required Kopo Kopo credentials: till_number, client_id, client_secret' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (till_number.length < 5 || kopokopo_api_key.length < 10 || kopokopo_merchant_id.length < 5) {
+      if (till_number.length < 5 || kopokopo_client_id.length < 10 || kopokopo_client_secret.length < 10) {
         return new Response(
           JSON.stringify({ error: 'Invalid Kopo Kopo credential format - credentials too short' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -142,13 +142,13 @@ serve(async (req) => {
     let encryptedConsumerKey: string | null = null;
     let encryptedConsumerSecret: string | null = null;
     let encryptedPasskey: string | null = null;
-    let encryptedKopokopoApiKey: string | null = null;
+    let encryptedKopokopoClientSecret: string | null = null;
 
     try {
       if (shortcode_type === 'till_kopokopo') {
-        // Encrypt Kopo Kopo credentials
-        encryptedKopokopoApiKey = await encryptCredential(kopokopo_api_key);
-        console.log('[MPESA-CREDS] Kopo Kopo API key encrypted successfully');
+        // Encrypt Kopo Kopo OAuth client secret
+        encryptedKopokopoClientSecret = await encryptCredential(kopokopo_client_secret);
+        console.log('[MPESA-CREDS] Kopo Kopo client secret encrypted successfully');
       } else {
         // Encrypt standard M-Pesa credentials
         encryptedConsumerKey = await encryptCredential(consumer_key);
@@ -196,11 +196,11 @@ serve(async (req) => {
     };
 
     if (shortcode_type === 'till_kopokopo') {
-      // Kopo Kopo configuration
+      // Kopo Kopo OAuth configuration
       upsertData.till_number = till_number;
       upsertData.till_provider = 'kopokopo';
-      upsertData.kopokopo_api_key_encrypted = encryptedKopokopoApiKey;
-      upsertData.kopokopo_merchant_id = kopokopo_merchant_id;
+      upsertData.kopokopo_client_id = kopokopo_client_id;
+      upsertData.kopokopo_client_secret_encrypted = encryptedKopokopoClientSecret;
       // Clear standard M-Pesa fields
       upsertData.consumer_key_encrypted = null;
       upsertData.consumer_secret_encrypted = null;
@@ -215,8 +215,8 @@ serve(async (req) => {
       upsertData.till_provider = shortcode_type === 'till_safaricom' ? 'safaricom' : null;
       upsertData.till_number = shortcode_type === 'till_safaricom' ? shortcode : null;
       // Clear Kopo Kopo fields
-      upsertData.kopokopo_api_key_encrypted = null;
-      upsertData.kopokopo_merchant_id = null;
+      upsertData.kopokopo_client_id = null;
+      upsertData.kopokopo_client_secret_encrypted = null;
     }
 
     // Save ONLY encrypted credentials using admin client (bypasses RLS for secure insert)

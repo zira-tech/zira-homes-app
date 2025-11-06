@@ -475,15 +475,15 @@ serve(async (req) => {
       
       try {
         if (shortcodeType === 'till_kopokopo' && tillProvider === 'kopokopo') {
-          // Kopo Kopo payment processing
+          // Kopo Kopo OAuth payment processing
           paymentProvider = 'kopokopo';
           tillNumber = mpesaConfig.till_number;
-          kopokopoMerchantId = mpesaConfig.kopokopo_merchant_id;
-          kopokopoApiKey = await decryptCredential(mpesaConfig.kopokopo_api_key_encrypted, encryptionKey);
+          kopokopoClientId = mpesaConfig.kopokopo_client_id;
+          kopokopoClientSecret = await decryptCredential(mpesaConfig.kopokopo_client_secret_encrypted, encryptionKey);
           
-          console.log('✅ Successfully decrypted Kopo Kopo credentials');
+          console.log('✅ Successfully retrieved Kopo Kopo credentials');
           console.log('📱 Kopo Kopo Till:', tillNumber);
-          console.log('🏪 Kopo Kopo Merchant:', kopokopoMerchantId);
+          console.log('🔑 Kopo Kopo Client ID:', kopokopoClientId);
         } else {
           // Standard M-Pesa payment processing (Paybill or Till Safaricom)
           paymentProvider = 'mpesa';
@@ -530,12 +530,12 @@ serve(async (req) => {
 
     // KOPO KOPO PAYMENT PROCESSING
     if (paymentProvider === 'kopokopo') {
-      console.log('🔄 Processing payment via Kopo Kopo...');
+      console.log('🔄 Processing payment via Kopo Kopo OAuth...');
       
-      if (!kopokopoApiKey || !kopokopoMerchantId || !tillNumber) {
-        console.error('Missing Kopo Kopo credentials:', {
-          missingApiKey: !kopokopoApiKey,
-          missingMerchantId: !kopokopoMerchantId,
+      if (!kopokopoClientId || !kopokopoClientSecret || !tillNumber) {
+        console.error('Missing Kopo Kopo OAuth credentials:', {
+          missingClientId: !kopokopoClientId,
+          missingClientSecret: !kopokopoClientSecret,
           missingTillNumber: !tillNumber
         });
         
@@ -545,8 +545,8 @@ serve(async (req) => {
             errorId: 'KOPOKOPO_CONFIG_MISSING',
             landlordId: landlordConfigId,
             missing: {
-              apiKey: !kopokopoApiKey,
-              merchantId: !kopokopoMerchantId,
+              clientId: !kopokopoClientId,
+              clientSecret: !kopokopoClientSecret,
               tillNumber: !tillNumber
             }
           }),
@@ -567,53 +567,94 @@ serve(async (req) => {
         phoneNumber = '+' + phoneNumber;
       }
 
-      // Kopo Kopo API configuration
-      const kopokopoBaseUrl = environment === 'production'
-        ? 'https://api.kopokopo.com/v1'
-        : 'https://sandbox.kopokopo.com/v1';
-
       try {
-        console.log('📱 Initiating Kopo Kopo STK Push...');
+        console.log('📱 Step 1: Getting Kopo Kopo OAuth token...');
         
-        // Kopo Kopo STK Push request
+        // Get OAuth access token
+        const tokenUrl = environment === 'production'
+          ? 'https://api.kopokopo.com/oauth/token'
+          : 'https://sandbox.kopokopo.com/oauth/token';
+
+        const tokenResponse = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'PropertyManagement/1.0'
+          },
+          body: new URLSearchParams({
+            client_id: kopokopoClientId,
+            client_secret: kopokopoClientSecret,
+            grant_type: 'client_credentials'
+          })
+        });
+
+        if (!tokenResponse.ok) {
+          const tokenError = await tokenResponse.json();
+          console.error('❌ Kopo Kopo OAuth error:', tokenError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to authenticate with Kopo Kopo',
+              errorId: 'KOPOKOPO_AUTH_FAILED',
+              details: tokenError
+            }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const tokenData = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+        
+        console.log('✅ Kopo Kopo access token obtained');
+        console.log('📱 Step 2: Initiating STK Push...');
+
+        // Construct callback URL
+        const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/kopokopo-callback`;
+
+        // Kopo Kopo STK Push payload
         const kopokopoPayload = {
-          payment_channel: 'M-PESA',
-          till_number: tillNumber,
-          subscriber: {
-            first_name: 'Customer',
-            last_name: 'Payment',
-            phone_number: phoneNumber
-          },
-          amount: {
-            currency: 'KES',
-            value: Math.round(amount * 100) // Kopo Kopo uses cents
-          },
+          paymentChannel: 'M-PESA STK Push',
+          tillNumber: tillNumber,
+          firstName: 'Customer',
+          lastName: 'Payment',
+          phoneNumber: phoneNumber,
+          amount: amount, // Amount in KES (not cents)
+          currency: 'KES',
+          callbackUrl: callbackUrl,
           metadata: {
             invoice_id: invoiceId || accountReference,
             payment_type: paymentType || 'rent',
             landlord_id: landlordConfigId,
-            transaction_desc: transactionDesc || 'Payment'
+            reference: `INV-${invoiceId || Date.now()}`,
+            notes: transactionDesc || 'Property rent payment'
           }
         };
 
-        console.log('Kopo Kopo request:', JSON.stringify(kopokopoPayload, null, 2));
+        console.log('Kopo Kopo STK Push payload:', JSON.stringify(kopokopoPayload, null, 2));
 
-        const kopokopoResponse = await fetch(`${kopokopoBaseUrl}/payment_requests`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${kopokopoApiKey}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(kopokopoPayload)
-        });
+        // Call Kopo Kopo API
+        const kopokopoBaseUrl = environment === 'production'
+          ? 'https://api.kopokopo.com'
+          : 'https://sandbox.kopokopo.com';
+
+        const kopokopoResponse = await fetch(
+          `${kopokopoBaseUrl}/api/v1/incoming_payments`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'PropertyManagement/1.0'
+            },
+            body: JSON.stringify(kopokopoPayload)
+          }
+        );
 
         const kopokopoData = await kopokopoResponse.json();
-        
         console.log('Kopo Kopo response:', JSON.stringify(kopokopoData, null, 2));
 
         if (!kopokopoResponse.ok) {
-          console.error('❌ Kopo Kopo API error:', kopokopoData);
+          console.error('❌ Kopo Kopo STK Push failed:', kopokopoData);
           return new Response(
             JSON.stringify({ 
               error: 'Failed to initiate Kopo Kopo payment',
@@ -627,15 +668,17 @@ serve(async (req) => {
           );
         }
 
-        // Log successful Kopo Kopo payment initiation
-        console.log('✅ Kopo Kopo STK Push sent successfully');
+        // Extract payment request ID from response
+        const paymentRequestId = kopokopoData.data?.id || `kk-${Date.now()}`;
         
+        console.log('✅ Kopo Kopo STK Push successful. Payment ID:', paymentRequestId);
+
         // Store STK request in database
-        const { error: stkError } = await supabaseAdmin
+        await supabaseAdmin
           .from('mpesa_stk_requests')
           .insert({
-            merchant_request_id: kopokopoData.id || 'kk-' + Date.now(),
-            checkout_request_id: kopokopoData.payment_request_id || 'kk-checkout-' + Date.now(),
+            merchant_request_id: paymentRequestId,
+            checkout_request_id: paymentRequestId,
             phone_number: phoneNumber,
             amount: amount,
             account_reference: accountReference || invoiceId,
@@ -647,35 +690,39 @@ serve(async (req) => {
             provider: 'kopokopo'
           });
 
-        if (stkError) {
-          console.error('Failed to log Kopo Kopo STK request:', stkError);
-        }
+        // Insert initial transaction record
+        await supabaseAdmin
+          .from('mpesa_transactions')
+          .insert({
+            merchant_request_id: paymentRequestId,
+            checkout_request_id: paymentRequestId,
+            result_code: '0',
+            result_desc: 'STK Push initiated',
+            phone_number: phoneNumber,
+            amount: amount,
+            status: 'pending',
+            provider: 'kopokopo'
+          });
 
         return new Response(
           JSON.stringify({
             success: true,
             provider: 'kopokopo',
-            message: 'STK push sent to your phone. Enter M-Pesa PIN to complete payment.',
+            message: 'STK push sent successfully. Please enter your M-Pesa PIN.',
             data: {
-              CheckoutRequestID: kopokopoData.payment_request_id || kopokopoData.id,
-              MerchantRequestID: kopokopoData.id,
-              ResponseDescription: 'Kopo Kopo STK push sent successfully',
-              TillNumber: tillNumber,
-              MerchantID: kopokopoMerchantId,
-              UsingLandlordConfig: true
+              CheckoutRequestID: paymentRequestId,
+              ResponseDescription: 'Kopo Kopo STK push initiated',
+              TillNumber: tillNumber
             }
           }),
-          { 
-            status: 200, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
       } catch (kopokopoError) {
-        console.error('❌ Kopo Kopo request failed:', kopokopoError);
+        console.error('❌ Kopo Kopo error:', kopokopoError);
         return new Response(
           JSON.stringify({ 
-            error: 'Failed to process Kopo Kopo payment',
+            error: 'Kopo Kopo payment processing failed',
             errorId: 'KOPOKOPO_REQUEST_FAILED',
             details: kopokopoError instanceof Error ? kopokopoError.message : 'Unknown error'
           }),
