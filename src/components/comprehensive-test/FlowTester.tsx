@@ -183,8 +183,8 @@ export function FlowTester() {
     // If no config exists, that's also a valid state for testing
     if (data && data.length > 0) {
       const config = data[0];
-      if (!config.consumer_key || !config.business_shortcode) {
-        throw new Error('M-Pesa configuration is incomplete');
+      if (!config.consumer_key_encrypted || !config.business_shortcode) {
+        throw new Error('M-Pesa configuration is incomplete - encrypted credentials required');
       }
       if (!config.environment) {
         throw new Error('M-Pesa environment not configured');

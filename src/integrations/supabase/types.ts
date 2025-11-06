@@ -811,17 +811,14 @@ export type Database = {
         Row: {
           business_shortcode: string
           callback_url: string | null
-          consumer_key: string
-          consumer_key_encrypted: string | null
-          consumer_secret: string
-          consumer_secret_encrypted: string | null
+          consumer_key_encrypted: string
+          consumer_secret_encrypted: string
           created_at: string
           environment: string
           id: string
           is_active: boolean
           landlord_id: string
-          passkey: string
-          passkey_encrypted: string | null
+          passkey_encrypted: string
           paybill_number: string | null
           phone_number: string | null
           shortcode_type: string | null
@@ -831,17 +828,14 @@ export type Database = {
         Insert: {
           business_shortcode: string
           callback_url?: string | null
-          consumer_key: string
-          consumer_key_encrypted?: string | null
-          consumer_secret: string
-          consumer_secret_encrypted?: string | null
+          consumer_key_encrypted: string
+          consumer_secret_encrypted: string
           created_at?: string
           environment?: string
           id?: string
           is_active?: boolean
           landlord_id: string
-          passkey: string
-          passkey_encrypted?: string | null
+          passkey_encrypted: string
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null
@@ -851,17 +845,14 @@ export type Database = {
         Update: {
           business_shortcode?: string
           callback_url?: string | null
-          consumer_key?: string
-          consumer_key_encrypted?: string | null
-          consumer_secret?: string
-          consumer_secret_encrypted?: string | null
+          consumer_key_encrypted?: string
+          consumer_secret_encrypted?: string
           created_at?: string
           environment?: string
           id?: string
           is_active?: boolean
           landlord_id?: string
-          passkey?: string
-          passkey_encrypted?: string | null
+          passkey_encrypted?: string
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null
