@@ -448,9 +448,17 @@ serve(async (req) => {
 
     // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
     let consumerKey, consumerSecret, shortcode, passkey;
+    let kopokopoApiKey, kopokopoMerchantId, tillNumber;
+    let paymentProvider = 'mpesa'; // 'mpesa' or 'kopokopo'
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
     
     if (mpesaConfig) {
+      // Check payment provider type
+      const shortcodeType = mpesaConfig.shortcode_type;
+      const tillProvider = mpesaConfig.till_provider;
+      
+      console.log('📋 Payment config type:', { shortcodeType, tillProvider });
+      
       // Decrypt credentials (encrypted-only storage enforced)
       const encryptionKey = Deno.env.get('MPESA_ENCRYPTION_KEY');
       
@@ -466,26 +474,41 @@ serve(async (req) => {
       }
       
       try {
-        // Decrypt credentials using the existing decryptCredential function
-        consumerKey = await decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey);
-        consumerSecret = await decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey);
-        passkey = await decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey);
-        shortcode = mpesaConfig.business_shortcode; // Not encrypted
-        
-        console.log('✅ Successfully decrypted landlord M-Pesa credentials');
+        if (shortcodeType === 'till_kopokopo' && tillProvider === 'kopokopo') {
+          // Kopo Kopo payment processing
+          paymentProvider = 'kopokopo';
+          tillNumber = mpesaConfig.till_number;
+          kopokopoMerchantId = mpesaConfig.kopokopo_merchant_id;
+          kopokopoApiKey = await decryptCredential(mpesaConfig.kopokopo_api_key_encrypted, encryptionKey);
+          
+          console.log('✅ Successfully decrypted Kopo Kopo credentials');
+          console.log('📱 Kopo Kopo Till:', tillNumber);
+          console.log('🏪 Kopo Kopo Merchant:', kopokopoMerchantId);
+        } else {
+          // Standard M-Pesa payment processing (Paybill or Till Safaricom)
+          paymentProvider = 'mpesa';
+          consumerKey = await decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey);
+          consumerSecret = await decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey);
+          passkey = await decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey);
+          shortcode = mpesaConfig.business_shortcode; // Not encrypted
+          
+          console.log('✅ Successfully decrypted landlord M-Pesa credentials');
+          console.log('📱 Shortcode type:', shortcodeType);
+        }
       } catch (decryptError) {
         console.error('❌ Failed to decrypt landlord credentials:', decryptError);
         return new Response(
           JSON.stringify({ 
-            error: 'Failed to decrypt M-Pesa credentials',
-            errorId: 'MPESA_DECRYPTION_FAILED',
-            hint: 'Landlord may need to re-configure M-Pesa settings'
+            error: 'Failed to decrypt payment credentials',
+            errorId: 'PAYMENT_DECRYPTION_FAILED',
+            hint: 'Landlord may need to re-configure payment settings'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     } else {
-      // Use global fallback credentials from secrets
+      // Use global fallback credentials from secrets (M-Pesa only)
+      paymentProvider = 'mpesa';
       consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
       consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
       shortcode = Deno.env.get('MPESA_SHORTCODE') || '4155923';
@@ -493,38 +516,180 @@ serve(async (req) => {
       console.log('Using global fallback M-Pesa credentials');
     }
 
-    console.log('M-Pesa Environment Check:', {
+    console.log('Payment Provider Check:', {
+      paymentProvider,
       hasConsumerKey: !!consumerKey,
       hasConsumerSecret: !!consumerSecret,
-      shortcode,
       hasPasskey: !!passkey,
+      hasKopokopoApiKey: !!kopokopoApiKey,
+      kopokopoMerchantId,
+      tillNumber,
       environment,
       usingLandlordConfig: !!mpesaConfig
-    })
+    });
 
-    // Handle dry run after we have all configuration
-    if (shouldProcessDryRun) {
-      console.log('DRY RUN: Mock STK push response');
-      return new Response(
-        JSON.stringify({
-          success: true,
-          dryRun: true,
-          message: 'Mock STK push - no actual payment initiated',
-          data: {
-            CheckoutRequestID: 'mock-checkout-' + Date.now(),
-            MerchantRequestID: 'mock-merchant-' + Date.now(),
-            ResponseDescription: 'Mock STK push sent successfully',
-            BusinessShortCode: shortcode,
-            UsingLandlordConfig: !!mpesaConfig
+    // KOPO KOPO PAYMENT PROCESSING
+    if (paymentProvider === 'kopokopo') {
+      console.log('🔄 Processing payment via Kopo Kopo...');
+      
+      if (!kopokopoApiKey || !kopokopoMerchantId || !tillNumber) {
+        console.error('Missing Kopo Kopo credentials:', {
+          missingApiKey: !kopokopoApiKey,
+          missingMerchantId: !kopokopoMerchantId,
+          missingTillNumber: !tillNumber
+        });
+        
+        return new Response(
+          JSON.stringify({ 
+            error: 'Kopo Kopo payment gateway not configured properly',
+            errorId: 'KOPOKOPO_CONFIG_MISSING',
+            landlordId: landlordConfigId,
+            missing: {
+              apiKey: !kopokopoApiKey,
+              merchantId: !kopokopoMerchantId,
+              tillNumber: !tillNumber
+            }
+          }),
+          { 
+            status: 503, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        );
+      }
+
+      // Format phone number for Kopo Kopo
+      let phoneNumber = phone.toString().replace(/\D/g, '');
+      if (phoneNumber.startsWith('0')) {
+        phoneNumber = '+254' + phoneNumber.slice(1);
+      } else if (!phoneNumber.startsWith('254')) {
+        phoneNumber = '+254' + phoneNumber;
+      } else if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+' + phoneNumber;
+      }
+
+      // Kopo Kopo API configuration
+      const kopokopoBaseUrl = environment === 'production'
+        ? 'https://api.kopokopo.com/v1'
+        : 'https://sandbox.kopokopo.com/v1';
+
+      try {
+        console.log('📱 Initiating Kopo Kopo STK Push...');
+        
+        // Kopo Kopo STK Push request
+        const kopokopoPayload = {
+          payment_channel: 'M-PESA',
+          till_number: tillNumber,
+          subscriber: {
+            first_name: 'Customer',
+            last_name: 'Payment',
+            phone_number: phoneNumber
+          },
+          amount: {
+            currency: 'KES',
+            value: Math.round(amount * 100) // Kopo Kopo uses cents
+          },
+          metadata: {
+            invoice_id: invoiceId || accountReference,
+            payment_type: paymentType || 'rent',
+            landlord_id: landlordConfigId,
+            transaction_desc: transactionDesc || 'Payment'
+          }
+        };
+
+        console.log('Kopo Kopo request:', JSON.stringify(kopokopoPayload, null, 2));
+
+        const kopokopoResponse = await fetch(`${kopokopoBaseUrl}/payment_requests`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${kopokopoApiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(kopokopoPayload)
+        });
+
+        const kopokopoData = await kopokopoResponse.json();
+        
+        console.log('Kopo Kopo response:', JSON.stringify(kopokopoData, null, 2));
+
+        if (!kopokopoResponse.ok) {
+          console.error('❌ Kopo Kopo API error:', kopokopoData);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to initiate Kopo Kopo payment',
+              errorId: 'KOPOKOPO_API_ERROR',
+              details: kopokopoData
+            }),
+            { 
+              status: kopokopoResponse.status, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
         }
-      )
+
+        // Log successful Kopo Kopo payment initiation
+        console.log('✅ Kopo Kopo STK Push sent successfully');
+        
+        // Store STK request in database
+        const { error: stkError } = await supabaseAdmin
+          .from('mpesa_stk_requests')
+          .insert({
+            merchant_request_id: kopokopoData.id || 'kk-' + Date.now(),
+            checkout_request_id: kopokopoData.payment_request_id || 'kk-checkout-' + Date.now(),
+            phone_number: phoneNumber,
+            amount: amount,
+            account_reference: accountReference || invoiceId,
+            transaction_desc: transactionDesc || 'Kopo Kopo Payment',
+            status: 'pending',
+            invoice_id: invoiceId,
+            payment_type: paymentType || 'rent',
+            landlord_id: landlordConfigId,
+            provider: 'kopokopo'
+          });
+
+        if (stkError) {
+          console.error('Failed to log Kopo Kopo STK request:', stkError);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            provider: 'kopokopo',
+            message: 'STK push sent to your phone. Enter M-Pesa PIN to complete payment.',
+            data: {
+              CheckoutRequestID: kopokopoData.payment_request_id || kopokopoData.id,
+              MerchantRequestID: kopokopoData.id,
+              ResponseDescription: 'Kopo Kopo STK push sent successfully',
+              TillNumber: tillNumber,
+              MerchantID: kopokopoMerchantId,
+              UsingLandlordConfig: true
+            }
+          }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+
+      } catch (kopokopoError) {
+        console.error('❌ Kopo Kopo request failed:', kopokopoError);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to process Kopo Kopo payment',
+            errorId: 'KOPOKOPO_REQUEST_FAILED',
+            details: kopokopoError instanceof Error ? kopokopoError.message : 'Unknown error'
+          }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
     }
 
+    // STANDARD M-PESA PAYMENT PROCESSING
+    console.log('🔄 Processing payment via standard M-Pesa...');
+    
     if (!consumerKey || !consumerSecret || !passkey) {
       console.error('Missing M-Pesa credentials:', {
         missingConsumerKey: !consumerKey,
@@ -599,7 +764,7 @@ serve(async (req) => {
     const callbackUrl = mpesaConfig?.callback_url || `${Deno.env.get('SUPABASE_URL')}/functions/v1/mpesa-callback`;
 
     // Determine transaction type based on shortcode type
-    const transactionType = mpesaConfig?.shortcode_type === 'till' 
+    const transactionType = (mpesaConfig?.shortcode_type === 'till_safaricom' || mpesaConfig?.shortcode_type === 'till') 
       ? 'CustomerBuyGoodsOnline' 
       : 'CustomerPayBillOnline';
 

@@ -87,49 +87,75 @@ serve(async (req) => {
       shortcode,
       shortcode_type,
       passkey,
+      till_number,
+      till_provider,
+      kopokopo_api_key,
+      kopokopo_merchant_id,
       callback_url,
       environment,
       is_active
     } = await req.json();
 
-    // Validate required fields
-    if (!consumer_key || !consumer_secret || !shortcode || !passkey) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required M-Pesa credentials' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Validate shortcode_type
-    if (shortcode_type && !['paybill', 'till'].includes(shortcode_type)) {
+    if (shortcode_type && !['paybill', 'till_safaricom', 'till_kopokopo'].includes(shortcode_type)) {
       return new Response(
-        JSON.stringify({ error: 'Invalid shortcode type. Must be "paybill" or "till"' }),
+        JSON.stringify({ error: 'Invalid shortcode type. Must be "paybill", "till_safaricom", or "till_kopokopo"' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate field lengths for security
-    if (consumer_key.length < 10 || consumer_secret.length < 10 || 
-        shortcode.length < 5 || passkey.length < 20) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid credential format - credentials too short' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Validate required fields based on shortcode type
+    if (shortcode_type === 'till_kopokopo') {
+      // Kopo Kopo Till validation
+      if (!till_number || !kopokopo_api_key || !kopokopo_merchant_id) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required Kopo Kopo credentials: till_number, kopokopo_api_key, kopokopo_merchant_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (till_number.length < 5 || kopokopo_api_key.length < 10 || kopokopo_merchant_id.length < 5) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid Kopo Kopo credential format - credentials too short' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Standard M-Pesa validation (Paybill or Till Safaricom)
+      if (!consumer_key || !consumer_secret || !shortcode || !passkey) {
+        return new Response(
+          JSON.stringify({ error: 'Missing required M-Pesa credentials: consumer_key, consumer_secret, shortcode, passkey' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (consumer_key.length < 10 || consumer_secret.length < 10 || 
+          shortcode.length < 5 || passkey.length < 20) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid M-Pesa credential format - credentials too short' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    console.log(`[MPESA-CREDS] Saving encrypted credentials for landlord: ${user.id}`);
+    console.log(`[MPESA-CREDS] Saving encrypted credentials for landlord: ${user.id}, type: ${shortcode_type}`);
 
     // SECURITY: Encrypt all sensitive credentials before storage
-    let encryptedConsumerKey: string;
-    let encryptedConsumerSecret: string;
-    let encryptedPasskey: string;
+    let encryptedConsumerKey: string | null = null;
+    let encryptedConsumerSecret: string | null = null;
+    let encryptedPasskey: string | null = null;
+    let encryptedKopokopoApiKey: string | null = null;
 
     try {
-      encryptedConsumerKey = await encryptCredential(consumer_key);
-      encryptedConsumerSecret = await encryptCredential(consumer_secret);
-      encryptedPasskey = await encryptCredential(passkey);
-      
-      console.log('[MPESA-CREDS] Credentials encrypted successfully');
+      if (shortcode_type === 'till_kopokopo') {
+        // Encrypt Kopo Kopo credentials
+        encryptedKopokopoApiKey = await encryptCredential(kopokopo_api_key);
+        console.log('[MPESA-CREDS] Kopo Kopo API key encrypted successfully');
+      } else {
+        // Encrypt standard M-Pesa credentials
+        encryptedConsumerKey = await encryptCredential(consumer_key);
+        encryptedConsumerSecret = await encryptCredential(consumer_secret);
+        encryptedPasskey = await encryptCredential(passkey);
+        console.log('[MPESA-CREDS] M-Pesa credentials encrypted successfully');
+      }
     } catch (encryptError) {
       console.error('[MPESA-CREDS] Encryption error:', encryptError);
       return new Response(
@@ -159,21 +185,44 @@ serve(async (req) => {
       // Don't fail the request for logging issues
     }
 
+    // Build upsert object based on shortcode type
+    const upsertData: any = {
+      landlord_id: user.id,
+      shortcode_type: shortcode_type || 'paybill',
+      callback_url: callback_url || null,
+      environment: environment || 'sandbox',
+      is_active: is_active !== false, // Default to true
+      updated_at: new Date().toISOString()
+    };
+
+    if (shortcode_type === 'till_kopokopo') {
+      // Kopo Kopo configuration
+      upsertData.till_number = till_number;
+      upsertData.till_provider = 'kopokopo';
+      upsertData.kopokopo_api_key_encrypted = encryptedKopokopoApiKey;
+      upsertData.kopokopo_merchant_id = kopokopo_merchant_id;
+      // Clear standard M-Pesa fields
+      upsertData.consumer_key_encrypted = null;
+      upsertData.consumer_secret_encrypted = null;
+      upsertData.passkey_encrypted = null;
+      upsertData.business_shortcode = null;
+    } else {
+      // Standard M-Pesa configuration (Paybill or Till Safaricom)
+      upsertData.consumer_key_encrypted = encryptedConsumerKey;
+      upsertData.consumer_secret_encrypted = encryptedConsumerSecret;
+      upsertData.passkey_encrypted = encryptedPasskey;
+      upsertData.business_shortcode = shortcode;
+      upsertData.till_provider = shortcode_type === 'till_safaricom' ? 'safaricom' : null;
+      upsertData.till_number = shortcode_type === 'till_safaricom' ? shortcode : null;
+      // Clear Kopo Kopo fields
+      upsertData.kopokopo_api_key_encrypted = null;
+      upsertData.kopokopo_merchant_id = null;
+    }
+
     // Save ONLY encrypted credentials using admin client (bypasses RLS for secure insert)
     const { data: savedConfig, error: saveError } = await supabaseAdmin
       .from('landlord_mpesa_configs')
-      .upsert({
-        landlord_id: user.id,
-        consumer_key_encrypted: encryptedConsumerKey,
-        consumer_secret_encrypted: encryptedConsumerSecret,
-        passkey_encrypted: encryptedPasskey,
-        business_shortcode: shortcode,
-        shortcode_type: shortcode_type || 'paybill',
-        callback_url: callback_url || null,
-        environment: environment || 'sandbox',
-        is_active: is_active !== false, // Default to true
-        updated_at: new Date().toISOString()
-      }, {
+      .upsert(upsertData, {
         onConflict: 'landlord_id',
         ignoreDuplicates: false
       })

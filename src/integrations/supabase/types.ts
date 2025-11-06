@@ -1342,6 +1342,63 @@ export type Database = {
         }
         Relationships: []
       }
+      mpesa_stk_requests: {
+        Row: {
+          account_reference: string | null
+          amount: number
+          checkout_request_id: string | null
+          created_at: string | null
+          id: string
+          invoice_id: string | null
+          landlord_id: string | null
+          merchant_request_id: string
+          payment_type: string | null
+          phone_number: string
+          provider: string | null
+          response_code: string | null
+          response_description: string | null
+          status: string
+          transaction_desc: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_reference?: string | null
+          amount: number
+          checkout_request_id?: string | null
+          created_at?: string | null
+          id?: string
+          invoice_id?: string | null
+          landlord_id?: string | null
+          merchant_request_id: string
+          payment_type?: string | null
+          phone_number: string
+          provider?: string | null
+          response_code?: string | null
+          response_description?: string | null
+          status?: string
+          transaction_desc?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_reference?: string | null
+          amount?: number
+          checkout_request_id?: string | null
+          created_at?: string | null
+          id?: string
+          invoice_id?: string | null
+          landlord_id?: string | null
+          merchant_request_id?: string
+          payment_type?: string | null
+          phone_number?: string
+          provider?: string | null
+          response_code?: string | null
+          response_description?: string | null
+          status?: string
+          transaction_desc?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       mpesa_transactions: {
         Row: {
           amount: number
