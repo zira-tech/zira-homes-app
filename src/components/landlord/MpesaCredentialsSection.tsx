@@ -3,13 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Zap, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Globe, Settings, Info, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MpesaConfig {
   id?: string;
@@ -34,10 +36,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const { user } = useAuth();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
-  const [usePlatformDefaults, setUsePlatformDefaults] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [hasConfig, setHasConfig] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const [config, setConfig] = useState<MpesaConfig>({
     consumer_key: '',
@@ -87,13 +90,14 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
             consumer_secret: '',
             passkey: ''
           }));
-          setUsePlatformDefaults(false);
           setHasConfig(true);
           setIsOpen(true);
+          setShowForm(false); // Show summary view by default
           onConfigChange(true);
         } else {
           setHasConfig(false);
           setIsOpen(true);
+          setShowForm(false); // Show selection view
           onConfigChange(false);
         }
       } catch (error) {
@@ -104,54 +108,54 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     loadConfig();
   }, [user?.id, onConfigChange]);
 
+  const handleDeleteConfig = async () => {
+    if (!user?.id || !config.id) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('landlord_mpesa_configs')
+        .delete()
+        .eq('id', config.id);
+
+      if (error) throw error;
+
+      setConfig({
+        consumer_key: '',
+        consumer_secret: '',
+        passkey: '',
+        business_shortcode: '',
+        shortcode_type: 'paybill',
+        phone_number: '',
+        paybill_number: '',
+        till_number: '',
+        environment: 'sandbox',
+        callback_url: '',
+        is_active: true,
+      });
+      setHasConfig(false);
+      setShowForm(false);
+      setShowDeleteDialog(false);
+      onConfigChange(false);
+
+      toast({
+        title: "Success",
+        description: "Switched to platform default M-Pesa configuration.",
+      });
+    } catch (error) {
+      console.error('Error deleting config:', error);
+      toast({
+        title: "Error", 
+        description: "Failed to switch to platform defaults.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user?.id) return;
-    
-    if (usePlatformDefaults) {
-      // Delete custom config if switching to platform defaults
-      if (config.id) {
-        setSaving(true);
-        try {
-          const { error } = await supabase
-            .from('landlord_mpesa_configs')
-            .delete()
-            .eq('id', config.id);
-
-          if (error) throw error;
-
-          setConfig({
-            consumer_key: '',
-            consumer_secret: '',
-            passkey: '',
-            business_shortcode: '',
-            shortcode_type: 'paybill',
-            phone_number: '',
-            paybill_number: '',
-            till_number: '',
-            environment: 'sandbox',
-            callback_url: '',
-            is_active: true,
-          });
-          setHasConfig(false);
-          onConfigChange(false);
-
-          toast({
-            title: "Success",
-            description: "Switched to platform default M-Pesa configuration.",
-          });
-        } catch (error) {
-          console.error('Error deleting config:', error);
-          toast({
-            title: "Error", 
-            description: "Failed to switch to platform defaults.",
-            variant: "destructive",
-          });
-        } finally {
-          setSaving(false);
-        }
-      }
-      return;
-    }
 
     // Validate required fields
     if (!config.consumer_key || !config.consumer_secret || !config.passkey || !config.business_shortcode) {
@@ -183,6 +187,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       if (data?.error) throw new Error(data.error);
 
       setHasConfig(true);
+      setShowForm(false); // Return to summary view
       onConfigChange(true);
       
       // Clear sensitive data from local state for security
@@ -254,66 +259,207 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   };
 
   return (
-    <div className="space-y-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center justify-between w-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <Shield className="h-5 w-5 text-blue-600" />
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                M-Pesa API Credentials
-              </h3>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasConfig ? (
-                <Badge variant="default" className="gap-1">
-                  <CheckCircle className="h-3 w-3" />
-                  Configured
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="gap-1">
-                  <XCircle className="h-3 w-3" />
-                  Not Configured
-                </Badge>
-              )}
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        
-        <CollapsibleContent className="space-y-4 pt-4">
-          {/* Informational alert */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div className="text-sm text-blue-800 dark:text-blue-200">
-                <p className="font-medium mb-1">M-Pesa Integration</p>
-                <p>Configure your own M-Pesa credentials so tenant payments go directly to your paybill/till number. Without this, payments will use platform defaults.</p>
+    <TooltipProvider>
+      <div className="space-y-4 border border-border rounded-lg p-4">
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full p-2 hover:bg-accent rounded">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <Shield className="h-5 w-5 text-primary" />
+                <h3 className="text-sm font-medium">
+                  M-Pesa API Credentials
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {hasConfig ? (
+                  <Badge variant="default" className="gap-1">
+                    <CheckCircle className="h-3 w-3" />
+                    Configured
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="gap-1">
+                    <Globe className="h-3 w-3" />
+                    Using Platform Defaults
+                  </Badge>
+                )}
               </div>
             </div>
-          </div>
+          </CollapsibleTrigger>
+          
+          <CollapsibleContent className="space-y-4 pt-4">
+            {/* Initial State - No Configuration */}
+            {!hasConfig && !showForm && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                    <div className="text-sm text-blue-800 dark:text-blue-200">
+                      <p className="font-medium mb-1">Choose M-Pesa Configuration</p>
+                      <p>Configure your own M-Pesa API credentials for direct payments to your account, or use platform defaults.</p>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Platform Defaults Toggle */}
-          <div className="flex items-center justify-between py-2">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                Use Platform Defaults
-              </Label>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                Use system-wide M-Pesa configuration instead of your own credentials
-              </p>
-            </div>
-            <Switch 
-              checked={usePlatformDefaults}
-              onCheckedChange={setUsePlatformDefaults}
-              className="data-[state=checked]:bg-blue-600"
-            />
-          </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Option 1: Configure Custom Credentials */}
+                  <Card className="border-2 hover:border-primary transition-colors cursor-pointer">
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-base">My Own M-Pesa</CardTitle>
+                      </div>
+                      <CardDescription>
+                        Tenant payments go directly to your paybill/till number
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 text-sm text-muted-foreground mb-4">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                          <span>Direct payments to your account</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                          <span>Full control over your funds</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                          <span>Instant settlement</span>
+                        </li>
+                      </ul>
+                      <Button 
+                        onClick={() => setShowForm(true)}
+                        className="w-full"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure Custom Credentials
+                      </Button>
+                    </CardContent>
+                  </Card>
 
-          {!usePlatformDefaults && (
-            <div className="space-y-4">
-              {/* SECURITY NOTICE */}
-              {hasConfig && (
+                  {/* Option 2: Platform Defaults */}
+                  <Card className="border-2 hover:border-primary transition-colors cursor-pointer">
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-base">Platform Defaults</CardTitle>
+                      </div>
+                      <CardDescription>
+                        Use system-wide M-Pesa configuration
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 text-sm text-muted-foreground mb-4">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                          <span>Quick setup, no API keys needed</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                          <span>Platform manages integration</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                          <span className="text-blue-600 dark:text-blue-400">Using Shortcode: 174379</span>
+                        </li>
+                      </ul>
+                      <Button 
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => {
+                          toast({
+                            title: "Using Platform Defaults",
+                            description: "Tenants can pay via M-Pesa using platform shortcode 174379",
+                          });
+                        }}
+                      >
+                        <Globe className="h-4 w-4 mr-2" />
+                        Continue with Defaults
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Configured State - Summary View */}
+            {hasConfig && !showForm && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        Custom M-Pesa Configuration Active
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        Tenant payments go directly to your account
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4 p-4 bg-accent rounded-lg">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Shortcode Type</p>
+                      <p className="font-medium">
+                        {config.shortcode_type === 'paybill' ? 'Paybill Number' : 'Till Number'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Shortcode</p>
+                      <p className="font-medium">{config.business_shortcode}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Environment</p>
+                      <p className="font-medium capitalize">{config.environment}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <Badge variant={config.is_active ? "default" : "secondary"}>
+                        {config.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div className="text-sm text-amber-800 dark:text-amber-200">
+                        <p className="font-medium">Credentials Encrypted</p>
+                        <p>API credentials are stored using AES-256-GCM encryption and never displayed.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button 
+                      variant="default"
+                      onClick={() => setShowForm(true)}
+                      className="flex-1"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Edit Credentials
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="flex-1"
+                    >
+                      <Globe className="h-4 w-4 mr-2" />
+                      Switch to Platform Defaults
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Form State - Edit/Create Credentials */}
+            {showForm && (
+              <div className="space-y-4">
+                {/* SECURITY NOTICE */}
+                {hasConfig && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
                   <div className="flex items-start gap-2">
                     <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
@@ -327,44 +473,70 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Consumer Key * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label>
+                      Consumer Key * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Get this from your M-Pesa Daraja Portal under "Apps"</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input 
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Key"}
                     value={config.consumer_key}
                     onChange={(e) => setConfig(prev => ({ ...prev, consumer_key: e.target.value }))}
-                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                   <p className="text-xs text-muted-foreground">Never shared or stored in plain text</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Consumer Secret * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label>
+                      Consumer Secret * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Secret key from M-Pesa Daraja Portal - keep this secure</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input 
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••" : "Enter M-Pesa Consumer Secret"}
                     value={config.consumer_secret}
                     onChange={(e) => setConfig(prev => ({ ...prev, consumer_secret: e.target.value }))}
-                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                   <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Shortcode Type *
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Shortcode Type *</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">Paybill: Business account. Till: Personal/shop till number</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Select 
                     value={config.shortcode_type}
                     onValueChange={(value: 'paybill' | 'till') => 
                       setConfig(prev => ({ ...prev, shortcode_type: value }))
                     }
                   >
-                    <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -372,13 +544,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       <SelectItem value="till">Till Number</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     Select whether this is a paybill or till number
                   </p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <Label>
                     {config.shortcode_type === 'paybill' ? 'Paybill Number' : 'Till Number'} *
                   </Label>
                   <Input 
@@ -386,38 +558,44 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     placeholder={config.shortcode_type === 'paybill' ? "e.g., 174379" : "e.g., 5071852"}
                     value={config.business_shortcode}
                     onChange={(e) => setConfig(prev => ({ ...prev, business_shortcode: e.target.value }))}
-                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     Your {config.shortcode_type} number where tenant payments will be received directly
                   </p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Passkey * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label>
+                      Passkey * {hasConfig && <span className="text-xs text-muted-foreground">(Re-enter to update)</span>}
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs">STK Push passkey from M-Pesa Daraja Portal</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input 
                     type="password"
                     placeholder={hasConfig ? "••••••••••••••••••••••••" : "Enter M-Pesa Passkey"}
                     value={config.passkey}
                     onChange={(e) => setConfig(prev => ({ ...prev, passkey: e.target.value }))}
-                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                   <p className="text-xs text-muted-foreground">Stored with end-to-end encryption</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Environment
-                  </Label>
+                  <Label>Environment</Label>
                   <Select 
                     value={config.environment}
                     onValueChange={(value: 'sandbox' | 'production') => 
                       setConfig(prev => ({ ...prev, environment: value }))
                     }
                   >
-                    <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -457,30 +635,45 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     variant="outline"
                     className="gap-2"
                   >
-                    <Zap className="h-4 w-4" />
                     {testing ? 'Testing...' : 'Test STK Push'}
                   </Button>
                 )}
               </div>
             </div>
           )}
-
-          {usePlatformDefaults && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                Using platform default M-Pesa configuration. Your tenants can make payments using the system's M-Pesa integration, but payments will go to the platform's paybill/till number first.
-              </p>
-              <Button 
-                onClick={handleSave}
-                disabled={saving}
-                className="mt-3 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {saving ? 'Saving...' : 'Save Settings'}
-              </Button>
-            </div>
-          )}
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              Switch to Platform Defaults?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will delete your custom M-Pesa configuration and switch to platform defaults.</p>
+              <p className="font-medium">What this means:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Your API credentials will be permanently deleted</li>
+                <li>Tenant payments will use platform shortcode (174379)</li>
+                <li>You can reconfigure your own credentials anytime</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfig}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {saving ? "Switching..." : "Switch to Defaults"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  </TooltipProvider>
   );
 };
