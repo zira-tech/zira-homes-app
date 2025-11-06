@@ -225,6 +225,50 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [showForm]);
 
+  const handleContinueWithDefaults = async () => {
+    if (!user?.id) return;
+    
+    setSaving(true);
+    try {
+      // Get existing preferences or create new
+      const { data: existingPrefs } = await supabase
+        .from('landlord_payment_preferences')
+        .select('*')
+        .eq('landlord_id', user.id)
+        .maybeSingle();
+
+      // Upsert with platform_default preference
+      const { error } = await supabase
+        .from('landlord_payment_preferences')
+        .upsert({
+          landlord_id: user.id,
+          mpesa_config_preference: 'platform_default',
+          preferred_payment_method: existingPrefs?.preferred_payment_method || 'mpesa',
+          auto_payment_enabled: existingPrefs?.auto_payment_enabled ?? false,
+          payment_reminders_enabled: existingPrefs?.payment_reminders_enabled ?? true,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Platform Defaults Confirmed",
+        description: "Tenants can now pay via M-Pesa using platform shortcode 4155923",
+      });
+      
+      // Optionally close the section
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Error saving platform default preference:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save platform default preference",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteConfig = async () => {
     if (!user?.id || !config.id) return;
     
@@ -533,15 +577,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       <Button 
                         variant="secondary"
                         className="w-full"
-                        onClick={() => {
-                          toast({
-                            title: "Using Platform Defaults",
-                            description: "Tenants can pay via M-Pesa using platform shortcode 4155923",
-                          });
-                        }}
+                        onClick={handleContinueWithDefaults}
+                        disabled={saving}
                       >
                         <Globe className="h-4 w-4 mr-2" />
-                        Continue with Defaults
+                        {saving ? "Saving..." : "Continue with Defaults"}
                       </Button>
                     </CardContent>
                   </Card>

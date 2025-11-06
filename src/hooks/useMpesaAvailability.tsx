@@ -115,9 +115,13 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
 
         if (prefsError) {
           console.error('Error checking payment preferences:', prefsError);
-        } else {
-          // Platform default is considered available
-          available = paymentPrefs?.mpesa_config_preference === 'platform_default';
+        } else if (paymentPrefs?.mpesa_config_preference === 'platform_default') {
+          // Explicit platform default preference
+          available = true;
+        } else if (!paymentPrefs || !paymentPrefs.mpesa_config_preference) {
+          // No preference set - default to platform availability for backward compatibility
+          console.log('No M-Pesa preference set, defaulting to platform availability');
+          available = true;
         }
       }
 
