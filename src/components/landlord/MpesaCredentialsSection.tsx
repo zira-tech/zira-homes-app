@@ -318,9 +318,19 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         }
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      // Handle edge function errors
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to save credentials');
+      }
+      
+      // Handle application-level errors from the edge function
+      if (data?.error) {
+        console.error('Application error from edge function:', data.error);
+        throw new Error(data.error);
+      }
 
+      // Success
       setHasConfig(true);
       setShowForm(false); // Exit form
       setIsOpen(false); // Collapse section to return to main page
@@ -346,9 +356,19 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       await loadConfig();
     } catch (error: any) {
       console.error('Error saving M-Pesa config:', error);
+      
+      // Extract detailed error message
+      let errorMessage = "Failed to save M-Pesa credentials.";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to save M-Pesa credentials.",
+        title: "Error Saving Credentials",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
