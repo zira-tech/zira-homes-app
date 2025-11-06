@@ -817,12 +817,15 @@ export type Database = {
           environment: string
           id: string
           is_active: boolean
+          kopokopo_api_key_encrypted: string | null
+          kopokopo_merchant_id: string | null
           landlord_id: string
           passkey_encrypted: string
           paybill_number: string | null
           phone_number: string | null
           shortcode_type: string | null
           till_number: string | null
+          till_provider: string | null
           updated_at: string
         }
         Insert: {
@@ -834,12 +837,15 @@ export type Database = {
           environment?: string
           id?: string
           is_active?: boolean
+          kopokopo_api_key_encrypted?: string | null
+          kopokopo_merchant_id?: string | null
           landlord_id: string
           passkey_encrypted: string
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null
           till_number?: string | null
+          till_provider?: string | null
           updated_at?: string
         }
         Update: {
@@ -851,12 +857,15 @@ export type Database = {
           environment?: string
           id?: string
           is_active?: boolean
+          kopokopo_api_key_encrypted?: string | null
+          kopokopo_merchant_id?: string | null
           landlord_id?: string
           passkey_encrypted?: string
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null
           till_number?: string | null
+          till_provider?: string | null
           updated_at?: string
         }
         Relationships: []
