@@ -883,6 +883,7 @@ export type Database = {
           created_at: string
           id: string
           landlord_id: string
+          mpesa_config_preference: string | null
           mpesa_phone_number: string | null
           payment_instructions: string | null
           payment_reminders_enabled: boolean | null
@@ -895,6 +896,7 @@ export type Database = {
           created_at?: string
           id?: string
           landlord_id: string
+          mpesa_config_preference?: string | null
           mpesa_phone_number?: string | null
           payment_instructions?: string | null
           payment_reminders_enabled?: boolean | null
@@ -907,6 +909,7 @@ export type Database = {
           created_at?: string
           id?: string
           landlord_id?: string
+          mpesa_config_preference?: string | null
           mpesa_phone_number?: string | null
           payment_instructions?: string | null
           payment_reminders_enabled?: boolean | null

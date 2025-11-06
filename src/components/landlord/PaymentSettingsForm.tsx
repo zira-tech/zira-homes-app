@@ -18,6 +18,7 @@ import { MpesaCredentialsSection } from "./MpesaCredentialsSection";
 interface PaymentPreferences {
   preferred_payment_method: string;
   mpesa_phone_number?: string;
+  mpesa_config_preference?: 'custom' | 'platform_default';
   bank_account_details?: {
     bank_name?: string;
     account_name?: string;
@@ -74,6 +75,7 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
   const [preferences, setPreferences] = useState<PaymentPreferences>({
     preferred_payment_method: 'mpesa', // Default to M-Pesa
     mpesa_phone_number: landlordPhone,
+    mpesa_config_preference: 'platform_default',
     bank_account_details: {
       bank_name: '',
       account_name: '',
@@ -137,6 +139,7 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
         ...prev,
         preferred_payment_method: billingData.payment_preferences.preferred_payment_method || 'mpesa',
         mpesa_phone_number: billingData.payment_preferences.mpesa_phone_number || landlordPhone,
+        mpesa_config_preference: (billingData.payment_preferences as any).mpesa_config_preference || 'platform_default',
         bank_account_details: {
           bank_name: bankDetails?.bank_name || '',
           account_name: bankDetails?.account_name || '',
@@ -204,6 +207,7 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
           landlord_id: user?.id,
           preferred_payment_method: preferences.preferred_payment_method,
           mpesa_phone_number: preferences.mpesa_phone_number,
+          mpesa_config_preference: preferences.mpesa_config_preference,
           bank_account_details: preferences.bank_account_details,
           payment_instructions: preferences.payment_instructions,
           auto_payment_enabled: preferences.auto_payment_enabled,
@@ -285,6 +289,47 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
           </SelectContent>
         </Select>
       </div>
+
+      {/* M-Pesa Configuration Selection */}
+      {preferences.preferred_payment_method === 'mpesa' && hasMpesaConfig && (
+        <div className="space-y-3">
+          <Label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            M-Pesa Configuration
+          </Label>
+          <Select 
+            value={preferences.mpesa_config_preference || 'platform_default'}
+            onValueChange={(value: 'custom' | 'platform_default') => {
+              setPreferences(prev => ({
+                ...prev,
+                mpesa_config_preference: value
+              }));
+            }}
+          >
+            <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+              <SelectItem 
+                value="custom"
+                className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Use My Custom M-Pesa Credentials
+              </SelectItem>
+              <SelectItem 
+                value="platform_default"
+                className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Use Platform Default M-Pesa
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            {preferences.mpesa_config_preference === 'custom' 
+              ? 'Payments will go directly to your configured paybill/till number' 
+              : 'Payments will use the platform\'s M-Pesa configuration'}
+          </p>
+        </div>
+      )}
 
       {/* M-Pesa Phone Number */}
       {preferences.preferred_payment_method === 'mpesa' && (

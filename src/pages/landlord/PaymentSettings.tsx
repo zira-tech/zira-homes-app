@@ -23,6 +23,7 @@ interface ApprovedMethod {
 interface PaymentPreferences {
   preferred_payment_method: string;
   mpesa_phone_number?: string;
+  mpesa_config_preference?: 'custom' | 'platform_default';
   bank_account_details?: {
     bank_name?: string;
     account_name?: string;
@@ -87,6 +88,7 @@ const PaymentSettings = () => {
       const transformedPrefs = prefs ? {
         preferred_payment_method: prefs.preferred_payment_method || 'mpesa',
         mpesa_phone_number: prefs.mpesa_phone_number || '',
+        mpesa_config_preference: ((prefs as any).mpesa_config_preference === 'custom' ? 'custom' : 'platform_default') as 'custom' | 'platform_default',
         bank_account_details: typeof prefs.bank_account_details === 'object' && prefs.bank_account_details 
           ? prefs.bank_account_details as any
           : null,
@@ -96,6 +98,7 @@ const PaymentSettings = () => {
       } : {
         preferred_payment_method: 'mpesa',
         mpesa_phone_number: '',
+        mpesa_config_preference: 'platform_default' as const,
         bank_account_details: null,
         payment_instructions: '',
         auto_payment_enabled: false,
@@ -317,13 +320,25 @@ const PaymentSettings = () => {
                     </span>
                   </div>
                   
-                  {preferences.preferred_payment_method === 'mpesa' && preferences.mpesa_phone_number && (
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <span className="text-sm font-medium">M-Pesa Number</span>
-                      <span className="text-sm font-mono">
-                        {preferences.mpesa_phone_number}
-                      </span>
-                    </div>
+                  {preferences.preferred_payment_method === 'mpesa' && (
+                    <>
+                      {hasMpesaConfig && (
+                        <div className="flex items-center justify-between py-2 border-b">
+                          <span className="text-sm font-medium">M-Pesa Configuration</span>
+                          <Badge variant={preferences.mpesa_config_preference === 'custom' ? 'default' : 'secondary'}>
+                            {preferences.mpesa_config_preference === 'custom' ? 'Custom Credentials' : 'Platform Defaults'}
+                          </Badge>
+                        </div>
+                      )}
+                      {preferences.mpesa_phone_number && (
+                        <div className="flex items-center justify-between py-2 border-b">
+                          <span className="text-sm font-medium">M-Pesa Number</span>
+                          <span className="text-sm font-mono">
+                            {preferences.mpesa_phone_number}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
                   
                    {preferences.preferred_payment_method === 'bank_transfer' && preferences.bank_account_details && (
