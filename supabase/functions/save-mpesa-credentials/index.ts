@@ -85,6 +85,7 @@ serve(async (req) => {
       consumer_key,
       consumer_secret,
       shortcode,
+      shortcode_type,
       passkey,
       callback_url,
       environment,
@@ -95,6 +96,14 @@ serve(async (req) => {
     if (!consumer_key || !consumer_secret || !shortcode || !passkey) {
       return new Response(
         JSON.stringify({ error: 'Missing required M-Pesa credentials' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate shortcode_type
+    if (shortcode_type && !['paybill', 'till'].includes(shortcode_type)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid shortcode type. Must be "paybill" or "till"' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -159,6 +168,7 @@ serve(async (req) => {
         consumer_secret_encrypted: encryptedConsumerSecret,
         passkey_encrypted: encryptedPasskey,
         business_shortcode: shortcode,
+        shortcode_type: shortcode_type || 'paybill',
         callback_url: callback_url || null,
         environment: environment || 'sandbox',
         is_active: is_active !== false, // Default to true

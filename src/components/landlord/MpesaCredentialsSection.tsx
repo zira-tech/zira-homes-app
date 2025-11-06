@@ -62,7 +62,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
         const { data, error } = await supabase
           .from('landlord_mpesa_configs')
-          .select('id, callback_url, environment, is_active, business_shortcode')
+          .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type')
           .eq('landlord_id', user.id)
           .maybeSingle();
 
@@ -81,6 +81,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
             environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
             is_active: data.is_active,
             business_shortcode: data.business_shortcode || '',
+            shortcode_type: (data.shortcode_type || 'paybill') as 'paybill' | 'till',
             // Explicitly clear sensitive fields for security
             consumer_key: '',
             consumer_secret: '',
@@ -170,6 +171,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           consumer_key: config.consumer_key,
           consumer_secret: config.consumer_secret,
           shortcode: config.business_shortcode,
+          shortcode_type: config.shortcode_type,
           passkey: config.passkey,
           callback_url: config.callback_url,
           environment: config.environment,
