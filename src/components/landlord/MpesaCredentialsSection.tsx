@@ -326,8 +326,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       
       // Handle application-level errors from the edge function
       if (data?.error) {
-        console.error('Application error from edge function:', data.error);
-        throw new Error(data.error);
+        console.error('Application error from edge function:', data.error, data?.details);
+        throw new Error(data?.details || data.error);
       }
 
       // Success
@@ -349,7 +349,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       toast({
         title: "Success",
-        description: "M-Pesa credentials saved securely.",
+        description: data?.message || "M-Pesa credentials saved securely.",
       });
       
       // Reload config to refresh summary view with latest data
