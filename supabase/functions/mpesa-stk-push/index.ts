@@ -449,20 +449,57 @@ serve(async (req) => {
     // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
     let consumerKey, consumerSecret, shortcode, passkey;
     const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
-
-    if (mpesaConfig && mpesaConfig.consumer_key) {
-      // Use landlord-specific credentials directly
-      consumerKey = mpesaConfig.consumer_key;
-      consumerSecret = mpesaConfig.consumer_secret;
-      shortcode = mpesaConfig.business_shortcode;
-      passkey = mpesaConfig.passkey;
-      console.log('Using landlord-specific M-Pesa credentials');
+    
+    if (mpesaConfig) {
+      // Check if encrypted credentials exist (secure method)
+      if (mpesaConfig.consumer_key_encrypted) {
+        const encryptionKey = Deno.env.get('MPESA_ENCRYPTION_KEY');
+        
+        if (!encryptionKey) {
+          console.error('❌ MPESA_ENCRYPTION_KEY not configured');
+          return new Response(
+            JSON.stringify({ 
+              error: 'Server encryption configuration missing',
+              errorId: 'MPESA_ENCRYPTION_CONFIG_MISSING'
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        try {
+          // Decrypt credentials using the existing decryptCredential function
+          consumerKey = await decryptCredential(mpesaConfig.consumer_key_encrypted, encryptionKey);
+          consumerSecret = await decryptCredential(mpesaConfig.consumer_secret_encrypted, encryptionKey);
+          passkey = await decryptCredential(mpesaConfig.passkey_encrypted, encryptionKey);
+          shortcode = mpesaConfig.business_shortcode; // Not encrypted
+          
+          console.log('✅ Successfully decrypted landlord M-Pesa credentials');
+        } catch (decryptError) {
+          console.error('❌ Failed to decrypt landlord credentials:', decryptError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to decrypt M-Pesa credentials',
+              errorId: 'MPESA_DECRYPTION_FAILED',
+              hint: 'Landlord may need to re-configure M-Pesa settings'
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else if (mpesaConfig.consumer_key) {
+        // Legacy plain text fallback (TEMPORARY - will be removed after migration)
+        console.warn('⚠️ Using legacy plain text credentials - SECURITY RISK - Please re-enter credentials via secure form');
+        consumerKey = mpesaConfig.consumer_key;
+        consumerSecret = mpesaConfig.consumer_secret;
+        passkey = mpesaConfig.passkey;
+        shortcode = mpesaConfig.business_shortcode;
+      }
     } else {
-      // Use secure environment variables
+      // Use global fallback credentials from secrets
       consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
       consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
       shortcode = Deno.env.get('MPESA_SHORTCODE') || '174379';
       passkey = Deno.env.get('MPESA_PASSKEY');
+      console.log('Using global fallback M-Pesa credentials');
     }
 
     console.log('M-Pesa Environment Check:', {

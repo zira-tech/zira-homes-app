@@ -65,6 +65,16 @@ export function parseMpesaError(error: any): MpesaError {
       message: 'Failed to send payment request to your phone.',
       action: 'Please check your phone number and try again.',
       retry: true
+    },
+    'MPESA_ENCRYPTION_CONFIG_MISSING': {
+      message: 'Server encryption not configured properly.',
+      action: 'Please contact support.',
+      retry: false
+    },
+    'MPESA_DECRYPTION_FAILED': {
+      message: 'Failed to decrypt M-Pesa credentials.',
+      action: 'The landlord may need to re-configure M-Pesa settings.',
+      retry: false
     }
   };
   
