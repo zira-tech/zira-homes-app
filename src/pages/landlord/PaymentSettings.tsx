@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useUserCountry } from "@/hooks/useUserCountry";
+import { usePaymentMethodMetadata } from "@/hooks/usePaymentMethodMetadata";
 import { filterPaymentMethodsByCountry, getCountryInfo } from "@/utils/countryService";
 
 interface ApprovedMethod {
@@ -40,6 +41,7 @@ const PaymentSettings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { primaryCountry, loading: countryLoading, detectedFrom, confidence } = useUserCountry();
+  const { getLabel } = usePaymentMethodMetadata(primaryCountry);
   const [allApprovedMethods, setAllApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [approvedMethods, setApprovedMethods] = useState<ApprovedMethod[]>([]);
   const [preferences, setPreferences] = useState<PaymentPreferences | null>(null);
