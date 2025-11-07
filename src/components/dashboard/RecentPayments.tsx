@@ -15,6 +15,8 @@ import { CreditCard, Eye } from "lucide-react";
 import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TablePaginator } from "@/components/ui/table-paginator";
+import { usePaymentMethodMetadata } from "@/hooks/usePaymentMethodMetadata";
+import { useUserCountry } from "@/hooks/useUserCountry";
 
 interface Payment {
   id: string;
@@ -28,6 +30,8 @@ interface Payment {
   payment_method: string | null;
 }
 export function RecentPayments() {
+  const { primaryCountry } = useUserCountry();
+  const { getIcon, getLabel } = usePaymentMethodMetadata(primaryCountry);
   const [currentPage, setCurrentPage] = useState(1);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +80,7 @@ export function RecentPayments() {
         amount: payment.amount || 0,
         payment_date: payment.payment_date,
         status: payment.status,
-        payment_method: payment.payment_method || "Bank Transfer"
+        payment_method: payment.payment_method || "bank_transfer"
       })) || [];
 
       setPayments(transformedPayments);
@@ -107,7 +111,7 @@ export function RecentPayments() {
             amount: payment.amount || 0,
             payment_date: payment.payment_date,
             status: payment.status,
-            payment_method: payment.payment_method || "Bank Transfer"
+            payment_method: payment.payment_method || "bank_transfer"
           }));
           setPayments(transformedPayments);
         } else {
@@ -144,18 +148,8 @@ export function RecentPayments() {
   };
 
   const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case "Credit Card":
-        return <CreditCard className="h-4 w-4 text-blue-600" />;
-      case "Bank Transfer":
-        return <div className="w-4 h-4 bg-blue-500 rounded text-white text-xs flex items-center justify-center font-bold">B</div>;
-      case "Check":
-        return <div className="w-4 h-4 bg-green-500 rounded text-white text-xs flex items-center justify-center font-bold">C</div>;
-      case "Mpesa":
-        return <div className="w-4 h-4 bg-green-600 rounded text-white text-xs flex items-center justify-center font-bold">M</div>;
-      default:
-        return <CreditCard className="h-4 w-4 text-gray-600" />;
-    }
+    const IconComponent = getIcon(method);
+    return <IconComponent className="h-4 w-4" />;
   };
 
   if (loading) {
@@ -278,7 +272,7 @@ export function RecentPayments() {
                       <TableCell>
                         <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm">
                           {getPaymentMethodIcon(payment.payment_method)}
-                          <span className="text-sm font-medium">{payment.payment_method}</span>
+                          <span className="text-sm font-medium">{getLabel(payment.payment_method)}</span>
                         </div>
                       </TableCell>
                       <TableCell>

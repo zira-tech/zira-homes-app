@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { formatAmount, getCurrencySymbol } from "@/utils/currency";
+import { usePaymentMethodMetadata } from "@/hooks/usePaymentMethodMetadata";
+import { useUserCountry } from "@/hooks/useUserCountry";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +113,8 @@ interface EnhancedBillingData {
 export const EnhancedBillingPage = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { primaryCountry } = useUserCountry();
+  const { getIcon, getLabel } = usePaymentMethodMetadata(primaryCountry);
   const smsUsage = useSmsUsage();
   const [billingData, setBillingData] = useState<EnhancedBillingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -460,26 +464,14 @@ export const EnhancedBillingPage = () => {
     }
   };
 
-  const getPaymentMethodIcon = (type: string, provider: string) => {
-    if (type === 'mpesa') {
-      return <Smartphone className="h-8 w-8 text-green-600" />;
-    } else if (type === 'card') {
-      return <CreditCard className="h-8 w-8 text-blue-600" />;
-    } else if (type === 'bank_transfer') {
-      return <Building2 className="h-8 w-8 text-purple-600" />;
-    }
-    return <CreditCard className="h-8 w-8 text-gray-500" />;
+  const getPaymentMethodIcon = (type: string) => {
+    const IconComponent = getIcon(type);
+    return <IconComponent className="h-8 w-8" />;
   };
 
   const getPaymentMethodLabel = (type: string, provider: string) => {
-    if (type === 'mpesa') {
-      return { title: 'M-Pesa', description: 'Mobile Money' };
-    } else if (type === 'card') {
-      return { title: 'Credit/Debit Card', description: `${provider} Cards` };
-    } else if (type === 'bank_transfer' || type === 'bank') {
-      return { title: provider || 'Bank Transfer', description: 'Bank Transfer' };
-    }
-    return { title: provider || type, description: type };
+    const label = getLabel(type);
+    return { title: label, description: provider || type };
   };
 
   const handleInvoicePayment = (invoice: any) => {
@@ -957,42 +949,68 @@ Thank you!`}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {/* Primary Payment Method */}
-            <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/20">
-              <div className="flex items-center space-x-3">
-                <Smartphone className="h-6 w-6 text-green-600" />
-                <div>
-                  <p className="font-medium">M-Pesa</p>
-                  <p className="text-sm text-muted-foreground">
-                    {billingData.payment_preferences.mpesa_phone_number || '+254 •••• •••• ••07'}
-                  </p>
-                </div>
-                <Badge>Primary</Badge>
-              </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/payment-settings">
-                  <Settings className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
+            {billingData.approved_payment_methods.length > 0 ? (
+              <>
+                {/* Primary Payment Method */}
+                {billingData.payment_preferences.preferred_payment_method && (
+                  <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/20">
+                    <div className="flex items-center space-x-3">
+                      {getPaymentMethodIcon(billingData.payment_preferences.preferred_payment_method)}
+                      <div>
+                        <p className="font-medium">
+                          {getPaymentMethodLabel(
+                            billingData.payment_preferences.preferred_payment_method,
+                            billingData.approved_payment_methods.find(m => m.payment_method_type === billingData.payment_preferences.preferred_payment_method)?.provider_name || ''
+                          ).title}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {billingData.payment_preferences.mpesa_phone_number || 'Configure in settings'}
+                        </p>
+                      </div>
+                      <Badge>Primary</Badge>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link to="/landlord/payment-settings">
+                        <Settings className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                )}
 
-            {/* Alternative Methods */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-                <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
-                <div>
-                  <p className="text-sm font-medium">Cards</p>
-                  <p className="text-xs text-muted-foreground">Visa, Mastercard</p>
-                </div>
+                {/* Alternative Methods */}
+                {billingData.approved_payment_methods.length > 1 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {billingData.approved_payment_methods
+                      .filter(method => method.payment_method_type !== billingData.payment_preferences.preferred_payment_method)
+                      .slice(0, 2)
+                      .map(method => (
+                        <div key={method.id} className="flex items-center p-3 bg-gray-50 rounded-lg">
+                          {getPaymentMethodIcon(method.payment_method_type)}
+                          <div className="ml-2">
+                            <p className="text-sm font-medium">
+                              {getPaymentMethodLabel(method.payment_method_type, method.provider_name).title}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {getPaymentMethodLabel(method.payment_method_type, method.provider_name).description}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-6">
+                <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground mb-2">No payment methods configured</p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/landlord/payment-settings">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Configure Payment Methods
+                  </Link>
+                </Button>
               </div>
-              <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-                <Building2 className="h-5 w-5 text-purple-600 mr-2" />
-                <div>
-                  <p className="text-sm font-medium">Bank Transfer</p>
-                  <p className="text-xs text-muted-foreground">KCB, Equity</p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
