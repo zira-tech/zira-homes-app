@@ -211,7 +211,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   };
 
   useEffect(() => {
-    // Restore draft on mount
+    // CRITICAL: Restore draft BEFORE loading config to prevent overwriting
     const isEditing = sessionStorage.getItem(EDIT_KEY) === '1';
     const draftFields = loadDraft();
     
@@ -228,11 +228,15 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       // Show toast notification that draft was restored
       toast({
         title: "Draft Restored",
-        description: "Your previous M-Pesa credentials draft has been restored.",
-        duration: 3000,
+        description: "Your previous M-Pesa credentials draft has been restored. Continue where you left off.",
+        duration: 5000, // Longer duration so user notices
       });
+      
+      // DO NOT call loadConfig() when draft exists - prevents overwriting
+      return;
     }
     
+    // Only load config if no draft exists
     loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -622,9 +626,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           errorMessage = error.message;
         }
         // Handle database constraint violations
-        else if (msg.includes('constraint') || msg.includes('violates') || msg.includes('not-null') || msg.includes('business_shortcode')) {
-          errorTitle = "Database Configuration Error";
-          errorMessage = "Unable to save credentials due to a database constraint. This has been reported and should now be fixed. Please try again.";
+        else if (msg.includes('constraint') || msg.includes('violates') || msg.includes('not-null')) {
+          errorTitle = "Database Constraint Error";
+          errorMessage = "Database validation error. Please ensure all required fields are filled correctly for your payment type.";
         }
         // Handle other database errors
         else if (msg.includes('database') || msg.includes('unique')) {
@@ -635,6 +639,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
           errorTitle = "Network Error";
           errorMessage = "Unable to connect to server. Please check your internet connection and try again.";
+        }
+        // Kopo Kopo specific errors
+        else if (msg.includes('kopo') || msg.includes('kopokopo')) {
+          errorTitle = "Kopo Kopo Configuration Error";
+          errorMessage = error.message || "Failed to save Kopo Kopo credentials. Please verify all OAuth credentials are correct.";
         }
         // Generic error with the actual message
         else {
@@ -928,6 +937,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               {/* Form State - Edit/Create Credentials */}
             {showForm && (
               <div className="space-y-4">
+                {/* DRAFT INDICATOR */}
+                {hasDraftRef.current && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        <strong>Draft in progress:</strong> Your changes are being saved automatically. Complete the form to save permanently.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* SECURITY NOTICE */}
                 {hasConfig && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">

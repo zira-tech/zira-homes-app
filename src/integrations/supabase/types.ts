@@ -811,8 +811,8 @@ export type Database = {
         Row: {
           business_shortcode: string
           callback_url: string | null
-          consumer_key_encrypted: string
-          consumer_secret_encrypted: string
+          consumer_key_encrypted: string | null
+          consumer_secret_encrypted: string | null
           created_at: string
           environment: string
           id: string
@@ -822,7 +822,7 @@ export type Database = {
           kopokopo_client_secret_encrypted: string | null
           kopokopo_merchant_id: string | null
           landlord_id: string
-          passkey_encrypted: string
+          passkey_encrypted: string | null
           paybill_number: string | null
           phone_number: string | null
           shortcode_type: string | null
@@ -833,8 +833,8 @@ export type Database = {
         Insert: {
           business_shortcode: string
           callback_url?: string | null
-          consumer_key_encrypted: string
-          consumer_secret_encrypted: string
+          consumer_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
           created_at?: string
           environment?: string
           id?: string
@@ -844,7 +844,7 @@ export type Database = {
           kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id: string
-          passkey_encrypted: string
+          passkey_encrypted?: string | null
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null
@@ -855,8 +855,8 @@ export type Database = {
         Update: {
           business_shortcode?: string
           callback_url?: string | null
-          consumer_key_encrypted?: string
-          consumer_secret_encrypted?: string
+          consumer_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
           created_at?: string
           environment?: string
           id?: string
@@ -866,7 +866,7 @@ export type Database = {
           kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id?: string
-          passkey_encrypted?: string
+          passkey_encrypted?: string | null
           paybill_number?: string | null
           phone_number?: string | null
           shortcode_type?: string | null

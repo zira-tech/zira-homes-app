@@ -157,9 +157,10 @@ const PaymentSettings = () => {
     setHasMpesaConfig(hasConfig);
   };
 
-  const handleMpesaPreferenceChange = () => {
+  const handleMpesaPreferenceChange = async () => {
     // Reload data when M-Pesa preference changes
-    loadData();
+    console.log('M-Pesa preference changed - refreshing payment settings...');
+    await loadData();
   };
 
   if (loading || countryLoading) {
