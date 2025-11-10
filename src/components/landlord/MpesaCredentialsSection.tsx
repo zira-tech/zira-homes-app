@@ -131,6 +131,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       console.log('💾 Draft saved (merged):', {
         shortcode_type: merged.shortcode_type,
         till_provider: merged.till_provider,
+        environment: merged.environment,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -752,10 +753,21 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   };
 
   const handleTestKopokopoConnection = async () => {
-    if (!user?.id) return;
+    console.log('🧪 Test Connection clicked');
+    console.log('📋 Current config:', {
+      client_id: config.kopokopo_client_id ? '✓ present' : '✗ missing',
+      client_secret: config.kopokopo_client_secret ? '✓ present' : '✗ missing',
+      environment: config.environment,
+    });
+
+    if (!user?.id) {
+      console.log('❌ No user ID');
+      return;
+    }
 
     // Validate required fields
     if (!config.kopokopo_client_id || !config.kopokopo_client_secret) {
+      console.log('❌ Missing credentials');
       toast({
         title: "Missing Credentials",
         description: "Please enter both Client ID and Client Secret to test the connection.",
@@ -764,11 +776,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       return;
     }
 
+    console.log('🚀 Starting test...');
     setTesting(true);
+    
     try {
       toast({
         title: "Testing Connection",
         description: "Validating your Kopo Kopo credentials...",
+      });
+
+      console.log('📡 Calling edge function with:', {
+        client_id: config.kopokopo_client_id?.substring(0, 10) + '...',
+        environment: config.environment,
       });
 
       const { data: testResult, error: testError } = await supabase.functions.invoke('test-kopokopo-credentials', {
@@ -779,7 +798,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         },
       });
 
+      console.log('📥 Response received:', {
+        success: testResult?.success,
+        error: testError?.message || testResult?.error,
+      });
+
       if (testError || !testResult?.success) {
+        console.log('❌ Test failed');
         toast({
           title: "Connection Failed",
           description: testResult?.error || testError?.message || "Unable to authenticate with Kopo Kopo. Please verify your credentials.",
@@ -789,19 +814,21 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       }
 
       // Success
+      console.log('✅ Test successful');
       toast({
         title: "Connection Successful! ✓",
         description: "Your Kopo Kopo credentials are valid and working correctly.",
       });
 
     } catch (error) {
-      console.error('Error testing Kopo Kopo credentials:', error);
+      console.error('💥 Exception in test function:', error);
       toast({
         title: "Test Failed",
-        description: "Failed to test credentials. Please try again.",
+        description: `Failed to test credentials: ${error.message}`,
         variant: "destructive",
       });
     } finally {
+      console.log('🏁 Test completed, resetting state');
       setTesting(false);
     }
   };
@@ -1269,6 +1296,30 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     />
                     <p className="text-xs text-muted-foreground">
                       Your Kopo Kopo till number
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Environment *</Label>
+                    <Select 
+                      value={config.environment} 
+                      onValueChange={(value: 'sandbox' | 'production') => {
+                        setConfig(prev => ({ ...prev, environment: value }));
+                        saveDraft({ environment: value });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select environment" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
+                        <SelectItem value="production">Production (Live)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {config.environment === 'sandbox' 
+                        ? 'Use sandbox for testing with test credentials'
+                        : 'Use production for live transactions'}
                     </p>
                   </div>
                   
