@@ -504,8 +504,8 @@ serve(async (req) => {
     }
 
     // M-Pesa credentials - SECURITY: Use environment variables, decrypt landlord config
-    let consumerKey, consumerSecret, shortcode, passkey;
-    let kopokopoApiKey, kopokopoMerchantId, tillNumber;
+    let consumerKey: string | undefined, consumerSecret: string | undefined, shortcode: string | undefined, passkey: string | undefined;
+    let kopokopoClientId: string | undefined, kopokopoClientSecret: string | undefined, tillNumber: string | undefined;
     let paymentProvider = 'mpesa'; // 'mpesa' or 'kopokopo'
     
     // Normalize environment to handle case variations (PRODUCTION, production, prod, etc.)
@@ -581,8 +581,8 @@ serve(async (req) => {
       hasConsumerKey: !!consumerKey,
       hasConsumerSecret: !!consumerSecret,
       hasPasskey: !!passkey,
-      hasKopokopoApiKey: !!kopokopoApiKey,
-      kopokopoMerchantId,
+      hasKopokopoClientId: !!kopokopoClientId,
+      hasKopokopoClientSecret: !!kopokopoClientSecret,
       tillNumber,
       environment,
       usingLandlordConfig: !!mpesaConfig
