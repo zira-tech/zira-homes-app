@@ -82,6 +82,7 @@ serve(async (req) => {
     }
 
     const {
+      config_id,
       consumer_key,
       consumer_secret,
       shortcode,
@@ -228,7 +229,7 @@ serve(async (req) => {
 
     // Save ONLY encrypted credentials using admin client (bypasses RLS for secure insert)
     // Check if this is an update (if config_id is provided) or a new insert
-    const configId = body.config_id; // Optional field to identify which config to update
+    const configId = config_id; // Optional field to identify which config to update
     
     let savedConfig;
     let saveError;
