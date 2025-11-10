@@ -757,7 +757,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   };
 
   const handleTestKopokopoConnection = async () => {
-    console.log('🧪 Test Connection clicked');
+    console.log('🧪 [STEP 1] Test Connection clicked');
     console.log('📋 Current config:', {
       config_id: config.id || 'new',
       client_id: config.kopokopo_client_id ? '✓ present' : '✗ missing',
@@ -766,7 +766,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     });
 
     if (!user?.id) {
-      console.log('❌ No user ID');
+      console.log('❌ [STEP 2] No user ID - aborting');
       return;
     }
 
@@ -778,7 +778,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       : !!(config.kopokopo_client_id && config.kopokopo_client_secret); // New: need both
 
     if (!hasRequiredFields) {
-      console.log('❌ Missing credentials');
+      console.log('❌ [STEP 3] Missing credentials - showing error toast');
       toast({
         title: "Missing Credentials",
         description: isExistingConfig
@@ -789,16 +789,17 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       return;
     }
 
-    console.log('🚀 Starting test...');
+    console.log('🚀 [STEP 4] Validation passed, starting test...');
     setTesting(true);
     
     try {
+      console.log('📢 [STEP 5] Showing "Testing Connection..." toast');
       toast({
         title: "Testing Connection",
         description: "Validating your Kopo Kopo credentials...",
       });
 
-      console.log('📡 Calling edge function with:', {
+      console.log('📡 [STEP 6] Calling edge function with:', {
         config_id: config.id || 'new',
         client_id: config.kopokopo_client_id?.substring(0, 10) + '...',
         environment: config.environment,
@@ -815,26 +816,30 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         },
       });
 
-      console.log('📥 Response received:', {
+      console.log('📥 [STEP 7] Response received:', {
         success: testResult?.success,
-        error: testError?.message || testResult?.error,
+        hasError: !!testError,
+        errorMessage: testError?.message || testResult?.error,
+        fullTestResult: testResult,
+        fullTestError: testError
       });
 
       if (testError || !testResult?.success) {
-        console.log('❌ Test failed');
+        console.log('❌ [STEP 8] Test failed - showing error toast');
         toast({
           title: "Connection Failed",
           description: testResult?.error || testError?.message || "Unable to authenticate with Kopo Kopo. Please verify your credentials.",
           variant: "destructive",
         });
+        console.log('✅ [STEP 8.1] Error toast called, returning');
         return;
       }
 
-      // Success
-      console.log('✅ Test successful');
+      console.log('✅ [STEP 9] Test successful!');
       
       // Mark credentials as verified if this is an existing config
       if (config.id) {
+        console.log('📝 [STEP 10] Updating database verification status...');
         try {
           const { error: updateError } = await supabase
             .from('landlord_mpesa_configs')
@@ -846,31 +851,43 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
             .eq('landlord_id', user.id);
           
           if (updateError) {
-            console.error('Failed to mark credentials as verified:', updateError);
+            console.error('[STEP 11] Failed to mark credentials as verified:', updateError);
           } else {
-            console.log('✅ Credentials marked as verified in database');
-            // Refresh configs to show the badge
+            console.log('✅ [STEP 12] Credentials marked as verified in database');
+            console.log('🔄 [STEP 13] Calling loadConfig() - showForm:', showForm, 'hasDraft:', hasDraftRef.current);
             await loadConfig();
+            console.log('✅ [STEP 14] loadConfig() completed');
           }
         } catch (err) {
-          console.error('Error updating verification status:', err);
+          console.error('[STEP 15] Exception updating verification status:', err);
         }
+      } else {
+        console.log('ℹ️ [STEP 16] No config.id, skipping database update');
       }
       
-      toast({
+      console.log('🎉 [STEP 17] About to show SUCCESS toast');
+      console.log('Toast function type:', typeof toast);
+      console.log('Toast function:', toast);
+      
+      const toastResult = toast({
         title: "Connection Successful! ✓",
         description: "Your Kopo Kopo credentials are valid and working correctly.",
       });
+      
+      console.log('✅ [STEP 18] SUCCESS toast called, returned:', toastResult);
 
     } catch (error) {
-      console.error('💥 Exception in test function:', error);
+      console.error('💥 [STEP 19] Exception in test function:', error);
+      console.error('Error type:', error?.constructor?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
       toast({
         title: "Test Failed",
         description: `Failed to test credentials: ${error.message}`,
         variant: "destructive",
       });
     } finally {
-      console.log('🏁 Test completed, resetting state');
+      console.log('🏁 [STEP 20] Finally block - resetting state');
       setTesting(false);
     }
   };
