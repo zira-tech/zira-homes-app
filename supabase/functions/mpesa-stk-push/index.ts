@@ -279,7 +279,7 @@ serve(async (req) => {
           .from('invoices')
           .select(`
             tenant_id,
-            leases!inner(
+            leases!invoices_lease_id_fkey!inner(
               tenant_id,
               unit_id,
               units!inner(
@@ -382,7 +382,7 @@ serve(async (req) => {
         .from('invoices')
         .select(`
           lease_id,
-          leases!inner(
+          leases!invoices_lease_id_fkey!inner(
             unit_id,
             units!inner(
               property_id,
