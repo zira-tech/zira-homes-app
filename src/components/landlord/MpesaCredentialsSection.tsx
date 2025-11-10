@@ -418,17 +418,43 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     } catch (error: any) {
       console.error('Error saving M-Pesa config:', error);
       
-      // Extract detailed error message
-      let errorMessage = "Failed to save M-Pesa credentials.";
+      // Extract detailed error message with specific handling
+      let errorTitle = "Error Saving Credentials";
+      let errorMessage = "Failed to save M-Pesa credentials. Please try again.";
       
       if (error.message) {
-        errorMessage = error.message;
+        const msg = error.message.toLowerCase();
+        
+        // Handle encryption-related errors
+        if (msg.includes('encryption') || msg.includes('invalid key') || msg.includes('dataerror')) {
+          errorTitle = "Server Configuration Error";
+          errorMessage = "There's a problem with the server encryption configuration. Please contact support or try again later.";
+        }
+        // Handle validation errors
+        else if (msg.includes('validation') || msg.includes('required')) {
+          errorTitle = "Validation Error";
+          errorMessage = error.message;
+        }
+        // Handle database errors
+        else if (msg.includes('database') || msg.includes('constraint') || msg.includes('unique')) {
+          errorTitle = "Database Error";
+          errorMessage = "Failed to save credentials to database. Please try again or contact support.";
+        }
+        // Handle network errors
+        else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
+          errorTitle = "Network Error";
+          errorMessage = "Unable to connect to server. Please check your internet connection and try again.";
+        }
+        // Generic error with the actual message
+        else {
+          errorMessage = error.message;
+        }
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
       
       toast({
-        title: "Error Saving Credentials",
+        title: errorTitle,
         description: errorMessage,
         variant: "destructive",
       });
