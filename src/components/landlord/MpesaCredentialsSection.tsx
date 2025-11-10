@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Globe, Settings, Info, AlertTriangle } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Globe, Settings, Info, AlertTriangle, Building2, Smartphone, Zap, TestTube, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -963,7 +964,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               )}
 
               {/* Shortcode Type Selection - Always show first */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Label>Payment Type *</Label>
                   <Tooltip>
@@ -971,14 +972,14 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="max-w-xs">Paybill: Business account. Till Safaricom: Direct M-Pesa. Till Kopo Kopo: Payment gateway</p>
+                      <p className="max-w-xs">Choose your M-Pesa payment type based on your business setup</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <Select 
+                
+                <RadioGroup 
                   value={config.shortcode_type}
                   onValueChange={(value: 'paybill' | 'till_safaricom' | 'till_kopokopo') => {
-                    // Update shortcode_type and till_provider in a single setState
                     const newConfig = {
                       ...config,
                       shortcode_type: value,
@@ -987,34 +988,92 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     setConfig(newConfig);
                     saveDraft(newConfig);
                   }}
+                  className="grid grid-cols-1 md:grid-cols-3 gap-3"
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="paybill">
-                      <div className="flex flex-col">
-                        <span className="font-medium">Paybill Number</span>
-                        <span className="text-xs text-muted-foreground">Best for businesses collecting rent</span>
+                  {/* Paybill Option */}
+                  <label 
+                    htmlFor="paybill"
+                    className={`
+                      relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all
+                      ${config.shortcode_type === 'paybill' 
+                        ? 'border-primary bg-primary/5 shadow-sm' 
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start gap-3">
+                      <RadioGroupItem value="paybill" id="paybill" className="mt-0.5" />
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-primary" />
+                          <span className="font-medium">Paybill Number</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Best for businesses collecting rent
+                        </p>
                       </div>
-                    </SelectItem>
-                    <SelectItem value="till_safaricom">
-                      <div className="flex flex-col">
-                        <span className="font-medium">Till Number - Safaricom Direct</span>
-                        <span className="text-xs text-muted-foreground">Direct M-Pesa till from Safaricom</span>
+                    </div>
+                    {config.shortcode_type === 'paybill' && (
+                      <CheckCircle className="absolute top-3 right-3 h-5 w-5 text-primary" />
+                    )}
+                  </label>
+
+                  {/* Till Safaricom Option */}
+                  <label 
+                    htmlFor="till_safaricom"
+                    className={`
+                      relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all
+                      ${config.shortcode_type === 'till_safaricom' 
+                        ? 'border-primary bg-primary/5 shadow-sm' 
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start gap-3">
+                      <RadioGroupItem value="till_safaricom" id="till_safaricom" className="mt-0.5" />
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Smartphone className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Till - Safaricom Direct</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Direct M-Pesa till from Safaricom
+                        </p>
                       </div>
-                    </SelectItem>
-                    <SelectItem value="till_kopokopo">
-                      <div className="flex flex-col">
-                        <span className="font-medium">Till Number - Kopo Kopo</span>
-                        <span className="text-xs text-muted-foreground">Kopo Kopo payment gateway integration</span>
+                    </div>
+                    {config.shortcode_type === 'till_safaricom' && (
+                      <CheckCircle className="absolute top-3 right-3 h-5 w-5 text-primary" />
+                    )}
+                  </label>
+
+                  {/* Kopo Kopo Option */}
+                  <label 
+                    htmlFor="till_kopokopo"
+                    className={`
+                      relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all
+                      ${config.shortcode_type === 'till_kopokopo' 
+                        ? 'border-primary bg-primary/5 shadow-sm' 
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start gap-3">
+                      <RadioGroupItem value="till_kopokopo" id="till_kopokopo" className="mt-0.5" />
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-orange-600" />
+                          <span className="font-medium">Till - Kopo Kopo</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Payment gateway with advanced features
+                        </p>
                       </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Choose your M-Pesa payment type based on your business setup
-                </p>
+                    </div>
+                    {config.shortcode_type === 'till_kopokopo' && (
+                      <CheckCircle className="absolute top-3 right-3 h-5 w-5 text-primary" />
+                    )}
+                  </label>
+                </RadioGroup>
               </div>
 
               {/* Conditional credential fields based on payment type */}
@@ -1211,21 +1270,38 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Environment</Label>
-                  <Select 
-                    value={config.environment}
-                    onValueChange={(value: 'sandbox' | 'production') => {
-                      setConfig(prev => ({ ...prev, environment: value }));
-                      saveDraft({ environment: value });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
-                      <SelectItem value="production">Production (Live)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={config.environment === 'sandbox' ? 'default' : 'outline'}
+                      className={`flex-1 ${config.environment === 'sandbox' ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}`}
+                      onClick={() => {
+                        setConfig(prev => ({ ...prev, environment: 'sandbox' }));
+                        saveDraft({ environment: 'sandbox' });
+                      }}
+                    >
+                      <TestTube className="h-4 w-4 mr-2" />
+                      Sandbox
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={config.environment === 'production' ? 'default' : 'outline'}
+                      className={`flex-1 ${config.environment === 'production' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+                      onClick={() => {
+                        setConfig(prev => ({ ...prev, environment: 'production' }));
+                        saveDraft({ environment: 'production' });
+                      }}
+                    >
+                      <Rocket className="h-4 w-4 mr-2" />
+                      Production
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {config.environment === 'sandbox' 
+                      ? '⚠️ Testing mode - use test credentials'
+                      : '✅ Live mode - real payments will be processed'
+                    }
+                  </p>
                 </div>
                 
                 <div className="space-y-2">
