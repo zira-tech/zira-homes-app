@@ -748,6 +748,61 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     }
   };
 
+  const handleTestKopokopoConnection = async () => {
+    if (!user?.id) return;
+
+    // Validate required fields
+    if (!config.kopokopo_client_id || !config.kopokopo_client_secret) {
+      toast({
+        title: "Missing Credentials",
+        description: "Please enter both Client ID and Client Secret to test the connection.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTesting(true);
+    try {
+      toast({
+        title: "Testing Connection",
+        description: "Validating your Kopo Kopo credentials...",
+      });
+
+      const { data: testResult, error: testError } = await supabase.functions.invoke('test-kopokopo-credentials', {
+        body: {
+          client_id: config.kopokopo_client_id,
+          client_secret: config.kopokopo_client_secret,
+          environment: config.environment,
+        },
+      });
+
+      if (testError || !testResult?.success) {
+        toast({
+          title: "Connection Failed",
+          description: testResult?.error || testError?.message || "Unable to authenticate with Kopo Kopo. Please verify your credentials.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Success
+      toast({
+        title: "Connection Successful! ✓",
+        description: "Your Kopo Kopo credentials are valid and working correctly.",
+      });
+
+    } catch (error) {
+      console.error('Error testing Kopo Kopo credentials:', error);
+      toast({
+        title: "Test Failed",
+        description: "Failed to test credentials. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const handleTestConfiguration = () => {
     if (!user?.id) return;
     setShowTestDialog(true);
@@ -1257,6 +1312,34 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       onBlur={() => saveDraft({ kopokopo_client_secret: config.kopokopo_client_secret })}
                     />
                     <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM before storage</p>
+                  </div>
+
+                  {/* Test Connection Button */}
+                  <div className="flex items-center justify-start pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleTestKopokopoConnection}
+                      disabled={testing || !config.kopokopo_client_id || !config.kopokopo_client_secret}
+                      className="gap-2"
+                    >
+                      {testing ? (
+                        <>
+                          <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          Testing Connection...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Test Connection
+                        </>
+                      )}
+                    </Button>
+                    {!config.kopokopo_client_id || !config.kopokopo_client_secret ? (
+                      <p className="text-xs text-muted-foreground ml-3">
+                        Enter credentials above to test
+                      </p>
+                    ) : null}
                   </div>
                   
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-2">
