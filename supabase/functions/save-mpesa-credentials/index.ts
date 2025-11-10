@@ -227,14 +227,43 @@ serve(async (req) => {
     }
 
     // Save ONLY encrypted credentials using admin client (bypasses RLS for secure insert)
-    const { data: savedConfig, error: saveError } = await supabaseAdmin
-      .from('landlord_mpesa_configs')
-      .upsert(upsertData, {
-        onConflict: 'landlord_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
+    // Check if this is an update (if config_id is provided) or a new insert
+    const configId = body.config_id; // Optional field to identify which config to update
+    
+    let savedConfig;
+    let saveError;
+
+    if (configId) {
+      // UPDATE existing config
+      const result = await supabaseAdmin
+        .from('landlord_mpesa_configs')
+        .update(upsertData)
+        .eq('id', configId)
+        .eq('landlord_id', user.id) // Security: ensure user owns this config
+        .select()
+        .single();
+      
+      savedConfig = result.data;
+      saveError = result.error;
+    } else {
+      // INSERT new config - first deactivate all other configs for this landlord
+      await supabaseAdmin
+        .from('landlord_mpesa_configs')
+        .update({ is_active: false })
+        .eq('landlord_id', user.id);
+
+      // Then insert new config as active
+      upsertData.is_active = true;
+      
+      const result = await supabaseAdmin
+        .from('landlord_mpesa_configs')
+        .insert(upsertData)
+        .select()
+        .single();
+      
+      savedConfig = result.data;
+      saveError = result.error;
+    }
 
     if (saveError) {
       console.error('[MPESA-CREDS] Database save error:', saveError);

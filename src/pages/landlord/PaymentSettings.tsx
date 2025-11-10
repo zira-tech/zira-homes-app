@@ -157,6 +157,11 @@ const PaymentSettings = () => {
     setHasMpesaConfig(hasConfig);
   };
 
+  const handleMpesaPreferenceChange = () => {
+    // Reload data when M-Pesa preference changes
+    loadData();
+  };
+
   if (loading || countryLoading) {
     return (
       <DashboardLayout>
@@ -213,7 +218,10 @@ const PaymentSettings = () => {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <MpesaCredentialsSection onConfigChange={handleMpesaConfigChange} />
+                  <MpesaCredentialsSection 
+                    onConfigChange={handleMpesaConfigChange}
+                    onPreferenceChange={handleMpesaPreferenceChange}
+                  />
                 </CardContent>
               </Card>
             </div>

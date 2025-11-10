@@ -35,9 +35,10 @@ interface MpesaConfig {
 
 interface MpesaCredentialsSectionProps {
   onConfigChange: (hasConfig: boolean) => void;
+  onPreferenceChange?: () => void; // Callback to refresh parent when preference changes
 }
 
-export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = ({ onConfigChange }) => {
+export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = ({ onConfigChange, onPreferenceChange }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { mpesaShortcode, mpesaDisplayName } = usePlatformConfig();
@@ -48,6 +49,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const [showForm, setShowForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showTestDialog, setShowTestDialog] = useState(false);
+  const [mpesaConfigPreference, setMpesaConfigPreference] = useState<'custom' | 'platform_default'>('platform_default');
+  const [allConfigs, setAllConfigs] = useState<MpesaConfig[]>([]);
+  const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const hasInitializedRef = useRef(false);
   const hasDraftRef = useRef(false);
   
@@ -123,38 +127,61 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     }
 
     try {
-      // SECURITY: Only select non-sensitive fields, NEVER fetch encrypted credentials
+      // Load payment preference to show correct badge
+      const { data: prefData, error: prefError } = await supabase
+        .from('landlord_payment_preferences')
+        .select('mpesa_config_preference')
+        .eq('landlord_id', user.id)
+        .maybeSingle();
+      
+      if (!prefError && prefData) {
+        setMpesaConfigPreference((prefData.mpesa_config_preference as 'custom' | 'platform_default') || 'platform_default');
+      }
+
+      // SECURITY: Load ALL configs (not just one), Only select non-sensitive fields, NEVER fetch encrypted credentials
       const { data, error } = await supabase
         .from('landlord_mpesa_configs')
         .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number')
         .eq('landlord_id', user.id)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading M-Pesa config:', error);
+        console.error('Error loading M-Pesa configs:', error);
         return;
       }
 
-      if (data) {
-        // SECURITY: Never populate credential fields from database
-        // Users must re-enter credentials to update them
-        setConfig(prev => ({
-          ...prev,
-          id: data.id,
-          callback_url: data.callback_url || '',
-          environment: (data.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
-          is_active: data.is_active,
-          business_shortcode: data.business_shortcode || '',
-          shortcode_type: (data.shortcode_type || 'paybill') as 'paybill' | 'till_safaricom' | 'till_kopokopo',
-          till_provider: (data.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
-          till_number: data.till_number || '',
-          kopokopo_client_id: data.kopokopo_client_id || '',
+      if (data && data.length > 0) {
+        // Store all configs
+        const configs = data.map(d => ({
+          id: d.id,
+          callback_url: d.callback_url || '',
+          environment: (d.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
+          is_active: d.is_active,
+          business_shortcode: d.business_shortcode || '',
+          shortcode_type: (d.shortcode_type || 'paybill') as 'paybill' | 'till_safaricom' | 'till_kopokopo',
+          till_provider: (d.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
+          till_number: d.till_number || '',
+          kopokopo_client_id: d.kopokopo_client_id || '',
           // Explicitly clear sensitive fields for security
           consumer_key: '',
           consumer_secret: '',
           passkey: '',
           kopokopo_client_secret: ''
         }));
+        
+        setAllConfigs(configs);
+        
+        // Find active config
+        const activeConfig = configs.find(c => c.is_active);
+        if (activeConfig) {
+          setConfig(activeConfig);
+          setActiveConfigId(activeConfig.id || null);
+        } else if (configs.length > 0) {
+          // If no active config, load the first one
+          setConfig(configs[0]);
+          setActiveConfigId(configs[0].id || null);
+        }
+        
         setHasConfig(true);
         setIsOpen(true);
         
@@ -166,6 +193,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         
         onConfigChange(true);
       } else {
+        setAllConfigs([]);
         setHasConfig(false);
         setIsOpen(true);
         
@@ -261,10 +289,16 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       if (error) throw error;
 
+      // Notify parent to refresh
+      onPreferenceChange?.();
+
       toast({
         title: "Platform Defaults Confirmed",
         description: `Tenants can now pay via M-Pesa using ${mpesaDisplayName || 'platform'} shortcode ${mpesaShortcode || '4155923'}`,
       });
+      
+      // Reload config to update badge
+      await loadConfig();
       
       // Optionally close the section
       setIsOpen(false);
@@ -292,6 +326,96 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       if (error) throw error;
 
+      // Remove from allConfigs
+      const updatedConfigs = allConfigs.filter(c => c.id !== config.id);
+      setAllConfigs(updatedConfigs);
+
+      // If there are other configs, switch to one of them
+      if (updatedConfigs.length > 0) {
+        const nextConfig = updatedConfigs[0];
+        setConfig(nextConfig);
+        setActiveConfigId(nextConfig.id || null);
+        setHasConfig(true);
+        onConfigChange(true);
+
+        toast({
+          title: "Configuration Deleted",
+          description: "The M-Pesa configuration has been deleted. Switched to another saved configuration.",
+        });
+      } else {
+        // No more configs, switch to platform defaults
+        const { error: prefError } = await supabase
+          .from('landlord_payment_preferences')
+          .upsert({
+            landlord_id: user.id,
+            mpesa_config_preference: 'platform_default'
+          }, {
+            onConflict: 'landlord_id',
+            ignoreDuplicates: false
+          });
+
+        if (prefError) {
+          console.error('Failed to update preference:', prefError);
+        }
+
+        setConfig({
+          consumer_key: '',
+          consumer_secret: '',
+          passkey: '',
+          business_shortcode: '',
+          shortcode_type: 'paybill',
+          phone_number: '',
+          paybill_number: '',
+          till_number: '',
+          till_provider: 'safaricom',
+          kopokopo_client_id: '',
+          kopokopo_client_secret: '',
+          environment: 'sandbox',
+          callback_url: '',
+          is_active: true,
+        });
+        setHasConfig(false);
+        onConfigChange(false);
+
+        // Notify parent to refresh
+        onPreferenceChange?.();
+        
+        // Reload to update badge
+        await loadConfig();
+
+        toast({
+          title: "Configuration Deleted",
+          description: "Switched to platform default M-Pesa configuration. Tenants will now use the platform shortcode.",
+        });
+      }
+
+      setShowForm(false);
+      setShowDeleteDialog(false);
+    } catch (error) {
+      console.error('Error deleting config:', error);
+      toast({
+        title: "Error", 
+        description: "Failed to delete configuration.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSwitchToDefaults = async () => {
+    if (!user?.id) return;
+    
+    setSaving(true);
+    try {
+      // Set all configs to inactive instead of deleting
+      const { error } = await supabase
+        .from('landlord_mpesa_configs')
+        .update({ is_active: false })
+        .eq('landlord_id', user.id);
+
+      if (error) throw error;
+
       // Update preference to platform_default
       const { error: prefError } = await supabase
         .from('landlord_payment_preferences')
@@ -307,33 +431,19 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         console.error('Failed to update preference:', prefError);
       }
 
-      setConfig({
-        consumer_key: '',
-        consumer_secret: '',
-        passkey: '',
-        business_shortcode: '',
-        shortcode_type: 'paybill',
-        phone_number: '',
-        paybill_number: '',
-        till_number: '',
-        till_provider: 'safaricom',
-        kopokopo_client_id: '',
-        kopokopo_client_secret: '',
-        environment: 'sandbox',
-        callback_url: '',
-        is_active: true,
-      });
-      setHasConfig(false);
+      // Notify parent to refresh
+      onPreferenceChange?.();
+      
+      // Reload config to show updated state
+      await loadConfig();
       setShowForm(false);
-      setShowDeleteDialog(false);
-      onConfigChange(false);
 
       toast({
-        title: "Success",
-        description: "Switched to platform default M-Pesa configuration. Tenants will now use the platform shortcode.",
+        title: "Switched to Platform Defaults",
+        description: "Your saved configurations are preserved and can be reactivated anytime.",
       });
     } catch (error) {
-      console.error('Error deleting config:', error);
+      console.error('Error switching to platform defaults:', error);
       toast({
         title: "Error", 
         description: "Failed to switch to platform defaults.",
@@ -342,6 +452,69 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleActivateConfig = async (configId: string) => {
+    if (!user?.id) return;
+    
+    setSaving(true);
+    try {
+      // Set all configs to inactive
+      await supabase
+        .from('landlord_mpesa_configs')
+        .update({ is_active: false })
+        .eq('landlord_id', user.id);
+
+      // Activate selected config
+      const { error } = await supabase
+        .from('landlord_mpesa_configs')
+        .update({ is_active: true })
+        .eq('id', configId);
+
+      if (error) throw error;
+
+      // Update preference to custom
+      const { error: prefError } = await supabase
+        .from('landlord_payment_preferences')
+        .upsert({
+          landlord_id: user.id,
+          mpesa_config_preference: 'custom'
+        }, {
+          onConflict: 'landlord_id',
+          ignoreDuplicates: false
+        });
+
+      if (prefError) {
+        console.error('Failed to update preference:', prefError);
+      }
+
+      // Notify parent to refresh
+      onPreferenceChange?.();
+      
+      // Reload config
+      await loadConfig();
+
+      toast({
+        title: "Configuration Activated",
+        description: "The selected M-Pesa configuration is now active.",
+      });
+    } catch (error) {
+      console.error('Error activating config:', error);
+      toast({
+        title: "Error",
+        description: "Failed to activate configuration.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditConfig = (configToEdit: MpesaConfig) => {
+    setConfig(configToEdit);
+    setShowForm(true);
+    setIsOpen(true);
+    sessionStorage.setItem(EDIT_KEY, '1');
   };
 
   const handleSave = async () => {
@@ -373,6 +546,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       // Save encrypted credentials via edge function
       const { data, error } = await supabase.functions.invoke('save-mpesa-credentials', {
         body: {
+          config_id: config.id, // Pass config_id for updates
           consumer_key: config.consumer_key,
           consumer_secret: config.consumer_secret,
           shortcode: config.business_shortcode,
@@ -416,6 +590,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         passkey: '',
         kopokopo_client_secret: ''
       }));
+
+      // Notify parent to refresh
+      onPreferenceChange?.();
 
       toast({
         title: "Credentials Saved Successfully",
@@ -496,15 +673,20 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 </h3>
               </div>
               <div className="flex items-center gap-2">
-                {hasConfig ? (
+                {mpesaConfigPreference === 'custom' ? (
                   <Badge variant="default" className="gap-1">
                     <CheckCircle className="h-3 w-3" />
-                    Configured
+                    Using Custom Credentials
                   </Badge>
                 ) : (
                   <Badge variant="secondary" className="gap-1">
                     <Globe className="h-3 w-3" />
                     Using Platform Defaults
+                  </Badge>
+                )}
+                {allConfigs.length > 1 && (
+                  <Badge variant="outline" className="text-xs">
+                    {allConfigs.length} configs saved
                   </Badge>
                 )}
               </div>
@@ -607,104 +789,140 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               </div>
             )}
 
-            {/* Configured State - Summary View */}
+            {/* Configured State - Summary View with All Configs */}
             {hasConfig && !showForm && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        Custom M-Pesa Configuration Active
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        Tenant payments go directly to your account
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4 p-4 bg-accent rounded-lg">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Payment Type</p>
-                      <p className="font-medium flex items-center gap-2">
-                        {config.shortcode_type === 'paybill' && 'Paybill Number'}
-                        {config.shortcode_type === 'till_safaricom' && 'Till Number - Safaricom'}
-                        {config.shortcode_type === 'till_kopokopo' && 'Till Number - Kopo Kopo'}
-                        <Badge variant="outline" className="text-xs">
-                          {config.shortcode_type === 'paybill' ? 'Paybill' : 'Till'}
-                        </Badge>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        {config.shortcode_type === 'till_kopokopo' ? 'Till Number' : 'Shortcode'}
-                      </p>
-                      <p className="font-medium">
-                        {config.shortcode_type === 'till_kopokopo' ? config.till_number : config.business_shortcode}
-                      </p>
-                    </div>
-                    {config.shortcode_type === 'till_kopokopo' && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Client ID</p>
-                        <p className="font-medium">{config.kopokopo_client_id}</p>
+              <div className="space-y-4">
+                {/* Show all saved configurations */}
+                {allConfigs.map((cfg) => (
+                  <Card key={cfg.id} className={cfg.is_active ? "border-primary" : ""}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-base flex items-center gap-2">
+                            {cfg.is_active && <CheckCircle className="h-5 w-5 text-green-600" />}
+                            {cfg.shortcode_type === 'paybill' && 'Paybill Number'}
+                            {cfg.shortcode_type === 'till_safaricom' && 'Till Number - Safaricom'}
+                            {cfg.shortcode_type === 'till_kopokopo' && 'Till Number - Kopo Kopo'}
+                          </CardTitle>
+                          <CardDescription className="mt-1">
+                            {cfg.is_active ? 'Currently Active' : 'Inactive Configuration'}
+                          </CardDescription>
+                        </div>
+                        {cfg.is_active && (
+                          <Badge variant="default">Active</Badge>
+                        )}
                       </div>
-                    )}
-                    <div>
-                      <p className="text-xs text-muted-foreground">Environment</p>
-                      <p className="font-medium capitalize">{config.environment}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Status</p>
-                      <Badge variant={config.is_active ? "default" : "secondary"}>
-                        {config.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
-                      <div className="text-sm text-amber-800 dark:text-amber-200">
-                        <p className="font-medium">Credentials Encrypted</p>
-                        <p>API credentials are stored using AES-256-GCM encryption and never displayed.</p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid md:grid-cols-3 gap-4 p-3 bg-accent rounded-lg text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            {cfg.shortcode_type === 'till_kopokopo' ? 'Till Number' : 'Shortcode'}
+                          </p>
+                          <p className="font-medium">
+                            {cfg.shortcode_type === 'till_kopokopo' ? cfg.till_number : cfg.business_shortcode}
+                          </p>
+                        </div>
+                        {cfg.shortcode_type === 'till_kopokopo' && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Client ID</p>
+                            <p className="font-medium">{cfg.kopokopo_client_id}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs text-muted-foreground">Environment</p>
+                          <p className="font-medium capitalize">{cfg.environment}</p>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Button 
-                      variant="default"
-                      onClick={handleTestConfiguration}
-                      disabled={testing}
-                      className="flex-1"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      {testing ? "Testing..." : "Test Configuration"}
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setShowForm(true);
-                        setIsOpen(true);
-                        sessionStorage.setItem(EDIT_KEY, '1');
-                      }}
-                      className="flex-1"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Edit Credentials
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => setShowDeleteDialog(true)}
-                      className="flex-1"
-                    >
-                      <Globe className="h-4 w-4 mr-2" />
-                      Switch to Defaults
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                      <div className="flex flex-wrap gap-2">
+                        {!cfg.is_active && (
+                          <Button 
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleActivateConfig(cfg.id!)}
+                            disabled={saving}
+                          >
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Activate
+                          </Button>
+                        )}
+                        {cfg.is_active && (
+                          <Button 
+                            variant="default"
+                            size="sm"
+                            onClick={handleTestConfiguration}
+                            disabled={testing}
+                          >
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            {testing ? "Testing..." : "Test"}
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditConfig(cfg)}
+                        >
+                          <Settings className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setConfig(cfg);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {/* Add New Configuration Button */}
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setConfig({
+                      consumer_key: '',
+                      consumer_secret: '',
+                      passkey: '',
+                      business_shortcode: '',
+                      shortcode_type: 'paybill',
+                      phone_number: '',
+                      paybill_number: '',
+                      till_number: '',
+                      till_provider: 'safaricom',
+                      kopokopo_client_id: '',
+                      kopokopo_client_secret: '',
+                      environment: 'sandbox',
+                      callback_url: '',
+                      is_active: true,
+                    });
+                    setShowForm(true);
+                    setIsOpen(true);
+                    sessionStorage.setItem(EDIT_KEY, '1');
+                  }}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Add New M-Pesa Configuration
+                </Button>
+
+                {/* Switch to Platform Defaults Button */}
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSwitchToDefaults}
+                  disabled={saving}
+                >
+                  <Globe className="h-4 w-4 mr-2" />
+                  {saving ? "Switching..." : "Use Platform Defaults (Preserve Configs)"}
+                </Button>
+              </div>
             )}
 
               {/* Form State - Edit/Create Credentials */}
@@ -1039,15 +1257,14 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-600" />
-              Switch to Platform Defaults?
+              Delete M-Pesa Configuration?
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
-              <p>This will delete your custom M-Pesa configuration and switch to platform defaults.</p>
-              <p className="font-medium">What this means:</p>
+              <p>This will permanently delete this M-Pesa configuration.</p>
+              <p className="font-medium">What happens next:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Your API credentials will be permanently deleted</li>
-                <li>Tenant payments will use platform shortcode (4155923)</li>
-                <li>You can reconfigure your own credentials anytime</li>
+                <li>{allConfigs.length > 1 ? 'You have other saved configurations that can be activated' : 'You will be switched back to platform defaults'}</li>
+                <li>This action cannot be undone</li>
               </ul>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1057,7 +1274,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
               onClick={handleDeleteConfig}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {saving ? "Switching..." : "Switch to Defaults"}
+              {saving ? "Deleting..." : "Delete Configuration"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
