@@ -31,6 +31,7 @@ serve(async (req) => {
     
     // Enhanced Safaricom IP ranges validation
     const safaricomIPRanges = [
+      '196.201.212.0/24',  // Production IPs (196.201.212.69, 196.201.212.129)
       '196.201.214.0/24',
       '196.201.215.0/24', 
       '196.201.216.0/24',
