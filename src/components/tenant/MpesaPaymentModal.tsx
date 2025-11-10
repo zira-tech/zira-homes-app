@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,11 @@ export function MpesaPaymentModal({
   
   // Use realtime hook for payment status updates
   const { transaction, isListening } = useRealtimeMpesaStatus(checkoutRequestId);
+  
+  // Polling state
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingAttemptsRef = useRef<number>(0);
+  const maxPollingAttempts = 12; // 12 attempts * 10 seconds = 2 minutes
 
   const formatPhoneNumber = (phone: string) => {
     let cleaned = phone.replace(/\D/g, '');
@@ -61,6 +66,13 @@ export function MpesaPaymentModal({
     if (!transaction) return;
 
     console.log('📊 Processing realtime transaction update:', transaction);
+    
+    // Stop polling when realtime update arrives
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      pollingAttemptsRef.current = 0;
+    }
 
     if (transaction.result_code !== null && transaction.result_code !== undefined) {
       if (String(transaction.result_code) === '0') {
@@ -91,6 +103,95 @@ export function MpesaPaymentModal({
       }
     }
   }, [transaction, invoice.id, onPaymentInitiated, onOpenChange]);
+
+  // Fallback polling mechanism
+  useEffect(() => {
+    // Only start polling when in verifying state and checkoutRequestId exists
+    if (status !== 'verifying' || !checkoutRequestId) {
+      return;
+    }
+
+    console.log('🔄 Starting fallback polling for transaction:', checkoutRequestId);
+    pollingAttemptsRef.current = 0;
+
+    const pollTransaction = async () => {
+      pollingAttemptsRef.current += 1;
+      console.log(`🔍 Polling attempt ${pollingAttemptsRef.current}/${maxPollingAttempts}`);
+
+      try {
+        const { data, error } = await supabase
+          .from('mpesa_transactions')
+          .select('*')
+          .eq('checkout_request_id', checkoutRequestId)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Polling error:', error);
+          return;
+        }
+
+        if (data && data.result_code !== null && data.result_code !== undefined) {
+          console.log('✅ Polling found transaction result:', data);
+          
+          // Clear polling interval
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+
+          // Process the result the same way as realtime
+          if (String(data.result_code) === '0') {
+            setStatus('success');
+            setStatusMessage('Payment completed successfully!');
+            
+            // Update invoice status
+            await supabase
+              .from('invoices')
+              .update({ 
+                status: 'paid',
+                mpesa_receipt_number: data.mpesa_receipt_number || data.result_desc 
+              })
+              .eq('id', invoice.id);
+
+            toast.success("Payment successful!");
+            
+            setTimeout(() => {
+              onPaymentInitiated?.();
+              onOpenChange(false);
+              resetDialog();
+            }, 2000);
+          } else {
+            setStatus('error');
+            setStatusMessage(data.result_desc || 'Payment failed');
+            toast.error(data.result_desc || 'Payment failed');
+          }
+        } else if (pollingAttemptsRef.current >= maxPollingAttempts) {
+          // Max attempts reached
+          console.warn('⏱️ Polling timeout - max attempts reached');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setStatus('error');
+          setStatusMessage('Payment verification timed out. Please check your M-Pesa messages or contact support.');
+          toast.error('Verification timed out');
+        }
+      } catch (err) {
+        console.error('Polling exception:', err);
+      }
+    };
+
+    // Start polling every 10 seconds
+    pollingIntervalRef.current = setInterval(pollTransaction, 10000);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [status, checkoutRequestId, invoice.id, onPaymentInitiated, onOpenChange]);
 
   const handlePayment = async () => {
     if (!phoneNumber.trim()) {
@@ -202,6 +303,13 @@ export function MpesaPaymentModal({
   };
 
   const resetDialog = () => {
+    // Clear polling interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    pollingAttemptsRef.current = 0;
+    
     setStatus('idle');
     setStatusMessage('');
     setCheckoutRequestId(null);
