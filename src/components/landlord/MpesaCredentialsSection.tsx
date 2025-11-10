@@ -111,14 +111,26 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
   const saveDraft = (fields: Partial<MpesaConfig>) => {
     try {
+      // Load existing draft and merge to preserve all fields
+      const existing = (loadDraft() || {}) as Partial<MpesaConfig>;
+      const merged: Partial<MpesaConfig> = {
+        // Preserve critical keys from previous draft or current config
+        shortcode_type: existing.shortcode_type ?? config.shortcode_type,
+        till_provider: existing.till_provider ?? config.till_provider,
+        environment: existing.environment ?? config.environment,
+        // Merge other fields
+        ...existing,
+        ...fields,
+      };
       const draft = {
-        fields,
+        fields: merged,
         savedAt: Date.now()
       };
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-      console.log('💾 Draft saved:', {
-        shortcode_type: fields.shortcode_type,
-        till_provider: fields.till_provider,
+      sessionStorage.setItem(EDIT_KEY, '1'); // Always refresh EDIT_KEY
+      console.log('💾 Draft saved (merged):', {
+        shortcode_type: merged.shortcode_type,
+        till_provider: merged.till_provider,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -244,7 +256,12 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       
       // CRITICAL FIX: Set config directly to draft (not merge with prev)
       // This ensures RadioGroup gets the correct value immediately
-      setConfig(draftFields as MpesaConfig);
+      // Safety: fallback to 'paybill' if shortcode_type is somehow missing
+      const safeConfig = {
+        ...draftFields,
+        shortcode_type: draftFields.shortcode_type || 'paybill'
+      } as MpesaConfig;
+      setConfig(safeConfig);
       
       // Show toast notification that draft was restored
       toast({
@@ -541,6 +558,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
   const handleEditConfig = (configToEdit: MpesaConfig) => {
     setConfig(configToEdit);
+    saveDraft(configToEdit); // Seed the draft immediately
     setShowForm(true);
     setIsOpen(true);
     sessionStorage.setItem(EDIT_KEY, '1');
@@ -770,6 +788,24 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       </ul>
                       <Button 
                         onClick={() => {
+                          const newConfig: MpesaConfig = {
+                            consumer_key: '',
+                            consumer_secret: '',
+                            passkey: '',
+                            business_shortcode: '',
+                            shortcode_type: 'paybill',
+                            phone_number: '',
+                            paybill_number: '',
+                            till_number: '',
+                            till_provider: 'safaricom',
+                            kopokopo_client_id: '',
+                            kopokopo_client_secret: '',
+                            environment: 'sandbox',
+                            callback_url: '',
+                            is_active: true,
+                          };
+                          setConfig(newConfig);
+                          saveDraft(newConfig); // Seed the draft immediately
                           setShowForm(true);
                           setIsOpen(true);
                           sessionStorage.setItem(EDIT_KEY, '1');
@@ -921,7 +957,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                   variant="outline"
                   className="w-full"
                   onClick={() => {
-                    setConfig({
+                    const newConfig: MpesaConfig = {
                       consumer_key: '',
                       consumer_secret: '',
                       passkey: '',
@@ -936,7 +972,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       environment: 'sandbox',
                       callback_url: '',
                       is_active: true,
-                    });
+                    };
+                    setConfig(newConfig);
+                    saveDraft(newConfig); // Seed the draft immediately
                     setShowForm(true);
                     setIsOpen(true);
                     sessionStorage.setItem(EDIT_KEY, '1');
