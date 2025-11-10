@@ -145,7 +145,7 @@ export function useTenantDashboardData(activeLeaseId?: string | null) {
       };
     },
     enabled: !!user && !!activeLeaseId,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 1, // 1 minute for fresher data
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
   });
 }

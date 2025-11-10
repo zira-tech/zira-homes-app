@@ -12,6 +12,7 @@ import { Smartphone, DollarSign, Loader2, Clock, CheckCircle2, XCircle, AlertCir
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 import { cn } from "@/lib/utils";
 import { useRealtimeMpesaStatus } from "@/hooks/useRealtimeMpesaStatus";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface MpesaPaymentModalProps {
   open: boolean;
@@ -38,6 +39,9 @@ export function MpesaPaymentModal({
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  
+  // React Query client for cache invalidation
+  const queryClient = useQueryClient();
   
   // Use realtime hook for payment status updates
   const { transaction, isListening } = useRealtimeMpesaStatus(checkoutRequestId);
@@ -108,6 +112,9 @@ export function MpesaPaymentModal({
           .eq('id', invoice.id)
           .then(() => {
             toast.success("Payment successful!");
+            
+            // Invalidate tenant dashboard cache for instant refresh
+            queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
             
             setTimeout(() => {
               onPaymentInitiated?.();
@@ -186,6 +193,9 @@ export function MpesaPaymentModal({
               .eq('id', invoice.id);
 
             toast.success("Payment successful!");
+            
+            // Invalidate tenant dashboard cache for instant refresh
+            queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
             
             setTimeout(() => {
               onPaymentInitiated?.();

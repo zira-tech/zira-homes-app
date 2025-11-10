@@ -7,6 +7,7 @@ interface UseRealtimeDashboardProps {
   onMaintenanceUpdate?: () => void;
   onTenantUpdate?: () => void;
   onPropertyUpdate?: () => void;
+  onInvoiceUpdate?: () => void;
 }
 
 export function useRealtimeDashboard({
@@ -14,6 +15,7 @@ export function useRealtimeDashboard({
   onMaintenanceUpdate,
   onTenantUpdate,
   onPropertyUpdate,
+  onInvoiceUpdate,
 }: UseRealtimeDashboardProps) {
   const channelRef = useRef<RealtimeChannel | null>(null);
 
@@ -69,6 +71,18 @@ export function useRealtimeDashboard({
           onPropertyUpdate?.();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices'
+        },
+        (payload) => {
+          console.log('Invoice change detected:', payload);
+          onInvoiceUpdate?.();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -76,7 +90,7 @@ export function useRealtimeDashboard({
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [onPaymentUpdate, onMaintenanceUpdate, onTenantUpdate, onPropertyUpdate]);
+  }, [onPaymentUpdate, onMaintenanceUpdate, onTenantUpdate, onPropertyUpdate, onInvoiceUpdate]);
 
   return {
     isConnected: channelRef.current?.state === 'joined'

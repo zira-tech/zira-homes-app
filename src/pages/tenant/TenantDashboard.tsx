@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantLeases } from "@/hooks/useTenantLeases";
 import { useTenantDashboardData } from "@/hooks/tenant/useTenantDashboardData";
+import { useRealtimeDashboard } from "@/hooks/useRealtimeDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,19 @@ export default function TenantDashboard() {
     : getActiveLease();
 
   // Use React Query hook for data fetching with caching - pass the activeLease for consistent data
-  const { data: tenantData, isLoading: dashboardLoading } = useTenantDashboardData(activeLease?.id);
+  const { data: tenantData, isLoading: dashboardLoading, refetch } = useTenantDashboardData(activeLease?.id);
+
+  // Set up realtime updates for instant dashboard refresh
+  useRealtimeDashboard({
+    onPaymentUpdate: () => {
+      console.log('Payment updated - refreshing dashboard');
+      refetch();
+    },
+    onInvoiceUpdate: () => {
+      console.log('Invoice updated - refreshing dashboard');
+      refetch();
+    },
+  });
 
   useEffect(() => {
     // Set initial selected lease when leases load
