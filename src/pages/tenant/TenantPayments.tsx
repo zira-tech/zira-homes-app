@@ -30,6 +30,7 @@ import {
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { TenantPaymentSettings } from "@/components/tenant/TenantPaymentSettings";
+import { MpesaErrorBoundary } from "@/components/mpesa/MpesaErrorBoundary";
 import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getInvoiceDescription, linkPaymentToInvoice } from "@/utils/invoiceFormat";
 import { fmtCurrency, fmtDate } from "@/lib/format";
 import { measureApiCall } from "@/utils/performanceMonitor";
@@ -1021,16 +1022,18 @@ export default function TenantPayments() {
 
             {selectedInvoice && (
               <Suspense fallback={<div className="flex items-center justify-center p-4"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                <MpesaPaymentDialog
-                  open={mpesaDialogOpen}
-                  onOpenChange={setMpesaDialogOpen}
-                  invoice={selectedInvoice}
-                  onPaymentInitiated={() => {
-                    setMpesaDialogOpen(false);
-                    setSelectedInvoice(null);
-                    fetchPaymentData();
-                  }}
-                />
+                <MpesaErrorBoundary onRetry={() => setMpesaDialogOpen(false)}>
+                  <MpesaPaymentDialog
+                    open={mpesaDialogOpen}
+                    onOpenChange={setMpesaDialogOpen}
+                    invoice={selectedInvoice}
+                    onPaymentInitiated={() => {
+                      setMpesaDialogOpen(false);
+                      setSelectedInvoice(null);
+                      fetchPaymentData();
+                    }}
+                  />
+                </MpesaErrorBoundary>
               </Suspense>
             )}
         </div>

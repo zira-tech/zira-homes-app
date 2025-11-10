@@ -1,19 +1,56 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/utils/logger';
 
 interface MpesaAvailabilityResult {
   isAvailable: boolean;
   isChecking: boolean;
   checkAvailability: (invoiceId: string) => Promise<boolean>;
+  error: string | null;
 }
+
+type MpesaCheckError = 
+  | 'invoice_not_found' 
+  | 'lease_not_found' 
+  | 'unit_not_found' 
+  | 'property_not_found' 
+  | 'landlord_not_found'
+  | 'config_check_failed'
+  | 'network_error'
+  | 'unknown_error';
+
+const ERROR_MESSAGES: Record<MpesaCheckError, string> = {
+  invoice_not_found: 'Invoice not found. Please refresh and try again.',
+  lease_not_found: 'Lease information not found. Please contact support.',
+  unit_not_found: 'Unit information not found. Please contact support.',
+  property_not_found: 'Property information not found. Please contact support.',
+  landlord_not_found: 'Landlord information not found. Please contact support.',
+  config_check_failed: 'Unable to verify M-Pesa configuration. Please try again.',
+  network_error: 'Network error. Please check your connection and try again.',
+  unknown_error: 'An unexpected error occurred. Please try again.',
+};
 
 export function useMpesaAvailability(): MpesaAvailabilityResult {
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleError = (errorType: MpesaCheckError, details?: string) => {
+    const message = ERROR_MESSAGES[errorType];
+    setError(message);
+    setIsAvailable(false);
+    toast.error(message, { duration: 5000 });
+    
+    logger.error(`M-Pesa availability check failed: ${errorType}`, new Error(message), {
+      errorType,
+      details
+    });
+  };
 
   const checkAvailability = async (invoiceId: string): Promise<boolean> => {
     setIsChecking(true);
+    setError(null);
     
     try {
       // First, get the lease_id from the invoice
@@ -24,16 +61,18 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         .maybeSingle();
 
       if (invoiceError) {
-        console.error('Error fetching invoice for M-Pesa check:', invoiceError);
-        toast.error('Failed to verify M-Pesa availability');
-        setIsAvailable(false);
+        if (invoiceError.code === 'PGRST116') {
+          handleError('invoice_not_found', invoiceId);
+        } else if (invoiceError.message?.includes('network') || invoiceError.message?.includes('fetch')) {
+          handleError('network_error', invoiceError.message);
+        } else {
+          handleError('unknown_error', invoiceError.message);
+        }
         return false;
       }
 
       if (!invoice || !invoice.lease_id) {
-        console.error('Invoice not found for M-Pesa check');
-        toast.error('Invoice not found');
-        setIsAvailable(false);
+        handleError('invoice_not_found', invoiceId);
         return false;
       }
 
@@ -45,9 +84,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         .maybeSingle();
 
       if (leaseError || !lease) {
-        console.error('Error fetching lease for M-Pesa check:', leaseError);
-        toast.error('Failed to verify M-Pesa availability');
-        setIsAvailable(false);
+        handleError('lease_not_found', leaseError?.message);
         return false;
       }
 
@@ -59,9 +96,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         .maybeSingle();
 
       if (unitError || !unit) {
-        console.error('Error fetching unit for M-Pesa check:', unitError);
-        toast.error('Failed to verify M-Pesa availability');
-        setIsAvailable(false);
+        handleError('unit_not_found', unitError?.message);
         return false;
       }
 
@@ -73,18 +108,14 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         .maybeSingle();
 
       if (propertyError || !property) {
-        console.error('Error fetching property for M-Pesa check:', propertyError);
-        toast.error('Failed to verify M-Pesa availability');
-        setIsAvailable(false);
+        handleError('property_not_found', propertyError?.message);
         return false;
       }
 
       const landlordId = property.owner_id;
 
       if (!landlordId) {
-        console.error('Could not determine landlord for M-Pesa check');
-        toast.error('Could not verify M-Pesa availability');
-        setIsAvailable(false);
+        handleError('landlord_not_found', 'Property has no owner');
         return false;
       }
 
@@ -97,9 +128,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         .maybeSingle();
 
       if (configError) {
-        console.error('Error checking M-Pesa config:', configError);
-        toast.error('Failed to verify M-Pesa availability');
-        setIsAvailable(false);
+        handleError('config_check_failed', configError.message);
         return false;
       }
 
@@ -128,6 +157,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
       setIsAvailable(available);
 
       if (!available) {
+        setError('M-Pesa payments are not available for this property yet.');
         toast.error(
           'M-Pesa payments are not available for this property yet. Please contact your landlord to enable M-Pesa payments.',
           {
@@ -137,11 +167,17 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         return false;
       }
 
+      logger.info('M-Pesa availability check successful', {
+        invoiceId,
+        landlordId,
+        hasCustomConfig: !!mpesaConfig,
+        usesPlatformDefault: available && !mpesaConfig
+      });
+
       return true;
-    } catch (error) {
-      console.error('Error checking M-Pesa availability:', error);
-      toast.error('Failed to verify M-Pesa availability');
-      setIsAvailable(false);
+    } catch (error: any) {
+      logger.error('Unexpected error checking M-Pesa availability', error);
+      handleError('unknown_error', error?.message);
       return false;
     } finally {
       setIsChecking(false);
@@ -152,5 +188,6 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
     isAvailable,
     isChecking,
     checkAvailability,
+    error,
   };
 }

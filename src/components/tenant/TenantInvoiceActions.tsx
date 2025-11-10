@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MpesaPaymentModal } from "./MpesaPaymentModal";
+import { MpesaErrorBoundary } from "@/components/mpesa/MpesaErrorBoundary";
 import { MoreHorizontal, Smartphone, Download, Eye } from "lucide-react";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
 
@@ -70,12 +71,14 @@ export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoic
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <MpesaPaymentModal
-        open={mpesaModalOpen}
-        onOpenChange={setMpesaModalOpen}
-        invoice={invoice}
-        onPaymentInitiated={onPaymentSuccess}
-      />
+      <MpesaErrorBoundary onRetry={() => setMpesaModalOpen(false)}>
+        <MpesaPaymentModal
+          open={mpesaModalOpen}
+          onOpenChange={setMpesaModalOpen}
+          invoice={invoice}
+          onPaymentInitiated={onPaymentSuccess}
+        />
+      </MpesaErrorBoundary>
     </>
   );
 }
