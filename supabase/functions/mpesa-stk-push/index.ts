@@ -670,22 +670,31 @@ serve(async (req) => {
         // Construct callback URL
         const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/kopokopo-callback`;
 
-        // Kopo Kopo STK Push payload
+        // Kopo Kopo STK Push payload (following official API format)
+        // Reference: https://developers.kopokopo.com/guides/receive-money/mpesa-stk.html
         const kopokopoPayload = {
-          paymentChannel: 'M-PESA STK Push',
-          tillNumber: tillNumber,
-          firstName: 'Customer',
-          lastName: 'Payment',
-          phoneNumber: phoneNumber,
-          amount: amount, // Amount in KES (not cents)
-          currency: 'KES',
-          callbackUrl: callbackUrl,
+          payment_channel: 'M-PESA STK Push',
+          till_number: `K${tillNumber}`, // Till number must be prefixed with K
+          subscriber: {
+            first_name: 'Customer',
+            last_name: 'Payment',
+            phone_number: phoneNumber,
+            email: 'customer@property.com'
+          },
+          amount: {
+            currency: 'KES',
+            value: amount // Amount in KES (not cents)
+          },
           metadata: {
+            customer_id: landlordConfigId,
             invoice_id: invoiceId || accountReference,
             payment_type: paymentType || 'rent',
             landlord_id: landlordConfigId,
             reference: `INV-${invoiceId || Date.now()}`,
             notes: transactionDesc || 'Property rent payment'
+          },
+          _links: {
+            callback_url: callbackUrl
           }
         };
 
