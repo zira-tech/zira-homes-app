@@ -65,7 +65,17 @@ export function MpesaPaymentModal({
   useEffect(() => {
     if (!transaction) return;
 
-    console.log('📊 Processing realtime transaction update:', transaction);
+    // Don't overwrite success state with later updates
+    if (status === 'success') {
+      console.log('⚠️ Ignoring update - payment already succeeded');
+      return;
+    }
+
+    console.log('📊 Processing realtime transaction update:', {
+      resultCode: transaction.result_code,
+      resultCodeType: typeof transaction.result_code,
+      resultDesc: transaction.result_desc
+    });
     
     // Stop polling when realtime update arrives
     if (pollingIntervalRef.current) {
@@ -75,7 +85,16 @@ export function MpesaPaymentModal({
     }
 
     if (transaction.result_code !== null && transaction.result_code !== undefined) {
-      if (String(transaction.result_code) === '0') {
+      // Convert to number for reliable comparison
+      const resultCode = Number(transaction.result_code);
+      
+      console.log('🔍 Result code comparison:', {
+        raw: transaction.result_code,
+        converted: resultCode,
+        isZero: resultCode === 0
+      });
+      
+      if (resultCode === 0) {
         setStatus('success');
         setStatusMessage('Payment completed successfully!');
         
@@ -98,11 +117,11 @@ export function MpesaPaymentModal({
           });
       } else {
         setStatus('error');
-        setStatusMessage(transaction.result_desc || 'Payment failed');
+        setStatusMessage(transaction.result_desc || `Payment failed (Code: ${transaction.result_code})`);
         toast.error(transaction.result_desc || 'Payment failed');
       }
     }
-  }, [transaction, invoice.id, onPaymentInitiated, onOpenChange]);
+  }, [transaction, status, invoice.id, onPaymentInitiated, onOpenChange]);
 
   // Fallback polling mechanism
   useEffect(() => {
@@ -131,7 +150,11 @@ export function MpesaPaymentModal({
         }
 
         if (data && data.result_code !== null && data.result_code !== undefined) {
-          console.log('✅ Polling found transaction result:', data);
+          console.log('✅ Polling found transaction result:', {
+            resultCode: data.result_code,
+            resultCodeType: typeof data.result_code,
+            resultDesc: data.result_desc
+          });
           
           // Clear polling interval
           if (pollingIntervalRef.current) {
@@ -139,8 +162,17 @@ export function MpesaPaymentModal({
             pollingIntervalRef.current = null;
           }
 
+          // Convert to number for reliable comparison
+          const resultCode = Number(data.result_code);
+          
+          console.log('🔍 Polling result code comparison:', {
+            raw: data.result_code,
+            converted: resultCode,
+            isZero: resultCode === 0
+          });
+
           // Process the result the same way as realtime
-          if (String(data.result_code) === '0') {
+          if (resultCode === 0) {
             setStatus('success');
             setStatusMessage('Payment completed successfully!');
             
@@ -162,7 +194,7 @@ export function MpesaPaymentModal({
             }, 2000);
           } else {
             setStatus('error');
-            setStatusMessage(data.result_desc || 'Payment failed');
+            setStatusMessage(data.result_desc || `Payment failed (Code: ${data.result_code})`);
             toast.error(data.result_desc || 'Payment failed');
           }
         } else if (pollingAttemptsRef.current >= maxPollingAttempts) {
