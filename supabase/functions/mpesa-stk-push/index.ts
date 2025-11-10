@@ -398,29 +398,12 @@ serve(async (req) => {
       }
     }
 
-    // Check landlord's M-Pesa configuration preference
-    let mpesaConfigPreference = 'platform_default'; // default
-    let shouldLoadLandlordConfig = false;
+    // IMPROVED: Check for active custom config first, then preferences
+    let mpesaConfig = null;
+    let mpesaConfigPreference = 'platform_default';
 
     if (landlordConfigId) {
-      const { data: paymentPrefs } = await supabaseAdmin
-        .from('landlord_payment_preferences')
-        .select('mpesa_config_preference')
-        .eq('landlord_id', landlordConfigId)
-        .maybeSingle();
-
-      mpesaConfigPreference = paymentPrefs?.mpesa_config_preference || 'platform_default';
-      shouldLoadLandlordConfig = mpesaConfigPreference === 'custom';
-
-      console.log('💳 Landlord payment preference:', {
-        landlordId: landlordConfigId,
-        preference: mpesaConfigPreference,
-        willUseLandlordConfig: shouldLoadLandlordConfig
-      });
-    }
-
-    let mpesaConfig = null;
-    if (shouldLoadLandlordConfig && landlordConfigId) {
+      // Step 1: Check for active custom config first (robust approach)
       const { data: config } = await supabaseAdmin
         .from('landlord_mpesa_configs')
         .select('*')
@@ -429,14 +412,53 @@ serve(async (req) => {
         .maybeSingle();
 
       mpesaConfig = config;
-      console.log('Landlord M-Pesa config found:', !!mpesaConfig);
-      
-      if (!mpesaConfig) {
-        console.warn('⚠️ Landlord prefers custom M-Pesa but no config found for landlordId:', landlordConfigId);
-        console.warn('⚠️ Falling back to platform defaults');
+
+      if (mpesaConfig) {
+        console.log('✅ Found active landlord M-Pesa config:', {
+          landlordId: landlordConfigId,
+          shortcode: mpesaConfig.business_shortcode,
+          shortcode_type: mpesaConfig.shortcode_type,
+          environment: mpesaConfig.environment
+        });
+
+        // Step 2: Check preference setting
+        const { data: paymentPrefs } = await supabaseAdmin
+          .from('landlord_payment_preferences')
+          .select('mpesa_config_preference')
+          .eq('landlord_id', landlordConfigId)
+          .maybeSingle();
+
+        mpesaConfigPreference = paymentPrefs?.mpesa_config_preference || 'platform_default';
+
+        // Step 3: Self-heal preference if needed
+        if (mpesaConfigPreference !== 'custom') {
+          console.log('🔄 Self-healing: Active config exists but preference is not "custom". Updating...');
+          await supabaseAdmin
+            .from('landlord_payment_preferences')
+            .upsert({
+              landlord_id: landlordConfigId,
+              mpesa_config_preference: 'custom',
+              updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'landlord_id'
+            });
+          console.log('✅ Preference self-healed to "custom" for landlord:', landlordConfigId);
+        }
+      } else {
+        // No custom config exists, check preference (might be platform_default or unset)
+        const { data: paymentPrefs } = await supabaseAdmin
+          .from('landlord_payment_preferences')
+          .select('mpesa_config_preference')
+          .eq('landlord_id', landlordConfigId)
+          .maybeSingle();
+
+        mpesaConfigPreference = paymentPrefs?.mpesa_config_preference || 'platform_default';
+        console.log('💳 No custom config found. Using preference:', {
+          landlordId: landlordConfigId,
+          preference: mpesaConfigPreference
+        });
+        console.log('✅ Using platform default M-Pesa config');
       }
-    } else if (landlordConfigId) {
-      console.log('✅ Using platform default M-Pesa config (landlord preference)');
     }
 
     // Helper function to decrypt credentials
