@@ -724,14 +724,32 @@ serve(async (req) => {
 
         if (!kopokopoResponse.ok) {
           console.error('❌ Kopo Kopo STK Push failed:', kopokopoData);
+          
+          // Handle specific error codes
+          let userMessage = 'Failed to initiate Kopo Kopo payment';
+          let shouldRetry = true;
+          
+          if (kopokopoResponse.status === 429 || kopokopoData.error_code === 429) {
+            if (kopokopoData.error_message?.includes('pending request')) {
+              userMessage = 'There is already a pending M-Pesa request for this phone number. Please complete or cancel the existing request first, then try again.';
+              shouldRetry = false;
+            } else {
+              userMessage = 'Too many payment requests. Please wait a moment and try again.';
+              shouldRetry = true;
+            }
+          } else if (kopokopoData.error_message) {
+            userMessage = kopokopoData.error_message;
+          }
+          
           return new Response(
             JSON.stringify({ 
-              error: 'Failed to initiate Kopo Kopo payment',
+              error: userMessage,
               errorId: 'KOPOKOPO_API_ERROR',
+              shouldRetry,
               details: kopokopoData
             }),
             { 
-              status: kopokopoResponse.status, 
+              status: 400, // Return 400 instead of passing through 429
               headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
             }
           );

@@ -1139,12 +1139,15 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                                     </Badge>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Credentials tested successfully</p>
+                                    <p className="font-medium">OAuth Credentials Verified</p>
                                     {cfg.last_verified_at && (
-                                      <p className="text-xs text-muted-foreground">
-                                        {new Date(cfg.last_verified_at).toLocaleDateString()} at {new Date(cfg.last_verified_at).toLocaleTimeString()}
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Last verified: {new Date(cfg.last_verified_at).toLocaleString()}
                                       </p>
                                     )}
+                                    <p className="text-xs text-yellow-600 mt-1">
+                                      ⚠️ Note: This only verifies OAuth authentication. Use "Test STK Push" to verify payment capability.
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -1195,7 +1198,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         )}
                         {cfg.is_active && (
                           <>
-                            {/* Test Credentials button - Kopo Kopo only */}
+                            {/* Test OAuth Connection button - Kopo Kopo only */}
                             {cfg.shortcode_type === 'till_kopokopo' && (
                               <Button 
                                 variant="default"
@@ -1204,10 +1207,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                                 disabled={testing}
                               >
                                 <Key className="h-3 w-3 mr-1" />
-                                {testing ? "Testing..." : "Test Credentials"}
+                                {testing ? "Testing..." : "Test OAuth"}
                               </Button>
                             )}
-                            {/* Test Payment button - for actual STK push */}
+                            {/* Test STK Push button - for actual payment */}
                             <Button 
                               variant="outline"
                               size="sm"
@@ -1215,7 +1218,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                               disabled={testing}
                             >
                               <Smartphone className="h-3 w-3 mr-1" />
-                              Test Payment
+                              Test STK Push
                             </Button>
                           </>
                         )}
@@ -1548,8 +1551,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         </>
                       ) : (
                         <>
-                          <CheckCircle className="h-4 w-4" />
-                          Test Connection
+                          <Key className="h-4 w-4" />
+                          Test OAuth Connection
                         </>
                       )}
                     </Button>

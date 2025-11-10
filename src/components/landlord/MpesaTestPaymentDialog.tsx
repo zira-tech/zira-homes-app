@@ -182,7 +182,9 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
       }
 
       if (!data?.success) {
-        throw new Error(data?.error || 'Failed to initiate payment');
+        const errorDetails = data?.error || 'Failed to initiate payment';
+        setErrorMessage(errorDetails);
+        throw new Error(errorDetails);
       }
 
       // Payment request sent successfully
@@ -372,6 +374,20 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
                 Please verify your credentials and try again, or contact support if the issue persists.
               </AlertDescription>
             </Alert>
+            
+            {errorMessage?.includes('pending request') && (
+              <Alert className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  <strong>Common causes:</strong>
+                  <ul className="list-disc ml-4 mt-2 space-y-1">
+                    <li>You have an incomplete M-Pesa transaction on your phone</li>
+                    <li>Wait 2-3 minutes for the previous request to expire</li>
+                    <li>Check your phone for any pending M-Pesa prompts and complete or cancel them</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
