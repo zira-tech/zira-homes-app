@@ -814,6 +814,7 @@ export type Database = {
           consumer_key_encrypted: string | null
           consumer_secret_encrypted: string | null
           created_at: string
+          credentials_verified: boolean | null
           environment: string
           id: string
           is_active: boolean
@@ -822,6 +823,7 @@ export type Database = {
           kopokopo_client_secret_encrypted: string | null
           kopokopo_merchant_id: string | null
           landlord_id: string
+          last_verified_at: string | null
           passkey_encrypted: string | null
           paybill_number: string | null
           phone_number: string | null
@@ -836,6 +838,7 @@ export type Database = {
           consumer_key_encrypted?: string | null
           consumer_secret_encrypted?: string | null
           created_at?: string
+          credentials_verified?: boolean | null
           environment?: string
           id?: string
           is_active?: boolean
@@ -844,6 +847,7 @@ export type Database = {
           kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id: string
+          last_verified_at?: string | null
           passkey_encrypted?: string | null
           paybill_number?: string | null
           phone_number?: string | null
@@ -858,6 +862,7 @@ export type Database = {
           consumer_key_encrypted?: string | null
           consumer_secret_encrypted?: string | null
           created_at?: string
+          credentials_verified?: boolean | null
           environment?: string
           id?: string
           is_active?: boolean
@@ -866,6 +871,7 @@ export type Database = {
           kopokopo_client_secret_encrypted?: string | null
           kopokopo_merchant_id?: string | null
           landlord_id?: string
+          last_verified_at?: string | null
           passkey_encrypted?: string | null
           paybill_number?: string | null
           phone_number?: string | null

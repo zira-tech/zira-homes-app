@@ -32,6 +32,8 @@ interface MpesaConfig {
   environment: 'sandbox' | 'production';
   callback_url?: string;
   is_active: boolean;
+  credentials_verified?: boolean;
+  last_verified_at?: string;
 }
 
 interface MpesaCredentialsSectionProps {
@@ -169,7 +171,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       // SECURITY: Load ALL configs (not just one), Only select non-sensitive fields, NEVER fetch encrypted credentials
       const { data, error } = await supabase
         .from('landlord_mpesa_configs')
-        .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number')
+        .select('id, callback_url, environment, is_active, business_shortcode, shortcode_type, till_provider, kopokopo_client_id, till_number, credentials_verified, last_verified_at')
         .eq('landlord_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -190,6 +192,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           till_provider: (d.till_provider || 'safaricom') as 'safaricom' | 'kopokopo',
           till_number: d.till_number || '',
           kopokopo_client_id: d.kopokopo_client_id || '',
+          credentials_verified: d.credentials_verified || false,
+          last_verified_at: d.last_verified_at || undefined,
           // Explicitly clear sensitive fields for security
           consumer_key: '',
           consumer_secret: '',
@@ -828,6 +832,31 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       // Success
       console.log('✅ Test successful');
+      
+      // Mark credentials as verified if this is an existing config
+      if (config.id) {
+        try {
+          const { error: updateError } = await supabase
+            .from('landlord_mpesa_configs')
+            .update({
+              credentials_verified: true,
+              last_verified_at: new Date().toISOString()
+            })
+            .eq('id', config.id)
+            .eq('landlord_id', user.id);
+          
+          if (updateError) {
+            console.error('Failed to mark credentials as verified:', updateError);
+          } else {
+            console.log('✅ Credentials marked as verified in database');
+            // Refresh configs to show the badge
+            await loadConfig();
+          }
+        } catch (err) {
+          console.error('Error updating verification status:', err);
+        }
+      }
+      
       toast({
         title: "Connection Successful! ✓",
         description: "Your Kopo Kopo credentials are valid and working correctly.",
@@ -1013,6 +1042,26 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                             {cfg.shortcode_type === 'paybill' && 'Paybill Number'}
                             {cfg.shortcode_type === 'till_safaricom' && 'Till Number - Safaricom'}
                             {cfg.shortcode_type === 'till_kopokopo' && 'Till Number - Kopo Kopo'}
+                            {cfg.credentials_verified && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="outline" className="ml-2 gap-1 border-green-600 text-green-600 bg-green-50 dark:bg-green-950">
+                                      <Shield className="h-3 w-3" />
+                                      Verified
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Credentials tested successfully</p>
+                                    {cfg.last_verified_at && (
+                                      <p className="text-xs text-muted-foreground">
+                                        {new Date(cfg.last_verified_at).toLocaleDateString()} at {new Date(cfg.last_verified_at).toLocaleTimeString()}
+                                      </p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </CardTitle>
                           <CardDescription className="mt-1">
                             {cfg.is_active ? 'Currently Active' : 'Inactive Configuration'}
