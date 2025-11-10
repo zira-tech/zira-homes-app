@@ -88,14 +88,23 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const loadDraft = () => {
     try {
       const draftStr = sessionStorage.getItem(DRAFT_KEY);
-      if (!draftStr) return null;
+      if (!draftStr) {
+        console.log('📭 No draft found in sessionStorage');
+        return null;
+      }
       const draft = JSON.parse(draftStr);
       if (Date.now() - draft.savedAt > DRAFT_EXPIRY_MS) {
+        console.log('⏰ Draft expired');
         clearDraft();
         return null;
       }
+      console.log('📬 Draft loaded:', {
+        shortcode_type: draft.fields.shortcode_type,
+        age_minutes: Math.round((Date.now() - draft.savedAt) / 60000)
+      });
       return draft.fields;
-    } catch {
+    } catch (error) {
+      console.error('Failed to load draft:', error);
       return null;
     }
   };
@@ -107,6 +116,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         savedAt: Date.now()
       };
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      console.log('💾 Draft saved:', {
+        shortcode_type: fields.shortcode_type,
+        till_provider: fields.till_provider,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       console.error('Failed to save draft:', error);
     }
@@ -217,20 +231,30 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     const draftFields = loadDraft();
     
     if (isEditing && draftFields) {
-      console.log('Restoring draft from sessionStorage');
+      console.log('🔄 Restoring draft from sessionStorage:', {
+        shortcode_type: draftFields.shortcode_type,
+        till_provider: draftFields.till_provider,
+        has_till_number: !!draftFields.till_number,
+        has_kopokopo_client_id: !!draftFields.kopokopo_client_id
+      });
+      
       hasDraftRef.current = true;
       setShowForm(true);
       setIsOpen(true);
-      setConfig(prev => ({
-        ...prev,
-        ...draftFields
-      }));
+      
+      // CRITICAL FIX: Set config directly to draft (not merge with prev)
+      // This ensures RadioGroup gets the correct value immediately
+      setConfig(draftFields as MpesaConfig);
       
       // Show toast notification that draft was restored
       toast({
         title: "Draft Restored",
-        description: "Your previous M-Pesa credentials draft has been restored. Continue where you left off.",
-        duration: 5000, // Longer duration so user notices
+        description: `Your ${
+          draftFields.shortcode_type === 'till_kopokopo' ? 'Kopo Kopo' :
+          draftFields.shortcode_type === 'till_safaricom' ? 'Till Safaricom' :
+          'Paybill'
+        } configuration has been restored. Continue where you left off.`,
+        duration: 5000,
       });
       
       // DO NOT call loadConfig() when draft exists - prevents overwriting
@@ -987,6 +1011,11 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     };
                     setConfig(newConfig);
                     saveDraft(newConfig);
+                    
+                    // CRITICAL: Refresh EDIT_KEY to ensure draft persists
+                    sessionStorage.setItem(EDIT_KEY, '1');
+                    
+                    console.log('💾 Payment type changed to:', value, '- Draft saved');
                   }}
                   className="grid grid-cols-1 md:grid-cols-3 gap-3"
                 >
