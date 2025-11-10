@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePlatformConfig } from "@/hooks/usePlatformConfig";
+import { MpesaTestPaymentDialog } from "./MpesaTestPaymentDialog";
 
 interface MpesaConfig {
   id?: string;
@@ -46,6 +47,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const [hasConfig, setHasConfig] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showTestDialog, setShowTestDialog] = useState(false);
   const hasInitializedRef = useRef(false);
   const hasDraftRef = useRef(false);
   
@@ -463,82 +465,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     }
   };
 
-  const handleTestConfiguration = async () => {
+  const handleTestConfiguration = () => {
     if (!user?.id) return;
-
-    setTesting(true);
-    try {
-      // Use dry-run mode to validate configuration without initiating payment
-      const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
-        body: {
-          phone: '254700000000', // Dummy phone for dry-run
-          amount: 1,
-          accountReference: 'CONFIG-TEST',
-          transactionDesc: 'Configuration Test',
-          landlordId: user.id,
-          dryRun: true, // Only validate config, don't send STK
-          paymentType: 'rent'
-        }
-      });
-
-      if (error) {
-        console.error('Configuration test error:', error);
-        throw new Error(error.message || 'Configuration test failed');
-      }
-
-      if (data?.success && data?.dryRun) {
-        const { BusinessShortCode, Environment, UsingLandlordConfig, TransactionType } = data.data || {};
-        
-        toast({
-          title: "✅ Configuration Valid",
-          description: (
-            <div className="space-y-1">
-              <p>Your M-Pesa credentials are working correctly!</p>
-              <div className="text-xs mt-2 space-y-0.5 text-muted-foreground">
-                <p>• Shortcode: {BusinessShortCode}</p>
-                <p>• Environment: {Environment}</p>
-                <p>• Type: {TransactionType}</p>
-                <p>• Using: {UsingLandlordConfig ? 'Custom Config' : 'Platform Default'}</p>
-              </div>
-            </div>
-          ),
-        });
-      } else {
-        throw new Error(data?.error || 'Unexpected response from configuration test');
-      }
-    } catch (error: any) {
-      console.error('Configuration test failed:', error);
-      
-      let errorMessage = "Failed to validate configuration. ";
-      
-      if (error.message) {
-        const msg = error.message.toLowerCase();
-        
-        if (msg.includes('oauth') || msg.includes('token') || msg.includes('401')) {
-          errorMessage += "Authentication failed. Please check your Consumer Key and Consumer Secret.";
-        } else if (msg.includes('passkey') || msg.includes('password')) {
-          errorMessage += "Invalid passkey. Please verify your M-Pesa passkey.";
-        } else if (msg.includes('shortcode')) {
-          errorMessage += "Invalid shortcode. Please verify your business shortcode or till number.";
-        } else if (msg.includes('network') || msg.includes('timeout')) {
-          errorMessage += "Network error. Please check your internet connection.";
-        } else if (msg.includes('not configured') || msg.includes('missing')) {
-          errorMessage += "Configuration not found. Please save your credentials first.";
-        } else {
-          errorMessage += error.message;
-        }
-      } else {
-        errorMessage += "Please verify your credentials and try again.";
-      }
-      
-      toast({
-        title: "❌ Configuration Test Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setTesting(false);
-    }
+    setShowTestDialog(true);
   };
 
   return (
@@ -1118,6 +1047,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Test Payment Dialog */}
+      <MpesaTestPaymentDialog 
+        open={showTestDialog}
+        onOpenChange={setShowTestDialog}
+        landlordId={user?.id || ''}
+      />
     </div>
   </TooltipProvider>
   );
