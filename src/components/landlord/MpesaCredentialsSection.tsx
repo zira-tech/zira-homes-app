@@ -463,43 +463,77 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     }
   };
 
-  const handleTestSTK = async () => {
-    if (!config.phone_number) {
-      toast({
-        title: "Test Error",
-        description: "Please enter a phone number to test STK Push.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleTestConfiguration = async () => {
+    if (!user?.id) return;
 
     setTesting(true);
     try {
+      // Use dry-run mode to validate configuration without initiating payment
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
         body: {
-          phone: config.phone_number,
-          amount: 1, // Test with 1 KES
-          accountReference: 'TEST-STK',
-          transactionDesc: 'Test STK Push',
-          landlordId: user?.id,
+          phone: '254700000000', // Dummy phone for dry-run
+          amount: 1,
+          accountReference: 'CONFIG-TEST',
+          transactionDesc: 'Configuration Test',
+          landlordId: user.id,
+          dryRun: true, // Only validate config, don't send STK
+          paymentType: 'rent'
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Configuration test error:', error);
+        throw new Error(error.message || 'Configuration test failed');
+      }
 
-      if (data?.success) {
+      if (data?.success && data?.dryRun) {
+        const { BusinessShortCode, Environment, UsingLandlordConfig, TransactionType } = data.data || {};
+        
         toast({
-          title: "Test Successful",
-          description: `STK Push sent successfully using shortcode ${data.data?.BusinessShortCode}! Check your phone.`,
+          title: "✅ Configuration Valid",
+          description: (
+            <div className="space-y-1">
+              <p>Your M-Pesa credentials are working correctly!</p>
+              <div className="text-xs mt-2 space-y-0.5 text-muted-foreground">
+                <p>• Shortcode: {BusinessShortCode}</p>
+                <p>• Environment: {Environment}</p>
+                <p>• Type: {TransactionType}</p>
+                <p>• Using: {UsingLandlordConfig ? 'Custom Config' : 'Platform Default'}</p>
+              </div>
+            </div>
+          ),
         });
       } else {
-        throw new Error(data?.error || 'Test failed');
+        throw new Error(data?.error || 'Unexpected response from configuration test');
       }
-    } catch (error) {
-      console.error('STK test error:', error);
+    } catch (error: any) {
+      console.error('Configuration test failed:', error);
+      
+      let errorMessage = "Failed to validate configuration. ";
+      
+      if (error.message) {
+        const msg = error.message.toLowerCase();
+        
+        if (msg.includes('oauth') || msg.includes('token') || msg.includes('401')) {
+          errorMessage += "Authentication failed. Please check your Consumer Key and Consumer Secret.";
+        } else if (msg.includes('passkey') || msg.includes('password')) {
+          errorMessage += "Invalid passkey. Please verify your M-Pesa passkey.";
+        } else if (msg.includes('shortcode')) {
+          errorMessage += "Invalid shortcode. Please verify your business shortcode or till number.";
+        } else if (msg.includes('network') || msg.includes('timeout')) {
+          errorMessage += "Network error. Please check your internet connection.";
+        } else if (msg.includes('not configured') || msg.includes('missing')) {
+          errorMessage += "Configuration not found. Please save your credentials first.";
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += "Please verify your credentials and try again.";
+      }
+      
       toast({
-        title: "Test Failed",
-        description: "Failed to send test STK Push. Please check your credentials.",
+        title: "❌ Configuration Test Failed",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -697,9 +731,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                     </div>
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <Button 
                       variant="default"
+                      onClick={handleTestConfiguration}
+                      disabled={testing}
+                      className="flex-1"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      {testing ? "Testing..." : "Test Configuration"}
+                    </Button>
+                    <Button 
+                      variant="outline"
                       onClick={() => {
                         setShowForm(true);
                         setIsOpen(true);
@@ -716,7 +759,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       className="flex-1"
                     >
                       <Globe className="h-4 w-4 mr-2" />
-                      Switch to Platform Defaults
+                      Switch to Defaults
                     </Button>
                   </div>
                 </CardContent>
@@ -1040,17 +1083,6 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                 >
                   Cancel
                 </Button>
-                
-                {hasConfig && config.phone_number && (
-                  <Button 
-                    onClick={handleTestSTK}
-                    disabled={testing}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    {testing ? 'Testing...' : 'Test STK Push'}
-                  </Button>
-                )}
               </div>
             </div>
           )}
