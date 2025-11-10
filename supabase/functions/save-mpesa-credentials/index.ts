@@ -207,11 +207,12 @@ serve(async (req) => {
       upsertData.till_provider = 'kopokopo';
       upsertData.kopokopo_client_id = kopokopo_client_id;
       upsertData.kopokopo_client_secret_encrypted = encryptedKopokopoClientSecret;
+      // Use till_number as business_shortcode for Kopo Kopo (NOT NULL constraint)
+      upsertData.business_shortcode = till_number;
       // Clear standard M-Pesa fields
       upsertData.consumer_key_encrypted = null;
       upsertData.consumer_secret_encrypted = null;
       upsertData.passkey_encrypted = null;
-      upsertData.business_shortcode = null;
     } else {
       // Standard M-Pesa configuration (Paybill or Till Safaricom)
       upsertData.consumer_key_encrypted = encryptedConsumerKey;

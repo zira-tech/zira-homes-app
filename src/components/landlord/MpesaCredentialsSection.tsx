@@ -196,6 +196,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         ...prev,
         ...draftFields
       }));
+      
+      // Show toast notification that draft was restored
+      toast({
+        title: "Draft Restored",
+        description: "Your previous M-Pesa credentials draft has been restored.",
+        duration: 3000,
+      });
     }
     
     loadConfig();
@@ -437,8 +444,13 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
           errorTitle = "Validation Error";
           errorMessage = error.message;
         }
-        // Handle database errors
-        else if (msg.includes('database') || msg.includes('constraint') || msg.includes('unique')) {
+        // Handle database constraint violations
+        else if (msg.includes('constraint') || msg.includes('violates') || msg.includes('not-null') || msg.includes('business_shortcode')) {
+          errorTitle = "Database Configuration Error";
+          errorMessage = "Unable to save credentials due to a database constraint. This has been reported and should now be fixed. Please try again.";
+        }
+        // Handle other database errors
+        else if (msg.includes('database') || msg.includes('unique')) {
           errorTitle = "Database Error";
           errorMessage = "Failed to save credentials to database. Please try again or contact support.";
         }
@@ -787,6 +799,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         setConfig(prev => ({ ...prev, till_number: newValue }));
                         saveDraft({ till_number: newValue });
                       }}
+                      onBlur={() => saveDraft({ till_number: config.till_number })}
                       autoFocus
                     />
                     <p className="text-xs text-muted-foreground">
@@ -806,6 +819,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         setConfig(prev => ({ ...prev, kopokopo_client_id: newValue }));
                         saveDraft({ kopokopo_client_id: newValue });
                       }}
+                      onBlur={() => saveDraft({ kopokopo_client_id: config.kopokopo_client_id })}
                     />
                     <p className="text-xs text-muted-foreground">Get this from your Kopo Kopo dashboard</p>
                   </div>
@@ -833,6 +847,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         setConfig(prev => ({ ...prev, kopokopo_client_secret: newValue }));
                         saveDraft({ kopokopo_client_secret: newValue });
                       }}
+                      onBlur={() => saveDraft({ kopokopo_client_secret: config.kopokopo_client_secret })}
                     />
                     <p className="text-xs text-muted-foreground">Encrypted using AES-256-GCM before storage</p>
                   </div>
