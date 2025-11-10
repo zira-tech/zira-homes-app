@@ -100,7 +100,7 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
       const { data, error} = await supabase
         .from('mpesa_transactions')
         .select('status, result_code, result_desc, mpesa_receipt_number')
-        .eq('id', txnId)
+        .eq('checkout_request_id', txnId)
         .maybeSingle();
 
       if (error) {
@@ -186,12 +186,12 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
       }
 
       // Payment request sent successfully
-      setTransactionId(data.transactionId || null);
+      setTransactionId(data.CheckoutRequestID || null);
       setStatus('waiting');
 
       // Start polling for status
-      if (data.transactionId) {
-        startStatusPolling(data.transactionId);
+      if (data.CheckoutRequestID) {
+        startStatusPolling(data.CheckoutRequestID);
         
         // After 3 seconds, move to verifying status
         setTimeout(() => {
