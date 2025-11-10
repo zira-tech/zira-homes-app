@@ -65,11 +65,26 @@ export function useRealtimeMpesaStatus(
               
               if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                 const newTransaction = payload.new as any;
-                setTransaction({
-                  result_code: newTransaction.result_code,
-                  result_desc: newTransaction.result_desc,
-                  status: newTransaction.status,
-                  mpesa_receipt_number: newTransaction.mpesa_receipt_number
+                
+                // Only update if result_code actually changed to prevent redundant re-renders
+                setTransaction(prev => {
+                  const newResultCode = newTransaction.result_code;
+                  if (prev?.result_code === newResultCode && newResultCode !== null) {
+                    console.log('⏭️ Result code unchanged, skipping state update:', newResultCode);
+                    return prev;
+                  }
+                  
+                  console.log('✅ New result code detected, updating state:', {
+                    previous: prev?.result_code,
+                    new: newResultCode
+                  });
+                  
+                  return {
+                    result_code: newResultCode,
+                    result_desc: newTransaction.result_desc,
+                    status: newTransaction.status,
+                    mpesa_receipt_number: newTransaction.mpesa_receipt_number
+                  };
                 });
               }
             }

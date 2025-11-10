@@ -50,6 +50,10 @@ export function MpesaPaymentModal({
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollingAttemptsRef = useRef<number>(0);
   const maxPollingAttempts = 12; // 12 attempts * 10 seconds = 2 minutes
+  
+  // Refs to prevent duplicate processing and status flicker
+  const lastProcessedResultCodeRef = useRef<number | null>(null);
+  const isProcessingRef = useRef(false);
 
   const formatPhoneNumber = (phone: string) => {
     let cleaned = phone.replace(/\D/g, '');
@@ -74,11 +78,20 @@ export function MpesaPaymentModal({
       console.log('⚠️ Ignoring update - payment already succeeded');
       return;
     }
+    
+    // Prevent concurrent processing
+    if (isProcessingRef.current) {
+      console.log('⏸️ Already processing status change, skipping...');
+      return;
+    }
 
-    console.log('📊 Processing realtime transaction update:', {
+    console.log('📊 Transaction object changed:', {
       resultCode: transaction.result_code,
       resultCodeType: typeof transaction.result_code,
-      resultDesc: transaction.result_desc
+      resultDesc: transaction.result_desc,
+      lastProcessed: lastProcessedResultCodeRef.current,
+      currentModalStatus: status,
+      timestamp: new Date().toISOString()
     });
     
     // Stop polling when realtime update arrives
@@ -92,25 +105,38 @@ export function MpesaPaymentModal({
       // Convert to number for reliable comparison
       const resultCode = Number(transaction.result_code);
       
-      console.log('🔍 Result code comparison:', {
+      // Skip if we've already processed this exact result_code
+      if (lastProcessedResultCodeRef.current === resultCode) {
+        console.log('⏭️ Skipping - already processed result_code:', resultCode);
+        return;
+      }
+      
+      console.log('🔍 Processing new result code:', {
         raw: transaction.result_code,
         converted: resultCode,
-        isZero: resultCode === 0
+        isZero: resultCode === 0,
+        previouslyProcessed: lastProcessedResultCodeRef.current
       });
       
+      // Update the last processed result code
+      lastProcessedResultCodeRef.current = resultCode;
+      
       if (resultCode === 0) {
+        isProcessingRef.current = true;
         setStatus('success');
         setStatusMessage('Payment completed successfully!');
         
         // Update invoice status
-        supabase
-          .from('invoices')
-          .update({ 
-            status: 'paid',
-            mpesa_receipt_number: transaction.mpesa_receipt_number || transaction.result_desc 
-          })
-          .eq('id', invoice.id)
-          .then(() => {
+        (async () => {
+          try {
+            await supabase
+              .from('invoices')
+              .update({ 
+                status: 'paid',
+                mpesa_receipt_number: transaction.mpesa_receipt_number || transaction.result_desc 
+              })
+              .eq('id', invoice.id);
+            
             toast.success("Payment successful!");
             
             // Invalidate tenant dashboard cache for instant refresh
@@ -121,14 +147,19 @@ export function MpesaPaymentModal({
               onOpenChange(false);
               resetDialog();
             }, 2000);
-          });
+          } finally {
+            isProcessingRef.current = false;
+          }
+        })();
       } else {
+        isProcessingRef.current = true;
         setStatus('error');
         setStatusMessage(transaction.result_desc || `Payment failed (Code: ${transaction.result_code})`);
         toast.error(transaction.result_desc || 'Payment failed');
+        isProcessingRef.current = false;
       }
     }
-  }, [transaction, status, invoice.id, onPaymentInitiated, onOpenChange]);
+  }, [transaction, status, invoice.id, onPaymentInitiated, onOpenChange, queryClient]);
 
   // Fallback polling mechanism
   useEffect(() => {
@@ -351,6 +382,10 @@ export function MpesaPaymentModal({
       pollingIntervalRef.current = null;
     }
     pollingAttemptsRef.current = 0;
+    
+    // Reset processing refs
+    lastProcessedResultCodeRef.current = null;
+    isProcessingRef.current = false;
     
     setStatus('idle');
     setStatusMessage('');
