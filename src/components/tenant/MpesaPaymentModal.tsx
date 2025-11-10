@@ -168,21 +168,26 @@ export function MpesaPaymentModal({
         return;
       }
 
-      if (data?.CheckoutRequestID) {
-        setCheckoutRequestId(data.CheckoutRequestID);
+      // Handle both top-level and nested CheckoutRequestID
+      const crId = data?.CheckoutRequestID ?? data?.data?.CheckoutRequestID;
+      
+      if (crId) {
+        setCheckoutRequestId(crId);
         setStatus('sent');
         setStatusMessage('Check your phone for the M-Pesa prompt and enter your PIN');
         
         toast.success("Payment request sent! Check your phone.");
         
-        // Realtime subscription will automatically handle status updates
+        // Move to verifying state to keep modal open for realtime updates
+        setTimeout(() => {
+          setStatus('verifying');
+          setStatusMessage('Waiting for payment confirmation...');
+        }, 1500);
+      } else if (data?.success) {
+        // Fallback for unexpected response shape - still try to stay in verifying
+        toast.success("Payment request sent! Please check your phone and enter your M-Pesa PIN.");
         setStatus('verifying');
         setStatusMessage('Waiting for payment confirmation...');
-      } else if (data?.success) {
-        toast.success("Payment request sent! Please check your phone and enter your M-Pesa PIN.");
-        onPaymentInitiated?.();
-        onOpenChange(false);
-        resetDialog();
       } else {
         throw new Error(data?.error || "Failed to initiate payment");
       }

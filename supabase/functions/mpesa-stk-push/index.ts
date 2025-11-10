@@ -287,7 +287,7 @@ serve(async (req) => {
                 properties!units_property_id_fkey!inner(owner_id, manager_id)
               )
             ),
-            tenants!inner(user_id)
+            tenants!invoices_tenant_id_fkey!inner(user_id)
           `)
           .eq('id', invoiceId)
           .single();
@@ -732,6 +732,8 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             provider: 'kopokopo',
+            CheckoutRequestID: paymentRequestId,
+            MerchantRequestID: paymentRequestId,
             message: 'STK push sent successfully. Please enter your M-Pesa PIN.',
             data: {
               CheckoutRequestID: paymentRequestId,
@@ -1001,6 +1003,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
+          CheckoutRequestID: stkData.CheckoutRequestID,
+          MerchantRequestID: stkData.MerchantRequestID,
           message: 'STK push sent successfully',
           data: {
             CheckoutRequestID: stkData.CheckoutRequestID,
