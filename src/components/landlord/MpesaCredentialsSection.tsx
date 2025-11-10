@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Globe, Settings, Info, AlertTriangle, Building2, Smartphone, Zap, TestTube, Rocket } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, CheckCircle, XCircle, Globe, Settings, Info, AlertTriangle, Building2, Smartphone, Zap, TestTube, Rocket, Key } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -880,6 +880,76 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     setShowTestDialog(true);
   };
 
+  // Test credentials for a saved config (Kopo Kopo only)
+  const handleTestSavedConfigCredentials = async (cfg: MpesaConfig) => {
+    if (!user?.id || cfg.shortcode_type !== 'till_kopokopo') return;
+    
+    console.log('🧪 Testing saved config credentials:', cfg.id);
+    setTesting(true);
+    
+    try {
+      toast({
+        title: "Testing Credentials",
+        description: "Validating your Kopo Kopo credentials...",
+      });
+
+      const { data: testResult, error: testError } = await supabase.functions.invoke('test-kopokopo-credentials', {
+        body: {
+          config_id: cfg.id,
+          landlord_id: user.id,
+          client_id: cfg.kopokopo_client_id,
+          environment: cfg.environment,
+        },
+      });
+
+      console.log('📥 Test result:', {
+        success: testResult?.success,
+        error: testError?.message || testResult?.error,
+      });
+
+      if (testError || !testResult?.success) {
+        console.log('❌ Test failed');
+        toast({
+          title: "Credentials Test Failed",
+          description: testResult?.error || testError?.message || "Unable to authenticate with Kopo Kopo.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Mark as verified
+      const { error: updateError } = await supabase
+        .from('landlord_mpesa_configs')
+        .update({
+          credentials_verified: true,
+          last_verified_at: new Date().toISOString()
+        })
+        .eq('id', cfg.id!)
+        .eq('landlord_id', user.id);
+      
+      if (!updateError) {
+        console.log('✅ Credentials verified and marked in database');
+        await loadConfig();
+      }
+
+      toast({
+        title: "Credentials Verified! ✓",
+        description: "Your Kopo Kopo credentials are working correctly.",
+      });
+
+    } catch (error) {
+      console.error('💥 Test error:', error);
+      toast({
+        title: "Test Failed",
+        description: `Failed to test credentials: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      console.log('🏁 Test completed');
+      setTesting(false);
+    }
+  };
+
   return (
     <TooltipProvider>
       <div className="space-y-4 border border-border rounded-lg p-4">
@@ -1107,15 +1177,30 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                           </Button>
                         )}
                         {cfg.is_active && (
-                          <Button 
-                            variant="default"
-                            size="sm"
-                            onClick={handleTestConfiguration}
-                            disabled={testing}
-                          >
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            {testing ? "Testing..." : "Test"}
-                          </Button>
+                          <>
+                            {/* Test Credentials button - Kopo Kopo only */}
+                            {cfg.shortcode_type === 'till_kopokopo' && (
+                              <Button 
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleTestSavedConfigCredentials(cfg)}
+                                disabled={testing}
+                              >
+                                <Key className="h-3 w-3 mr-1" />
+                                {testing ? "Testing..." : "Test Credentials"}
+                              </Button>
+                            )}
+                            {/* Test Payment button - for actual STK push */}
+                            <Button 
+                              variant="outline"
+                              size="sm"
+                              onClick={handleTestConfiguration}
+                              disabled={testing}
+                            >
+                              <Smartphone className="h-3 w-3 mr-1" />
+                              Test Payment
+                            </Button>
+                          </>
                         )}
                         <Button 
                           variant="outline"
