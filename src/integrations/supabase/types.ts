@@ -3989,8 +3989,8 @@ export type Database = {
         Returns: string
       }
       encrypt_pii:
-        | { Args: { data: string; key: string }; Returns: string }
         | { Args: { data: string }; Returns: string }
+        | { Args: { data: string; key: string }; Returns: string }
       encrypt_sensitive_data: {
         Args: { data: string; key_name?: string }
         Returns: string

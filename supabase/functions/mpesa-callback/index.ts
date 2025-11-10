@@ -151,13 +151,62 @@ serve(async (req) => {
     // Secure transaction status update with idempotency check
     const { data: existingTxn, error: fetchError } = await supabase
       .from('mpesa_transactions')
-      .select('status, amount, phone_number')
+      .select('status, amount, phone_number, payment_type, metadata')
       .eq('checkout_request_id', CheckoutRequestID)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !existingTxn) {
-      console.error('Transaction not found:', CheckoutRequestID, fetchError);
-      return new Response('Transaction not found', { status: 404 });
+    if (fetchError) {
+      console.error('Error fetching transaction:', CheckoutRequestID, fetchError);
+      return new Response('OK', { status: 200 });
+    }
+
+    // If transaction doesn't exist, create it from callback data
+    if (!existingTxn) {
+      console.log('Transaction not found, creating from callback data:', CheckoutRequestID);
+      
+      // Insert the transaction record with data from callback
+      const { error: insertError } = await supabase
+        .from('mpesa_transactions')
+        .insert({
+          checkout_request_id: CheckoutRequestID,
+          merchant_request_id: stkCallback.MerchantRequestID || null,
+          phone_number: phoneNumber || 'unknown',
+          amount: amount || 0,
+          payment_type: 'rent', // Default to rent, metadata may override
+          status: status,
+          result_code: ResultCode,
+          result_desc: ResultDesc,
+          mpesa_receipt_number: transactionId,
+          metadata: { 
+            created_from_callback: true,
+            ip: clientIP,
+            timestamp: new Date().toISOString()
+          }
+        });
+
+      if (insertError) {
+        console.error('Error inserting transaction from callback:', insertError);
+        return new Response('OK', { status: 200 });
+      }
+
+      console.log('Transaction created successfully from callback');
+      
+      // Fetch the newly created transaction to continue processing
+      const { data: newTxn, error: newFetchError } = await supabase
+        .from('mpesa_transactions')
+        .select('*')
+        .eq('checkout_request_id', CheckoutRequestID)
+        .single();
+
+      if (newFetchError || !newTxn) {
+        console.error('Error fetching newly created transaction:', newFetchError);
+        return new Response('OK', { status: 200 });
+      }
+
+      // For newly created transactions from callbacks, we skip the rest of the processing
+      // since we don't have enough metadata to process rent/service charge payments
+      console.log('Transaction created from callback - skipping payment processing');
+      return new Response('OK', { status: 200 });
     }
 
     // Prevent duplicate processing - only allow pending -> completed/failed
