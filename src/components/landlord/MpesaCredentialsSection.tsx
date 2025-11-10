@@ -633,9 +633,12 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
     // Save encrypted credentials via edge function
     setSaving(true);
     try {
+      // Find if we're updating an existing config for this payment type
+      const existingConfigForType = allConfigs.find(c => c.shortcode_type === config.shortcode_type);
+      
       const { data, error } = await supabase.functions.invoke('save-mpesa-credentials', {
         body: {
-          config_id: config.id, // Pass config_id for updates
+          config_id: existingConfigForType?.id || config.id, // Pass config_id to help backend identify update vs insert
           consumer_key: config.consumer_key,
           consumer_secret: config.consumer_secret,
           shortcode: config.business_shortcode,

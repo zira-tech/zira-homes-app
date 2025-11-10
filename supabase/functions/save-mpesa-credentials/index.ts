@@ -228,18 +228,39 @@ serve(async (req) => {
     }
 
     // Save ONLY encrypted credentials using admin client (bypasses RLS for secure insert)
-    // Check if this is an update (if config_id is provided) or a new insert
+    // Strategy: Check if a config exists for this landlord + shortcode_type combination
+    // If yes → UPDATE it; If no → INSERT new and deactivate others
     const configId = config_id; // Optional field to identify which config to update
     
     let savedConfig;
     let saveError;
 
-    if (configId) {
-      // UPDATE existing config
+    // Check if a config exists for this landlord + shortcode_type combination
+    const { data: existingConfig } = await supabaseAdmin
+      .from('landlord_mpesa_configs')
+      .select('id')
+      .eq('landlord_id', user.id)
+      .eq('shortcode_type', shortcode_type || 'paybill')
+      .maybeSingle(); // Use maybeSingle to avoid error if not found
+
+    if (existingConfig || configId) {
+      // UPDATE existing config (either found by shortcode_type or provided configId)
+      const updateId = configId || existingConfig.id;
+      
+      // First deactivate all other configs for this landlord
+      await supabaseAdmin
+        .from('landlord_mpesa_configs')
+        .update({ is_active: false })
+        .eq('landlord_id', user.id)
+        .neq('id', updateId);
+      
+      // Then update this config and mark it active
+      upsertData.is_active = true;
+      
       const result = await supabaseAdmin
         .from('landlord_mpesa_configs')
         .update(upsertData)
-        .eq('id', configId)
+        .eq('id', updateId)
         .eq('landlord_id', user.id) // Security: ensure user owns this config
         .select()
         .single();
