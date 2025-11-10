@@ -272,6 +272,16 @@ serve(async (req) => {
         authorized = true;
         landlordConfigId = user.id;
       }
+    } else if (paymentType === 'test') {
+      // Test configuration: Allow landlords to test their own M-Pesa setup
+      // Only the landlord who owns the configuration can test it
+      if (landlordId && landlordId === user.id) {
+        authorized = true;
+        landlordConfigId = user.id;
+        console.log('✅ Test payment authorized for landlord:', user.id);
+      } else {
+        console.error('❌ Test payment denied: landlordId must match authenticated user');
+      }
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
       if (invoiceId) {
