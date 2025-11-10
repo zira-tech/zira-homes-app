@@ -284,7 +284,7 @@ serve(async (req) => {
               unit_id,
               units!leases_unit_id_fkey!inner(
                 property_id,
-                properties!inner(owner_id, manager_id)
+                properties!units_property_id_fkey!inner(owner_id, manager_id)
               )
             ),
             tenants!inner(user_id)
@@ -386,7 +386,7 @@ serve(async (req) => {
             unit_id,
             units!leases_unit_id_fkey!inner(
               property_id,
-              properties!inner(owner_id)
+              properties!units_property_id_fkey!inner(owner_id)
             )
           )
         `)
