@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { parseMpesaError } from "@/utils/mpesaErrorHandler";
-import { Smartphone, DollarSign, Loader2, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Smartphone, DollarSign, Loader2, Clock, CheckCircle2, XCircle, AlertCircle, Radio } from "lucide-react";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 import { cn } from "@/lib/utils";
+import { useRealtimeMpesaStatus } from "@/hooks/useRealtimeMpesaStatus";
 
 interface MpesaPaymentModalProps {
   open: boolean;
@@ -37,7 +38,9 @@ export function MpesaPaymentModal({
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Use realtime hook for payment status updates
+  const { transaction, isListening } = useRealtimeMpesaStatus(checkoutRequestId);
 
   const formatPhoneNumber = (phone: string) => {
     let cleaned = phone.replace(/\D/g, '');
@@ -53,43 +56,26 @@ export function MpesaPaymentModal({
     return cleaned;
   };
 
-  const startStatusPolling = useCallback((requestId: string) => {
-    let pollCount = 0;
-    const maxPolls = 100;
-    
-    setStatus('verifying');
-    setStatusMessage('Waiting for payment confirmation...');
-    
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
-    
-    pollingIntervalRef.current = setInterval(async () => {
-      pollCount++;
-      
-      try {
-        const { data: transaction, error } = await supabase
-          .from('mpesa_transactions')
-          .select('result_code, result_desc')
-          .eq('checkout_request_id', requestId)
-          .maybeSingle();
+  // Handle realtime transaction updates
+  useEffect(() => {
+    if (!transaction) return;
+
+    console.log('📊 Processing realtime transaction update:', transaction);
+
+    if (transaction.result_code !== null && transaction.result_code !== undefined) {
+      if (String(transaction.result_code) === '0') {
+        setStatus('success');
+        setStatusMessage('Payment completed successfully!');
         
-        if (transaction) {
-          clearInterval(pollingIntervalRef.current!);
-          
-          if (String(transaction.result_code) === '0') {
-            setStatus('success');
-            setStatusMessage('Payment completed successfully!');
-            
-            // Update invoice status
-            await supabase
-              .from('invoices')
-              .update({ 
-                status: 'paid',
-                mpesa_receipt_number: transaction.result_desc 
-              })
-              .eq('id', invoice.id);
-            
+        // Update invoice status
+        supabase
+          .from('invoices')
+          .update({ 
+            status: 'paid',
+            mpesa_receipt_number: transaction.mpesa_receipt_number || transaction.result_desc 
+          })
+          .eq('id', invoice.id)
+          .then(() => {
             toast.success("Payment successful!");
             
             setTimeout(() => {
@@ -97,22 +83,14 @@ export function MpesaPaymentModal({
               onOpenChange(false);
               resetDialog();
             }, 2000);
-          } else {
-            setStatus('error');
-            setStatusMessage(transaction.result_desc || 'Payment failed');
-            toast.error(transaction.result_desc || 'Payment failed');
-          }
-        } else if (pollCount >= maxPolls) {
-          clearInterval(pollingIntervalRef.current!);
-          setStatus('error');
-          setStatusMessage('Payment verification timed out. Please check your payment status.');
-          toast.error("Payment verification timed out. Please contact support if money was deducted.");
-        }
-      } catch (error) {
-        console.error('Error polling payment status:', error);
+          });
+      } else {
+        setStatus('error');
+        setStatusMessage(transaction.result_desc || 'Payment failed');
+        toast.error(transaction.result_desc || 'Payment failed');
       }
-    }, 3000);
-  }, [invoice, onPaymentInitiated, onOpenChange]);
+    }
+  }, [transaction, invoice.id, onPaymentInitiated, onOpenChange]);
 
   const handlePayment = async () => {
     if (!phoneNumber.trim()) {
@@ -197,8 +175,9 @@ export function MpesaPaymentModal({
         
         toast.success("Payment request sent! Check your phone.");
         
-        // Start polling for payment status
-        startStatusPolling(data.CheckoutRequestID);
+        // Realtime subscription will automatically handle status updates
+        setStatus('verifying');
+        setStatusMessage('Waiting for payment confirmation...');
       } else if (data?.success) {
         toast.success("Payment request sent! Please check your phone and enter your M-Pesa PIN.");
         onPaymentInitiated?.();
@@ -222,9 +201,6 @@ export function MpesaPaymentModal({
     setStatusMessage('');
     setCheckoutRequestId(null);
     setPhoneNumber('');
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
   };
 
   const handleClose = () => {
@@ -260,14 +236,6 @@ export function MpesaPaymentModal({
       resetDialog();
     }
   }, [open]);
-
-  useEffect(() => {
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, []);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -314,10 +282,20 @@ export function MpesaPaymentModal({
               <div className="flex items-center gap-3">
                 {getStatusIcon()}
                 <div className="flex-1">
-                  <AlertTitle className="mb-1">
+                  <AlertTitle className="mb-1 flex items-center gap-2">
                     {status === 'sending' && 'Processing...'}
                     {status === 'sent' && 'Check Your Phone'}
-                    {status === 'verifying' && 'Verifying Payment...'}
+                    {status === 'verifying' && (
+                      <>
+                        Verifying Payment...
+                        {isListening && (
+                          <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                            <Radio className="h-3 w-3 animate-pulse text-green-500" />
+                            Live updates active
+                          </span>
+                        )}
+                      </>
+                    )}
                     {status === 'success' && 'Payment Successful!'}
                     {status === 'error' && 'Payment Failed'}
                   </AlertTitle>
