@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,9 +8,39 @@ const corsHeaders = {
 };
 
 interface TestKopokopoRequest {
+  config_id?: string;
+  landlord_id?: string;
   client_id: string;
-  client_secret: string;
+  client_secret?: string;
   environment: 'sandbox' | 'production';
+}
+
+// Decrypt stored credentials
+async function decryptCredential(encrypted: string): Promise<string> {
+  const encryptionKey = Deno.env.get('MPESA_ENCRYPTION_KEY');
+  if (!encryptionKey) {
+    throw new Error('Encryption key not configured');
+  }
+
+  const [ivHex, encryptedHex] = encrypted.split(':');
+  const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  const encryptedData = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(encryptionKey.padEnd(32).slice(0, 32)),
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt']
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encryptedData
+  );
+
+  return new TextDecoder().decode(decrypted);
 }
 
 serve(async (req) => {
@@ -19,12 +50,61 @@ serve(async (req) => {
   }
 
   try {
-    const { client_id, client_secret, environment }: TestKopokopoRequest = await req.json();
+    const { config_id, landlord_id, client_id, client_secret, environment }: TestKopokopoRequest = await req.json();
 
-    console.log('Testing Kopo Kopo credentials:', { client_id, environment });
+    console.log('Testing Kopo Kopo credentials:', { config_id: config_id || 'new', client_id, environment });
+
+    let clientSecret = client_secret;
+
+    // If testing existing config, retrieve stored encrypted secret
+    if (config_id && landlord_id && !client_secret) {
+      console.log(`🔍 Retrieving stored credentials for config: ${config_id}`);
+      
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabaseClient = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: configData, error: configError } = await supabaseClient
+        .from('landlord_mpesa_configs')
+        .select('kopokopo_client_secret_encrypted')
+        .eq('id', config_id)
+        .eq('landlord_id', landlord_id)
+        .single();
+      
+      if (configError || !configData?.kopokopo_client_secret_encrypted) {
+        console.error('Failed to retrieve stored credentials:', configError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Could not retrieve stored credentials. Please re-enter your credentials.'
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      try {
+        clientSecret = await decryptCredential(configData.kopokopo_client_secret_encrypted);
+        console.log('✅ Retrieved and decrypted stored client secret');
+      } catch (decryptError) {
+        console.error('Failed to decrypt credentials:', decryptError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Could not decrypt stored credentials. Please re-enter your credentials.'
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    }
 
     // Validate required fields
-    if (!client_id || !client_secret || !environment) {
+    if (!client_id || !clientSecret || !environment) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -50,7 +130,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         client_id,
-        client_secret,
+        client_secret: clientSecret,
         grant_type: 'client_credentials',
       }),
     });

@@ -755,6 +755,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const handleTestKopokopoConnection = async () => {
     console.log('🧪 Test Connection clicked');
     console.log('📋 Current config:', {
+      config_id: config.id || 'new',
       client_id: config.kopokopo_client_id ? '✓ present' : '✗ missing',
       client_secret: config.kopokopo_client_secret ? '✓ present' : '✗ missing',
       environment: config.environment,
@@ -765,12 +766,20 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       return;
     }
 
-    // Validate required fields
-    if (!config.kopokopo_client_id || !config.kopokopo_client_secret) {
+    // For existing configs, we only need client_id to be visible (secret is in DB)
+    // For new configs, we need both
+    const isExistingConfig = !!config.id;
+    const hasRequiredFields = isExistingConfig 
+      ? !!config.kopokopo_client_id  // Existing: just need client_id
+      : !!(config.kopokopo_client_id && config.kopokopo_client_secret); // New: need both
+
+    if (!hasRequiredFields) {
       console.log('❌ Missing credentials');
       toast({
         title: "Missing Credentials",
-        description: "Please enter both Client ID and Client Secret to test the connection.",
+        description: isExistingConfig
+          ? "Configuration data is incomplete. Please edit and re-enter your credentials."
+          : "Please enter both Client ID and Client Secret to test the connection.",
         variant: "destructive",
       });
       return;
@@ -786,14 +795,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       });
 
       console.log('📡 Calling edge function with:', {
+        config_id: config.id || 'new',
         client_id: config.kopokopo_client_id?.substring(0, 10) + '...',
         environment: config.environment,
+        using_stored_secret: isExistingConfig && !config.kopokopo_client_secret
       });
 
       const { data: testResult, error: testError } = await supabase.functions.invoke('test-kopokopo-credentials', {
         body: {
+          config_id: config.id, // Pass config ID if editing
+          landlord_id: user.id,
           client_id: config.kopokopo_client_id,
-          client_secret: config.kopokopo_client_secret,
+          client_secret: config.kopokopo_client_secret || undefined, // Only pass if re-entered
           environment: config.environment,
         },
       });
@@ -1374,7 +1387,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                       type="button"
                       variant="outline"
                       onClick={handleTestKopokopoConnection}
-                      disabled={testing || !config.kopokopo_client_id || !config.kopokopo_client_secret}
+                      disabled={testing || !config.kopokopo_client_id}
                       className="gap-2"
                     >
                       {testing ? (
