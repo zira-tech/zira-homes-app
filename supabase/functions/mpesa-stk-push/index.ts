@@ -462,13 +462,14 @@ serve(async (req) => {
     }
 
     // Helper function to decrypt credentials
-    async function decryptCredential(encrypted: string, key: string): Promise<string> {
+    async function decryptCredential(encrypted: string, keyBase64: string): Promise<string> {
       try {
-        const encoder = new TextEncoder();
-        const keyData = encoder.encode(key.padEnd(32, '0').slice(0, 32));
+        // Decode the base64 encryption key (SAME AS ENCRYPTION)
+        const keyData = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0));
+        
         const cryptoKey = await crypto.subtle.importKey(
           'raw',
-          keyData,
+          keyData,  // Use decoded keyData directly, no padding
           { name: 'AES-GCM' },
           false,
           ['decrypt']
