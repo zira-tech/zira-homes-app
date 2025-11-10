@@ -282,7 +282,7 @@ serve(async (req) => {
             leases!invoices_lease_id_fkey!inner(
               tenant_id,
               unit_id,
-              units!inner(
+              units!leases_unit_id_fkey!inner(
                 property_id,
                 properties!inner(owner_id, manager_id)
               )
@@ -384,7 +384,7 @@ serve(async (req) => {
           lease_id,
           leases!invoices_lease_id_fkey!inner(
             unit_id,
-            units!inner(
+            units!leases_unit_id_fkey!inner(
               property_id,
               properties!inner(owner_id)
             )
