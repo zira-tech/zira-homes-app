@@ -63,6 +63,13 @@ const PaymentSettings = () => {
     }
   }, [user]);
 
+  // Reload payment preferences when M-Pesa config is added
+  useEffect(() => {
+    if (hasMpesaConfig && user) {
+      loadData();
+    }
+  }, [hasMpesaConfig]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -317,14 +324,19 @@ const PaymentSettings = () => {
                   
                   {preferences.preferred_payment_method === 'mpesa' && (
                     <>
-                      {hasMpesaConfig && (
-                        <div className="flex items-center justify-between py-2 border-b">
-                          <span className="text-sm font-medium">M-Pesa Configuration</span>
-                          <Badge variant={preferences.mpesa_config_preference === 'custom' ? 'default' : 'secondary'}>
-                            {preferences.mpesa_config_preference === 'custom' ? 'Custom Credentials' : 'Platform Defaults'}
-                          </Badge>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-between py-2 border-b">
+                        <span className="text-sm font-medium">M-Pesa Configuration</span>
+                        <Badge variant={preferences.mpesa_config_preference === 'custom' ? 'default' : 'secondary'} className="gap-1">
+                          {preferences.mpesa_config_preference === 'custom' ? (
+                            <>
+                              <Check className="h-3 w-3" />
+                              Using Your Custom Credentials
+                            </>
+                          ) : (
+                            'Platform Defaults'
+                          )}
+                        </Badge>
+                      </div>
                       {preferences.mpesa_phone_number && (
                         <div className="flex items-center justify-between py-2 border-b">
                           <span className="text-sm font-medium">M-Pesa Number</span>

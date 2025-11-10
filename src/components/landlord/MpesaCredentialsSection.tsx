@@ -283,6 +283,21 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       if (error) throw error;
 
+      // Update preference to platform_default
+      const { error: prefError } = await supabase
+        .from('landlord_payment_preferences')
+        .upsert({
+          landlord_id: user.id,
+          mpesa_config_preference: 'platform_default'
+        }, {
+          onConflict: 'landlord_id',
+          ignoreDuplicates: false
+        });
+
+      if (prefError) {
+        console.error('Failed to update preference:', prefError);
+      }
+
       setConfig({
         consumer_key: '',
         consumer_secret: '',
@@ -306,7 +321,7 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
       toast({
         title: "Success",
-        description: "Switched to platform default M-Pesa configuration.",
+        description: "Switched to platform default M-Pesa configuration. Tenants will now use the platform shortcode.",
       });
     } catch (error) {
       console.error('Error deleting config:', error);
@@ -394,8 +409,8 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       }));
 
       toast({
-        title: "Success",
-        description: data?.message || "M-Pesa credentials saved securely.",
+        title: "Credentials Saved Successfully",
+        description: "Your M-Pesa credentials have been saved and activated. Tenant payments will now go directly to your paybill/till number.",
       });
       
       // Reload config to refresh summary view with latest data

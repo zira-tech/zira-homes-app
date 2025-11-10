@@ -266,6 +266,25 @@ serve(async (req) => {
       }
     }).catch(err => console.error('Failed to log success event:', err));
 
+    // Automatically set landlord preference to use custom config
+    const { error: prefError } = await supabaseAdmin
+      .from('landlord_payment_preferences')
+      .upsert({
+        landlord_id: user.id,
+        mpesa_config_preference: 'custom',
+        preferred_payment_method: 'mpesa' // Default to mpesa if not set
+      }, {
+        onConflict: 'landlord_id',
+        ignoreDuplicates: false
+      });
+
+    if (prefError) {
+      console.warn('[MPESA-CREDS] Failed to auto-update payment preference:', prefError);
+      // Don't fail the whole operation, just log warning
+    } else {
+      console.log('[MPESA-CREDS] Auto-set mpesa_config_preference to custom');
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
