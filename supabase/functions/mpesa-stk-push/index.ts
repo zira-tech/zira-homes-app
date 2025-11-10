@@ -474,7 +474,10 @@ serve(async (req) => {
     let consumerKey, consumerSecret, shortcode, passkey;
     let kopokopoApiKey, kopokopoMerchantId, tillNumber;
     let paymentProvider = 'mpesa'; // 'mpesa' or 'kopokopo'
-    const environment = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
+    
+    // Normalize environment to handle case variations (PRODUCTION, production, prod, etc.)
+    const rawEnv = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
+    const environment = String(rawEnv).toLowerCase().includes('prod') ? 'production' : 'sandbox';
     
     if (mpesaConfig) {
       // Check payment provider type
@@ -535,7 +538,7 @@ serve(async (req) => {
       paymentProvider = 'mpesa';
       consumerKey = Deno.env.get('MPESA_CONSUMER_KEY');
       consumerSecret = Deno.env.get('MPESA_CONSUMER_SECRET');
-      shortcode = Deno.env.get('MPESA_SHORTCODE') || '4155923';
+      shortcode = Deno.env.get('MPESA_SHORTCODE');
       passkey = Deno.env.get('MPESA_PASSKEY');
       console.log('Using global fallback M-Pesa credentials');
     }
@@ -763,11 +766,12 @@ serve(async (req) => {
     // STANDARD M-PESA PAYMENT PROCESSING
     console.log('🔄 Processing payment via standard M-Pesa...');
     
-    if (!consumerKey || !consumerSecret || !passkey) {
+    if (!consumerKey || !consumerSecret || !passkey || !shortcode) {
       console.error('Missing M-Pesa credentials:', {
         missingConsumerKey: !consumerKey,
         missingConsumerSecret: !consumerSecret,
         missingPasskey: !passkey,
+        missingShortcode: !shortcode,
         landlordConfigId
       });
       
@@ -779,7 +783,8 @@ serve(async (req) => {
           missing: {
             consumerKey: !consumerKey,
             consumerSecret: !consumerSecret,
-            passkey: !passkey
+            passkey: !passkey,
+            shortcode: !shortcode
           }
         }),
         { 
@@ -790,30 +795,43 @@ serve(async (req) => {
     }
 
     console.log('🔑 Fetching M-Pesa OAuth token...');
+    console.log('🌍 M-Pesa environment (normalized):', environment);
     
     // Get OAuth token
     const authUrl = environment === 'production' 
       ? 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-      : 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+      : 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+    
+    console.log('🔗 OAuth URL:', authUrl);
 
     const authResponse = await fetch(authUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${btoa(`${consumerKey}:${consumerSecret}`)}`
       }
-    })
+    });
 
-    const authData = await authResponse.json()
+    const authData = await authResponse.json();
     
-    if (!authData.access_token) {
-      console.error('Failed to get M-Pesa token:', authData)
+    if (!authResponse.ok || !authData.access_token) {
+      console.error('Failed to get M-Pesa token:', {
+        status: authResponse.status,
+        data: authData
+      });
       return new Response(
-        JSON.stringify({ error: 'Failed to authenticate with M-Pesa' }),
+        JSON.stringify({ 
+          error: 'Failed to authenticate with M-Pesa',
+          errorId: 'MPESA_TOKEN_FAILED',
+          details: {
+            status: authResponse.status,
+            response: authData
+          }
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
-      )
+      );
     }
 
     // Generate timestamp and password
@@ -831,7 +849,9 @@ serve(async (req) => {
     // STK Push request
     const stkUrl = environment === 'production'
       ? 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
-      : 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
+      : 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
+    
+    console.log('🔗 STK URL:', stkUrl);
 
     // Use custom callback URL if provided in config
     const callbackUrl = mpesaConfig?.callback_url || `${Deno.env.get('SUPABASE_URL')}/functions/v1/mpesa-callback`;
@@ -1020,18 +1040,26 @@ serve(async (req) => {
         }
       )
     } else {
-      console.error('STK Push failed:', stkData)
+      console.error('STK Push failed:', stkData);
+      
+      // Map specific error codes to errorIds
+      let errorId = 'MPESA_STK_FAILED';
+      if (stkData.errorCode === '404.001.03') {
+        errorId = 'MPESA_INVALID_ACCESS_TOKEN';
+      }
+      
       return new Response(
         JSON.stringify({
           success: false,
-          error: stkData.ResponseDescription || 'STK push failed',
+          error: stkData.ResponseDescription || stkData.errorMessage || 'STK push failed',
+          errorId: errorId,
           data: stkData
         }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
-      )
+      );
     }
 
   } catch (error) {

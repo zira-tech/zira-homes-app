@@ -61,6 +61,11 @@ export function parseMpesaError(error: any): MpesaError {
       action: 'Please try again in a moment.',
       retry: true
     },
+    'MPESA_INVALID_ACCESS_TOKEN': {
+      message: 'Payment gateway credentials or environment are mismatched.',
+      action: 'Please contact your landlord or admin to verify M-Pesa configuration (credentials, shortcode, passkey, and environment).',
+      retry: false
+    },
     'MPESA_STK_FAILED': {
       message: 'Failed to send payment request to your phone.',
       action: 'Please check your phone number and try again.',
