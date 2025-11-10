@@ -794,6 +794,32 @@ serve(async (req) => {
       );
     }
 
+    // Handle dry run - return config without initiating payment
+    if (dryRun) {
+      console.log('🔍 Dry run mode - returning config only');
+      const transactionType = (mpesaConfig?.shortcode_type === 'till_safaricom' || mpesaConfig?.shortcode_type === 'till') 
+        ? 'CustomerBuyGoodsOnline' 
+        : 'CustomerPayBillOnline';
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          dryRun: true,
+          data: {
+            BusinessShortCode: shortcode,
+            Environment: environment,
+            UsingLandlordConfig: !!mpesaConfig,
+            TransactionType: transactionType,
+            DisplayName: mpesaConfig?.display_name || 'Platform M-Pesa'
+          }
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     console.log('🔑 Fetching M-Pesa OAuth token...');
     console.log('🌍 M-Pesa environment (normalized):', environment);
     
