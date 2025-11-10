@@ -166,6 +166,12 @@ serve(async (req) => {
 
     // Log security event BEFORE saving (for audit trail)
     try {
+      // Safely compute shortcode prefix (may be undefined for till_kopokopo)
+      const shortcodeValue = shortcode || till_number || '';
+      const shortcodePrefix = shortcodeValue.length >= 3 
+        ? shortcodeValue.substring(0, 3) + '***' 
+        : '***';
+      
       await supabaseAdmin.rpc('log_security_event', {
         _event_type: 'mpesa_credentials_save_attempt',
         _severity: 'high',
@@ -175,7 +181,7 @@ serve(async (req) => {
         _details: { 
           environment, 
           has_callback: !!callback_url,
-          shortcode_prefix: shortcode.substring(0, 3) + '***',
+          shortcode_prefix: shortcodePrefix,
           timestamp: new Date().toISOString(),
           action: 'credential_save'
         }
@@ -233,40 +239,30 @@ serve(async (req) => {
       console.error('[MPESA-CREDS] Database save error:', saveError);
       
       // Log failure
-      await supabaseAdmin.rpc('log_security_event', {
-        _event_type: 'mpesa_credentials_save_failed',
-        _severity: 'high',
-        _user_id: user.id,
-        _ip_address: req.headers.get('x-forwarded-for') || 'unknown',
-        _user_agent: req.headers.get('user-agent'),
-        _details: { 
-          error: saveError.message,
-          code: saveError.code,
-          timestamp: new Date().toISOString()
-        }
-      }).catch(err => console.error('Failed to log error event:', err));
+      try {
+        await supabaseAdmin.rpc('log_security_event', {
+          _event_type: 'mpesa_credentials_save_failed',
+          _severity: 'high',
+          _user_id: user.id,
+          _ip_address: req.headers.get('x-forwarded-for') || 'unknown',
+          _user_agent: req.headers.get('user-agent'),
+          _details: { 
+            error: saveError.message,
+            code: saveError.code,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (err) {
+        console.error('Failed to log error event:', err);
+      }
       
       throw saveError;
     }
 
     console.log(`[MPESA-CREDS] Credentials saved successfully for landlord: ${user.id}`);
 
-    // Log successful save
-    await supabaseAdmin.rpc('log_security_event', {
-      _event_type: 'mpesa_credentials_saved',
-      _severity: 'high',
-      _user_id: user.id,
-      _ip_address: req.headers.get('x-forwarded-for') || 'unknown',
-      _user_agent: req.headers.get('user-agent'),
-      _details: { 
-        environment,
-        config_id: savedConfig?.id,
-        timestamp: new Date().toISOString(),
-        action: 'credential_save_success'
-      }
-    }).catch(err => console.error('Failed to log success event:', err));
-
-    // Automatically set landlord preference to use custom config
+    // CRITICAL: Update landlord preference to use custom config IMMEDIATELY after save
+    // This must happen before logging so the UI can refresh correctly
     const { error: prefError } = await supabaseAdmin
       .from('landlord_payment_preferences')
       .upsert({
@@ -283,6 +279,26 @@ serve(async (req) => {
       // Don't fail the whole operation, just log warning
     } else {
       console.log('[MPESA-CREDS] Auto-set mpesa_config_preference to custom');
+    }
+
+    // Log successful save (after preference update, in try/catch so it can't break the flow)
+    try {
+      await supabaseAdmin.rpc('log_security_event', {
+        _event_type: 'mpesa_credentials_saved',
+        _severity: 'high',
+        _user_id: user.id,
+        _ip_address: req.headers.get('x-forwarded-for') || 'unknown',
+        _user_agent: req.headers.get('user-agent'),
+        _details: { 
+          environment,
+          config_id: savedConfig?.id,
+          timestamp: new Date().toISOString(),
+          action: 'credential_save_success'
+        }
+      });
+    } catch (err) {
+      console.error('Failed to log success event:', err);
+      // Don't fail the request for logging issues
     }
 
     return new Response(
