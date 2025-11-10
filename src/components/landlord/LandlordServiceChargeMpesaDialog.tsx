@@ -36,15 +36,39 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
   const [profilePhoneNumber, setProfilePhoneNumber] = useState<string>("");
   const [customPhoneNumber, setCustomPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
+  const [platformShortcode, setPlatformShortcode] = useState<string | null>(null);
+  const [platformTransactionType, setPlatformTransactionType] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'success' | 'error'>('idle');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
 
-  // Fetch saved phone numbers when dialog opens
+  // Fetch saved phone numbers and platform config when dialog opens
   useEffect(() => {
     if (open && user) {
       fetchSavedPhoneNumbers();
+      fetchPlatformConfig();
     }
   }, [open, user]);
+
+  const fetchPlatformConfig = async () => {
+    try {
+      const { data } = await supabase.functions.invoke('mpesa-stk-push', {
+        body: {
+          phone: '254700000000',
+          amount: 1,
+          invoiceId: invoice.id,
+          paymentType: 'service-charge',
+          dryRun: true
+        }
+      });
+      
+      if (data?.data?.BusinessShortCode) {
+        setPlatformShortcode(data.data.BusinessShortCode);
+        setPlatformTransactionType(data.data.TransactionType);
+      }
+    } catch (error) {
+      console.log('Could not determine platform shortcode');
+    }
+  };
 
   const fetchSavedPhoneNumbers = async () => {
     try {
@@ -209,46 +233,67 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
   };
 
   const startStatusPolling = (requestId: string) => {
+    let pollCount = 0;
+    const maxPolls = 100; // 5 minutes (3s * 100)
+    
     const checkStatus = async () => {
+      pollCount++;
+      
       try {
         const { data: transaction } = await supabase
           .from('mpesa_transactions')
-          .select('status, result_desc, mpesa_receipt_number')
+          .select('status, result_code, result_desc, mpesa_receipt_number')
           .eq('checkout_request_id', requestId)
-          .single();
+          .maybeSingle();
 
-        if (transaction) {
-          if (transaction.status === 'completed') {
-            setStatus('success');
-            
-            // Update service charge invoice status
-            await supabase
-              .from('service_charge_invoices')
-              .update({
-                status: 'paid',
-                payment_date: new Date().toISOString(),
-                payment_method: 'mpesa',
-                payment_reference: transaction.mpesa_receipt_number,
-              })
-              .eq('id', invoice.id);
-
-            toast({
-              title: "Payment Successful",
-              description: `Payment of ${formatAmount(invoice.total_amount)} completed successfully`,
-            });
-            
-            onPaymentSuccess?.();
-            return true;
-          } else if (transaction.status === 'failed' || transaction.status === 'cancelled') {
+        // Continue polling if no transaction or result not yet available
+        if (!transaction || (transaction.result_code === null && transaction.status === 'pending')) {
+          if (pollCount >= maxPolls) {
             setStatus('error');
             toast({
-              title: "Payment Failed",
-              description: transaction.result_desc || "Payment was not completed",
+              title: "Payment Timeout",
+              description: "Payment verification timed out. Please check your payment status.",
               variant: "destructive",
             });
             return true;
           }
+          return false;
         }
+
+        // Check for success
+        if (String(transaction.result_code) === '0' || transaction.status === 'completed') {
+          setStatus('success');
+          
+          // Update service charge invoice status
+          await supabase
+            .from('service_charge_invoices')
+            .update({
+              status: 'paid',
+              payment_date: new Date().toISOString(),
+              payment_method: 'mpesa',
+              payment_reference: transaction.mpesa_receipt_number || transaction.result_desc,
+            })
+            .eq('id', invoice.id);
+
+          toast({
+            title: "Payment Successful",
+            description: `Payment of ${formatAmount(invoice.total_amount)} completed successfully`,
+          });
+          
+          onPaymentSuccess?.();
+          return true;
+        } 
+        // Check for failure
+        else if (transaction.status === 'failed' || transaction.status === 'cancelled' || Number(transaction.result_code) !== 0) {
+          setStatus('error');
+          toast({
+            title: "Payment Failed",
+            description: transaction.result_desc || "Payment was not completed",
+            variant: "destructive",
+          });
+          return true;
+        }
+        
         return false;
       } catch (error) {
         console.error('Error checking payment status:', error);
@@ -262,19 +307,6 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
         clearInterval(pollInterval);
       }
     }, 3000);
-
-    // Stop polling after 5 minutes
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      if (status === 'sent') {
-        setStatus('error');
-        toast({
-          title: "Payment Timeout",
-          description: "Payment verification timed out. Please check your payment status.",
-          variant: "destructive",
-        });
-      }
-    }, 300000);
   };
 
   const resetDialog = () => {
@@ -350,6 +382,14 @@ export const LandlordServiceChargeMpesaDialog: React.FC<LandlordServiceChargeMpe
                 {invoice.currency} {invoice.total_amount.toLocaleString()}
               </span>
             </div>
+            {platformShortcode && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {platformTransactionType === 'CustomerBuyGoodsOnline' ? 'Till:' : 'Paybill:'}
+                </span>
+                <span className="font-medium">{platformShortcode}</span>
+              </div>
+            )}
           </div>
 
           {/* Status Display */}

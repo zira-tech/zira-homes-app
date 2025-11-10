@@ -34,6 +34,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [landlordShortcode, setLandlordShortcode] = useState<string | null>(null);
+  const [landlordTransactionType, setLandlordTransactionType] = useState<string | null>(null);
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
@@ -49,12 +50,14 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
               phone: '254700000000',
               amount: 1,
               invoiceId: invoice.id,
+              paymentType: 'rent',
               dryRun: true
             }
           });
           
           if (data?.data?.BusinessShortCode) {
             setLandlordShortcode(data.data.BusinessShortCode);
+            setLandlordTransactionType(data.data.TransactionType);
           }
         } catch (error) {
           console.log('Could not determine landlord shortcode');
@@ -82,54 +85,61 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       try {
         const { data: transaction, error } = await supabase
           .from('mpesa_transactions')
-          .select('result_code, result_desc')
+          .select('result_code, result_desc, status, mpesa_receipt_number')
           .eq('checkout_request_id', requestId)
           .maybeSingle();
         
-        if (transaction) {
-          clearInterval(pollingIntervalRef.current!);
-          
-          if (String(transaction.result_code) === '0') {
-            setStatus('success');
-            setStatusMessage('Payment completed successfully!');
-            
-            // Update invoice status
-            if (invoice?.id) {
-              await supabase
-                .from('invoices')
-                .update({ 
-                  status: 'paid',
-                  mpesa_receipt_number: transaction.result_desc 
-                })
-                .eq('id', invoice.id);
-            }
-            
-            toast({
-              title: "Payment Successful",
-              description: "Your rent payment has been processed.",
-            });
-            
-            setTimeout(() => {
-              onPaymentInitiated?.();
-              onOpenChange(false);
-              resetDialog();
-            }, 2000);
-          } else {
+        // Continue polling if no transaction or result not yet available
+        if (!transaction || (transaction.result_code === null && transaction.status === 'pending')) {
+          if (pollCount >= maxPolls) {
+            clearInterval(pollingIntervalRef.current!);
             setStatus('error');
-            setStatusMessage(transaction.result_desc || 'Payment failed');
+            setStatusMessage('Payment verification timed out. Please check your payment status.');
             toast({
-              title: "Payment Failed",
-              description: transaction.result_desc,
+              title: "Verification Timeout",
+              description: "We couldn't verify your payment. Please contact support if money was deducted.",
               variant: "destructive",
             });
           }
-        } else if (pollCount >= maxPolls) {
+          return;
+        }
+        
+        // Check for success
+        if (String(transaction.result_code) === '0' || transaction.status === 'completed') {
+          clearInterval(pollingIntervalRef.current!);
+          setStatus('success');
+          setStatusMessage('Payment completed successfully!');
+          
+          // Update invoice status
+          if (invoice?.id) {
+            await supabase
+              .from('invoices')
+              .update({ 
+                status: 'paid',
+                mpesa_receipt_number: transaction.mpesa_receipt_number || transaction.result_desc 
+              })
+              .eq('id', invoice.id);
+          }
+          
+          toast({
+            title: "Payment Successful",
+            description: "Your rent payment has been processed.",
+          });
+          
+          setTimeout(() => {
+            onPaymentInitiated?.();
+            onOpenChange(false);
+            resetDialog();
+          }, 2000);
+        } 
+        // Check for failure
+        else if (transaction.status === 'failed' || transaction.status === 'cancelled' || Number(transaction.result_code) !== 0) {
           clearInterval(pollingIntervalRef.current!);
           setStatus('error');
-          setStatusMessage('Payment verification timed out. Please check your payment status.');
+          setStatusMessage(transaction.result_desc || 'Payment failed');
           toast({
-            title: "Verification Timeout",
-            description: "We couldn't verify your payment. Please contact support if money was deducted.",
+            title: "Payment Failed",
+            description: transaction.result_desc || 'Payment was not completed',
             variant: "destructive",
           });
         }
@@ -357,7 +367,9 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
               </div>
               {landlordShortcode && (
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Paybill/Till:</span>
+                  <span className="text-sm text-muted-foreground">
+                    {landlordTransactionType === 'CustomerBuyGoodsOnline' ? 'Till:' : 'Paybill:'}
+                  </span>
                   <span className="text-sm font-medium">{landlordShortcode}</span>
                 </div>
               )}
