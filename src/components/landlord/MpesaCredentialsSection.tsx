@@ -577,6 +577,48 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         });
         return;
       }
+
+      // Test Kopo Kopo credentials before saving
+      setSaving(true);
+      try {
+        toast({
+          title: "Testing Connection",
+          description: "Validating your Kopo Kopo credentials...",
+        });
+
+        const { data: testResult, error: testError } = await supabase.functions.invoke('test-kopokopo-credentials', {
+          body: {
+            client_id: config.kopokopo_client_id,
+            client_secret: config.kopokopo_client_secret,
+            environment: config.environment,
+          },
+        });
+
+        if (testError || !testResult?.success) {
+          toast({
+            title: "Credential Validation Failed",
+            description: testResult?.error || testError?.message || "Unable to authenticate with Kopo Kopo. Please verify your credentials.",
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+
+        toast({
+          title: "Connection Successful",
+          description: "Your Kopo Kopo credentials have been validated successfully.",
+        });
+
+      } catch (error) {
+        console.error('Error testing Kopo Kopo credentials:', error);
+        toast({
+          title: "Validation Error",
+          description: "Failed to test credentials. Please try again.",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
     } else {
       if (!config.consumer_key || !config.consumer_secret || !config.passkey || !config.business_shortcode) {
         toast({
@@ -588,9 +630,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       }
     }
 
+    // Save encrypted credentials via edge function
     setSaving(true);
     try {
-      // Save encrypted credentials via edge function
       const { data, error } = await supabase.functions.invoke('save-mpesa-credentials', {
         body: {
           config_id: config.id, // Pass config_id for updates
