@@ -56,6 +56,10 @@ export function MpesaPaymentModal({
   const pollingAttemptsRef = useRef<number>(0);
   const maxPollingAttempts = 12; // 12 attempts * 10 seconds = 2 minutes
   
+  // Kopo Kopo verify fallback state
+  const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const verifyAttemptedRef = useRef(false);
+  
   // Refs to prevent duplicate processing and status flicker
   const lastProcessedResultCodeRef = useRef<number | null>(null);
   const isProcessingRef = useRef(false);
@@ -213,6 +217,73 @@ export function MpesaPaymentModal({
       isProcessingRef.current = false;
     }
   }, [transaction, status, invoice.id, onPaymentInitiated, onOpenChange, queryClient]);
+
+  // Kopo Kopo verify fallback (after 30-45 seconds of verifying)
+  useEffect(() => {
+    // Only for Kopo Kopo payments in verifying state
+    if (status !== 'verifying' || !checkoutRequestId || paymentProvider !== 'kopokopo' || verifyAttemptedRef.current) {
+      return;
+    }
+
+    console.log('⏱️ Starting Kopo Kopo verify timeout (45 seconds)...');
+    
+    verifyTimeoutRef.current = setTimeout(async () => {
+      console.log('🔍 Triggering Kopo Kopo manual verification...');
+      verifyAttemptedRef.current = true;
+      
+      try {
+        setStatusMessage('Contacting payment provider for verification...');
+        
+        const { data, error } = await supabase.functions.invoke('kopokopo-verify', {
+          body: { checkoutRequestId }
+        });
+
+        if (error) {
+          console.error('❌ Verify function error:', error);
+          return; // Continue with normal polling
+        }
+
+        console.log('✅ Verify response:', data);
+
+        if (data.status === 'completed') {
+          setStatus('success');
+          setStatusMessage('Payment completed successfully!');
+          
+          // Update invoice
+          await supabase
+            .from('invoices')
+            .update({ 
+              status: 'paid',
+              mpesa_receipt_number: data.receipt
+            })
+            .eq('id', invoice.id);
+
+          toast.success("Payment successful!");
+          queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
+          
+          setTimeout(() => {
+            onPaymentInitiated?.();
+            onOpenChange(false);
+            resetDialog();
+          }, 2000);
+        } else if (data.status === 'failed') {
+          setStatus('error');
+          setStatusMessage(data.result_desc || 'Payment failed');
+          toast.error(data.result_desc || 'Payment failed');
+        }
+      } catch (err) {
+        console.error('Verify exception:', err);
+        // Continue with normal polling
+      }
+    }, 45000); // 45 seconds
+
+    return () => {
+      if (verifyTimeoutRef.current) {
+        clearTimeout(verifyTimeoutRef.current);
+        verifyTimeoutRef.current = null;
+      }
+    };
+  }, [status, checkoutRequestId, paymentProvider, invoice.id, onPaymentInitiated, onOpenChange, queryClient, supabase]);
 
   // Fallback polling mechanism
   useEffect(() => {
@@ -473,6 +544,13 @@ export function MpesaPaymentModal({
       pollingIntervalRef.current = null;
     }
     pollingAttemptsRef.current = 0;
+    
+    // Clear verify timeout
+    if (verifyTimeoutRef.current) {
+      clearTimeout(verifyTimeoutRef.current);
+      verifyTimeoutRef.current = null;
+    }
+    verifyAttemptedRef.current = false;
     
     // Reset processing refs
     lastProcessedResultCodeRef.current = null;

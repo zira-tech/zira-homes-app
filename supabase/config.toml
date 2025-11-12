@@ -107,3 +107,6 @@ verify_jwt = true
 
 [functions.sms-health-check]
 verify_jwt = true
+
+[functions.kopokopo-verify]
+verify_jwt = true

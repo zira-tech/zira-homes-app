@@ -65,10 +65,14 @@ serve(async (req) => {
     console.log(`   Invoice ID: ${invoiceId}`);
     console.log(`   Payment Type: ${paymentType}`);
 
-    // Determine final status
-    const finalStatus = status?.toLowerCase() === 'success' ? 'completed' : 'failed';
-    const resultCode = status?.toLowerCase() === 'success' ? 0 : 1; // 0 for success (UI compatibility)
-    const resultDesc = status?.toLowerCase() === 'success' ? 'Payment successful' : (attributes.failure_reason || 'Payment failed');
+    // Determine final status - support multiple success variations
+    const statusLower = (status || '').toLowerCase();
+    const successStatuses = ['success', 'successful', 'processed', 'completed', 'paid'];
+    const isSuccess = successStatuses.includes(statusLower);
+    
+    const finalStatus = isSuccess ? 'completed' : 'failed';
+    const resultCode = isSuccess ? 0 : 1; // 0 for success (UI compatibility)
+    const resultDesc = isSuccess ? 'Payment successful' : (attributes.failure_reason || 'Payment failed');
 
     // Check if we should update existing transaction or insert new one
     // Priority 1: Look for pending transaction by metadata.reference (most reliable)
