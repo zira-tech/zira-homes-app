@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2 - Fixed 202 response handling for Kopo Kopo
-  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2 (202 response fix deployed)');
+  // 🔖 VERSION: 2025-11-12-v2.1 - Comprehensive 202 handling, branch markers, and error details
+  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2.1 (hardened response parsing)');
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -652,19 +652,38 @@ serve(async (req) => {
         });
 
         if (!tokenResponse.ok) {
-          const tokenError = await tokenResponse.json();
+          let tokenError;
+          try {
+            tokenError = await tokenResponse.json();
+          } catch (e) {
+            tokenError = { error: 'Failed to parse OAuth error response', status: tokenResponse.status };
+          }
           console.error('❌ Kopo Kopo OAuth error:', tokenError);
           return new Response(
             JSON.stringify({ 
               error: 'Failed to authenticate with Kopo Kopo',
               errorId: 'KOPOKOPO_AUTH_FAILED',
-              details: tokenError
+              details: tokenError,
+              userMessage: 'Payment gateway authentication failed. Please contact your landlord to verify M-Pesa configuration.'
             }),
             { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        const tokenData = await tokenResponse.json();
+        let tokenData;
+        try {
+          tokenData = await tokenResponse.json();
+        } catch (e) {
+          console.error('❌ Failed to parse OAuth token response:', e);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invalid OAuth response from Kopo Kopo',
+              errorId: 'KOPOKOPO_AUTH_PARSE_FAILED',
+              userMessage: 'Payment gateway returned invalid response. Please try again.'
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         const accessToken = tokenData.access_token;
         
         console.log('✅ Kopo Kopo access token obtained');
@@ -724,9 +743,9 @@ serve(async (req) => {
           }
         );
 
-        // Handle 202 Accepted (STK Push successfully queued)
+        // Handle 202 Accepted (STK Push successfully queued) - MAIN BRANCH
         if (kopokopoResponse.status === 202) {
-          console.log('✅ STK Push accepted by Kopo Kopo (202) - Payment queued');
+          console.log('✅ [SNAKE_202] STK Push accepted by Kopo Kopo (202) - Payment queued');
           
           // Generate unique reference for this payment
           const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -749,7 +768,8 @@ serve(async (req) => {
                 description: transactionDesc,
                 landlord_id: landlordConfigId,
                 provider: 'kopokopo',
-                till_number: tillNumber
+                till_number: tillNumber,
+                branch: 'snake_202'
               },
               initiated_by: userId
             })
@@ -766,6 +786,7 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               provider: 'kopokopo',
+              branch: 'snake_202',
               CheckoutRequestID: checkoutRequestId,
               MerchantRequestID: checkoutRequestId,
               message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
@@ -781,25 +802,43 @@ serve(async (req) => {
         }
 
         // For other status codes, try to parse JSON response
-        const kopokopoData = await kopokopoResponse.json();
-        console.log('Kopo Kopo response:', JSON.stringify(kopokopoData, null, 2));
+        let kopokopoData;
+        try {
+          kopokopoData = await kopokopoResponse.json();
+        } catch (parseError) {
+          console.error('❌ Failed to parse Kopo Kopo response:', parseError, 'Status:', kopokopoResponse.status);
+          
+          // If we get here with non-202, it's likely a gateway error
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invalid response from payment gateway',
+              errorId: 'KOPOKOPO_RESPONSE_PARSE_FAILED',
+              status: kopokopoResponse.status,
+              userMessage: 'Payment gateway returned invalid response. Please try again or contact support.'
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log('📦 [SNAKE_JSON] Kopo Kopo response:', JSON.stringify(kopokopoData, null, 2));
 
         if (!kopokopoResponse.ok) {
           console.error('❌ Kopo Kopo STK Push failed:', kopokopoData);
           
           // Handle specific error codes
-          let userMessage = 'Failed to initiate Kopo Kopo payment';
+          let userMessage = 'Failed to initiate M-Pesa payment';
+          let errorId = 'KOPOKOPO_REQUEST_FAILED';
           let shouldRetry = true;
           
           if (kopokopoResponse.status === 429 || kopokopoData.error_code === 429) {
+            errorId = 'KOPOKOPO_RATE_LIMIT';
             if (kopokopoData.error_message?.includes('pending request')) {
-              userMessage = 'There is already a pending M-Pesa request for this phone number. Please complete or cancel the existing request first, then try again.';
+              userMessage = 'There is already a pending M-Pesa request for this phone number. Please complete or cancel the existing request first.';
               shouldRetry = false;
             } else {
               userMessage = 'Too many payment requests. Please wait a moment and try again.';
               shouldRetry = true;
             }
-          } else if (kopokopoData.error_message?.includes('Till number is invalid')) {
+          } else if (kopokopoData.error_message?.includes('Till number is invalid') || kopokopoData.error_message?.includes('till_number')) {
             console.log('⚠️ Till number validation failed, trying camelCase payload (PHP-style)...');
             
             // Retry with camelCase payload matching the working PHP example
@@ -835,9 +874,9 @@ serve(async (req) => {
               }
             );
             
-            // Handle 202 Accepted in retry
+            // Handle 202 Accepted in retry - CAMELCASE BRANCH
             if (camelRetryResponse.status === 202) {
-              console.log('✅ CamelCase retry: STK Push accepted (202) - Payment queued');
+              console.log('✅ [CAMEL_202] CamelCase retry: STK Push accepted (202) - Payment queued');
               
               const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
               
@@ -859,7 +898,7 @@ serve(async (req) => {
                     landlord_id: landlordConfigId,
                     provider: 'kopokopo',
                     till_number: tillNumber,
-                    retry_format: 'camelCase'
+                    branch: 'camel_202'
                   },
                   initiated_by: userId
                 });
@@ -868,6 +907,7 @@ serve(async (req) => {
                 JSON.stringify({
                   success: true,
                   provider: 'kopokopo',
+                  branch: 'camel_202',
                   CheckoutRequestID: checkoutRequestId,
                   MerchantRequestID: checkoutRequestId,
                   message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
@@ -882,11 +922,24 @@ serve(async (req) => {
               );
             }
             
-            const camelRetryData = await camelRetryResponse.json();
-            console.log('🔄 CamelCase retry response:', JSON.stringify(camelRetryData, null, 2));
+            let camelRetryData;
+            try {
+              camelRetryData = await camelRetryResponse.json();
+            } catch (parseError) {
+              console.error('❌ Failed to parse camelCase retry response:', parseError);
+              return new Response(
+                JSON.stringify({ 
+                  error: 'Invalid retry response from payment gateway',
+                  errorId: 'KOPOKOPO_RETRY_PARSE_FAILED',
+                  userMessage: 'Payment gateway returned invalid response. Please try again.'
+                }),
+                { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            console.log('📦 [CAMEL_JSON] CamelCase retry response:', JSON.stringify(camelRetryData, null, 2));
             
             if (camelRetryResponse.ok) {
-              console.log('✅ Kopo Kopo STK Push successful (camelCase format)');
+              console.log('✅ [CAMEL_SUCCESS] Kopo Kopo STK Push successful (camelCase format)');
               
               // Store transaction
               const { error: txnError } = await supabaseAdmin
@@ -910,14 +963,30 @@ serve(async (req) => {
 
               return new Response(
                 JSON.stringify({ 
-                  success: true, 
-                  message: 'Payment request sent successfully',
-                  transaction: camelRetryData.data
+                  success: true,
+                  provider: 'kopokopo',
+                  branch: 'camel_json_ok',
+                  CheckoutRequestID: camelRetryData.data?.resource_id || `checkout-${Date.now()}`,
+                  MerchantRequestID: camelRetryData.data?.id || `KK-${Date.now()}`,
+                  message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
+                  data: camelRetryData
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             } else {
-              userMessage = 'Till number appears invalid for STK Push. Please verify the exact till number in your Kopo Kopo dashboard and ensure STK Push is enabled for this till.';
+              console.error('❌ CamelCase retry also failed:', camelRetryData);
+              errorId = 'KOPOKOPO_TILL_INVALID';
+              userMessage = 'Till number validation failed. Please contact your landlord to verify the M-Pesa Till configuration.';
+              return new Response(
+                JSON.stringify({ 
+                  error: userMessage,
+                  errorId,
+                  userMessage,
+                  details: camelRetryData,
+                  shouldRetry: false
+                }),
+                { status: camelRetryResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
             }
           } else if (kopokopoData.error_message?.includes('metadata')) {
             console.log('⚠️ Metadata validation failed, retrying without metadata...');
@@ -1002,21 +1071,22 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ 
               error: userMessage,
-              errorId: 'KOPOKOPO_API_ERROR',
+              errorId,
+              userMessage,
               shouldRetry,
               details: kopokopoData
             }),
             { 
-              status: 400, // Return 400 instead of passing through 429
+              status: 400,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
             }
           );
         }
 
-        // Extract payment request ID from response
-        const paymentRequestId = kopokopoData.data?.id || `kk-${Date.now()}`;
+        // Success response (snake_case payload worked with JSON body)
+        console.log('✅ [SNAKE_SUCCESS] Kopo Kopo STK Push successful');
         
-        console.log('✅ Kopo Kopo STK Push successful. Payment ID:', paymentRequestId);
+        const paymentRequestId = kopokopoData.data?.id || `kk-${Date.now()}`;
 
         // Store STK request in database
         await supabaseAdmin
@@ -1053,13 +1123,15 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             provider: 'kopokopo',
+            branch: 'snake_json_ok',
             CheckoutRequestID: paymentRequestId,
             MerchantRequestID: paymentRequestId,
-            message: 'STK push sent successfully. Please enter your M-Pesa PIN.',
+            message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
             data: {
               CheckoutRequestID: paymentRequestId,
               ResponseDescription: 'Kopo Kopo STK push initiated',
-              TillNumber: tillNumber
+              TillNumber: tillNumber,
+              status: 'pending'
             }
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
