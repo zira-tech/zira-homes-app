@@ -177,7 +177,9 @@ serve(async (req) => {
           result_code: ResultCode,
           result_desc: ResultDesc,
           mpesa_receipt_number: transactionId,
+          provider: 'mpesa',
           metadata: { 
+            provider: 'mpesa',
             created_from_callback: true,
             ip: clientIP,
             timestamp: new Date().toISOString()
@@ -238,7 +240,8 @@ serve(async (req) => {
         result_code: ResultCode,
         result_desc: ResultDesc,
         mpesa_receipt_number: transactionId,
-        metadata: { validated: true, ip: clientIP },
+        provider: 'mpesa',
+        metadata: { provider: 'mpesa', validated: true, ip: clientIP },
         updated_at: new Date().toISOString()
       })
       .eq('checkout_request_id', CheckoutRequestID)

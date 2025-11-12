@@ -1429,6 +1429,7 @@ export type Database = {
           payment_type: string | null
           phone_number: string
           phone_number_encrypted: string | null
+          provider: string | null
           result_code: number | null
           result_desc: string | null
           status: string
@@ -1448,6 +1449,7 @@ export type Database = {
           payment_type?: string | null
           phone_number: string
           phone_number_encrypted?: string | null
+          provider?: string | null
           result_code?: number | null
           result_desc?: string | null
           status?: string
@@ -1467,6 +1469,7 @@ export type Database = {
           payment_type?: string | null
           phone_number?: string
           phone_number_encrypted?: string | null
+          provider?: string | null
           result_code?: number | null
           result_desc?: string | null
           status?: string

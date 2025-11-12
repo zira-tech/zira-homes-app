@@ -157,27 +157,28 @@ serve(async (req) => {
     if (existingTxn) {
       // Update existing pending transaction
       console.log('✅ Updating existing pending transaction:', existingTxn.checkout_request_id);
-      const { error: updateError } = await supabase
-        .from('mpesa_transactions')
-        .update({
-          result_code: resultCode,
-          result_desc: resultDesc,
-          mpesa_receipt_number: transactionId,
-          phone_number: phoneNumber || existingTxn.phone_number,
-          amount: amount || existingTxn.amount,
-          status: finalStatus,
-          metadata: {
-            ...existingTxn.metadata,
-            provider: 'kopokopo',
-            callback_reference: reference,
-            transaction_id: transactionId,
-            sender_first_name: senderFirstName,
-            sender_last_name: senderLastName,
-            raw_callback: callbackData,
-            reconciled: true
-          }
-        })
-        .eq('id', existingTxn.id);
+  const { error: updateError } = await supabase
+    .from('mpesa_transactions')
+    .update({
+      result_code: resultCode,
+      result_desc: resultDesc,
+      mpesa_receipt_number: transactionId,
+      phone_number: phoneNumber || existingTxn.phone_number,
+      amount: amount || existingTxn.amount,
+      status: finalStatus,
+      provider: 'kopokopo',
+      metadata: {
+        ...existingTxn.metadata,
+        provider: 'kopokopo',
+        callback_reference: reference,
+        transaction_id: transactionId,
+        sender_first_name: senderFirstName,
+        sender_last_name: senderLastName,
+        raw_callback: callbackData,
+        reconciled: true
+      }
+    })
+    .eq('id', existingTxn.id);
 
       if (updateError) {
         console.error('❌ Failed to update transaction:', updateError);
@@ -202,6 +203,7 @@ serve(async (req) => {
           status: finalStatus,
           invoice_id: invoiceId || null,
           payment_type: paymentType || 'rent',
+          provider: 'kopokopo',
           metadata: {
             provider: 'kopokopo',
             reference: reference,

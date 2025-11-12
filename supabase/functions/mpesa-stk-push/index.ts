@@ -898,6 +898,7 @@ serve(async (req) => {
                   result_desc: 'Awaiting user input',
                   invoice_id: invoiceId || null,
                   payment_type: paymentType || 'rent',
+                  provider: 'kopokopo',
                   metadata: {
                     reference: standardReference,
                     description: transactionDesc,
@@ -962,7 +963,8 @@ serve(async (req) => {
                   transaction_type: paymentType || 'rent',
                   status: 'pending',
                   invoice_id: invoiceId,
-                  landlord_id: landlordConfigId
+                  landlord_id: landlordConfigId,
+                  provider: 'kopokopo'
                 });
 
               if (txnError) {
@@ -1060,7 +1062,8 @@ serve(async (req) => {
                   transaction_type: paymentType || 'rent',
                   status: 'pending',
                   invoice_id: invoiceId,
-                  landlord_id: landlordConfigId
+                  landlord_id: landlordConfigId,
+                  provider: 'kopokopo'
                 });
 
               if (txnError) {
@@ -1347,7 +1350,8 @@ serve(async (req) => {
         created_at: new Date().toISOString(),
         payment_type: paymentType || 'rent',
         initiated_by: user.id,
-        authorized_by: user.id
+        authorized_by: user.id,
+        provider: 'mpesa'
       }
 
       // Only add invoice_id if it's a valid UUID (for rent payments)
