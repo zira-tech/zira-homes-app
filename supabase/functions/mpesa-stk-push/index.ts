@@ -591,6 +591,36 @@ serve(async (req) => {
       usingLandlordConfig: !!mpesaConfig
     });
 
+    // Handle dry run early - return config without initiating payment (works for both providers)
+    if (shouldProcessDryRun) {
+      console.log('🔍 Dry run mode - returning config only');
+      const isKopoKopo = paymentProvider === 'kopokopo';
+      const isTill = mpesaConfig?.shortcode_type === 'till_safaricom' || 
+                     mpesaConfig?.shortcode_type === 'till' || 
+                     isKopoKopo;
+      const transactionType = isTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          dryRun: true,
+          data: {
+            Provider: isKopoKopo ? 'kopokopo' : 'mpesa',
+            TillNumber: isKopoKopo ? tillNumber : null,
+            BusinessShortCode: isKopoKopo ? tillNumber : shortcode,
+            Environment: environment,
+            UsingLandlordConfig: !!mpesaConfig,
+            TransactionType: transactionType,
+            DisplayName: mpesaConfig?.display_name || 'Platform M-Pesa'
+          }
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // KOPO KOPO PAYMENT PROCESSING
     if (paymentProvider === 'kopokopo') {
       console.log('🔄 Processing payment via Kopo Kopo OAuth...');
@@ -767,6 +797,9 @@ serve(async (req) => {
               result_desc: 'Awaiting user input',
               invoice_id: invoiceId || null,
               payment_type: paymentType || 'rent',
+              initiated_by: user.id,
+              authorized_by: user.id,
+              provider: 'kopokopo',
               metadata: {
                 reference: standardReference,
                 description: transactionDesc,
@@ -898,6 +931,8 @@ serve(async (req) => {
                   result_desc: 'Awaiting user input',
                   invoice_id: invoiceId || null,
                   payment_type: paymentType || 'rent',
+                  initiated_by: user.id,
+                  authorized_by: user.id,
                   provider: 'kopokopo',
                   metadata: {
                     reference: standardReference,
@@ -960,11 +995,20 @@ serve(async (req) => {
                   amount: amount,
                   account_reference: accountReference,
                   transaction_desc: transactionDesc,
-                  transaction_type: paymentType || 'rent',
                   status: 'pending',
-                  invoice_id: invoiceId,
-                  landlord_id: landlordConfigId,
-                  provider: 'kopokopo'
+                  invoice_id: invoiceId || null,
+                  payment_type: paymentType || 'rent',
+                  initiated_by: user.id,
+                  authorized_by: user.id,
+                  provider: 'kopokopo',
+                  metadata: {
+                    reference: standardReference,
+                    description: transactionDesc,
+                    landlord_id: landlordConfigId,
+                    provider: 'kopokopo',
+                    till: tillNumber,
+                    branch: 'camel_json_ok'
+                  }
                 });
 
               if (txnError) {
@@ -1059,11 +1103,20 @@ serve(async (req) => {
                   amount: amount,
                   account_reference: accountReference,
                   transaction_desc: transactionDesc,
-                  transaction_type: paymentType || 'rent',
                   status: 'pending',
-                  invoice_id: invoiceId,
-                  landlord_id: landlordConfigId,
-                  provider: 'kopokopo'
+                  invoice_id: invoiceId || null,
+                  payment_type: paymentType || 'rent',
+                  initiated_by: user.id,
+                  authorized_by: user.id,
+                  provider: 'kopokopo',
+                  metadata: {
+                    reference: standardReference,
+                    description: transactionDesc,
+                    landlord_id: landlordConfigId,
+                    provider: 'kopokopo',
+                    till: tillNumber,
+                    branch: 'no_metadata_success'
+                  }
                 });
 
               if (txnError) {
@@ -1143,7 +1196,19 @@ serve(async (req) => {
             phone_number: phoneNumber,
             amount: amount,
             status: 'pending',
-            provider: 'kopokopo'
+            invoice_id: invoiceId || null,
+            payment_type: paymentType || 'rent',
+            initiated_by: user.id,
+            authorized_by: user.id,
+            provider: 'kopokopo',
+            metadata: {
+              reference: standardReference,
+              description: transactionDesc,
+              landlord_id: landlordConfigId,
+              provider: 'kopokopo',
+              till: tillNumber,
+              branch: 'snake_json_ok'
+            }
           });
 
         return new Response(
@@ -1213,35 +1278,7 @@ serve(async (req) => {
       );
     }
 
-    // Handle dry run - return config without initiating payment
-    if (dryRun) {
-      console.log('🔍 Dry run mode - returning config only');
-      const isKopoKopo = mpesaConfig?.shortcode_type === 'till_kopokopo';
-      const isTill = mpesaConfig?.shortcode_type === 'till_safaricom' || 
-                     mpesaConfig?.shortcode_type === 'till' || 
-                     isKopoKopo;
-      const transactionType = isTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          dryRun: true,
-          data: {
-            Provider: isKopoKopo ? 'kopokopo' : 'mpesa',
-            TillNumber: isKopoKopo ? tillNumber : null,
-            BusinessShortCode: shortcode,
-            Environment: environment,
-            UsingLandlordConfig: !!mpesaConfig,
-            TransactionType: transactionType,
-            DisplayName: mpesaConfig?.display_name || 'Platform M-Pesa'
-          }
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
+    // Dry run already handled above for both providers
 
     console.log('🔑 Fetching M-Pesa OAuth token...');
     console.log('🌍 M-Pesa environment (normalized):', environment);
