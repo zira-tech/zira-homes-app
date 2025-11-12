@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2.2 - Enhanced 201/202 handling, synthetic checkout IDs, provider display
-  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2.2 (enhanced Kopo Kopo flow)');
+  // 🔖 VERSION: 2025-11-12-v2.4 - Normalized provider/till display + invoice_id reconciliation
+  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2.4 (normalized response + invoice_id)');
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -791,14 +791,16 @@ serve(async (req) => {
               success: true,
               provider: 'kopokopo',
               tillNumber: tillNumber,
-              branch: `snake_${kopokopoResponse.status}`,
               CheckoutRequestID: checkoutRequestId,
               MerchantRequestID: checkoutRequestId,
               message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
               data: {
+                provider: 'kopokopo',
+                tillNumber: tillNumber,
                 CheckoutRequestID: checkoutRequestId,
                 ResponseDescription: 'Kopo Kopo STK push queued',
-                status: 'pending'
+                status: 'pending',
+                branch: `snake_${kopokopoResponse.status}`
               }
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -912,14 +914,16 @@ serve(async (req) => {
                   success: true,
                   provider: 'kopokopo',
                   tillNumber: tillNumber,
-                  branch: `camel_${camelRetryResponse.status}`,
                   CheckoutRequestID: checkoutRequestId,
                   MerchantRequestID: checkoutRequestId,
                   message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
                   data: {
+                    provider: 'kopokopo',
+                    tillNumber: tillNumber,
                     CheckoutRequestID: checkoutRequestId,
                     ResponseDescription: 'Kopo Kopo STK push queued (camelCase retry)',
-                    status: 'pending'
+                    status: 'pending',
+                    branch: `camel_${camelRetryResponse.status}`
                   }
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -969,11 +973,17 @@ serve(async (req) => {
                 JSON.stringify({ 
                   success: true,
                   provider: 'kopokopo',
-                  branch: 'camel_json_ok',
+                  tillNumber: tillNumber,
                   CheckoutRequestID: camelRetryData.data?.resource_id || `checkout-${Date.now()}`,
                   MerchantRequestID: camelRetryData.data?.id || `KK-${Date.now()}`,
                   message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
-                  data: camelRetryData
+                  data: {
+                    provider: 'kopokopo',
+                    tillNumber: tillNumber,
+                    CheckoutRequestID: camelRetryData.data?.resource_id || `checkout-${Date.now()}`,
+                    branch: 'camel_json_ok',
+                    ...camelRetryData
+                  }
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
@@ -1059,9 +1069,19 @@ serve(async (req) => {
 
               return new Response(
                 JSON.stringify({ 
-                  success: true, 
+                  success: true,
+                  provider: 'kopokopo',
+                  tillNumber: tillNumber,
+                  CheckoutRequestID: retryData.data?.resource_id || `checkout-${Date.now()}`,
+                  MerchantRequestID: retryData.data?.id || `KK-${Date.now()}`,
                   message: 'Payment request sent successfully',
-                  transaction: retryData.data
+                  data: {
+                    provider: 'kopokopo',
+                    tillNumber: tillNumber,
+                    CheckoutRequestID: retryData.data?.resource_id || `checkout-${Date.now()}`,
+                    branch: 'no_metadata_success',
+                    ...retryData
+                  }
                 }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
@@ -1127,15 +1147,17 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             provider: 'kopokopo',
-            branch: 'snake_json_ok',
+            tillNumber: tillNumber,
             CheckoutRequestID: paymentRequestId,
             MerchantRequestID: paymentRequestId,
             message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
             data: {
+              provider: 'kopokopo',
+              tillNumber: tillNumber,
               CheckoutRequestID: paymentRequestId,
               ResponseDescription: 'Kopo Kopo STK push initiated',
-              TillNumber: tillNumber,
-              status: 'pending'
+              status: 'pending',
+              branch: 'snake_json_ok'
             }
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

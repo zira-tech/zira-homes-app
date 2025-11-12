@@ -45,8 +45,11 @@ export function MpesaPaymentModal({
   // React Query client for cache invalidation
   const queryClient = useQueryClient();
   
-  // Use realtime hook for payment status updates
-  const { transaction, isListening } = useRealtimeMpesaStatus(checkoutRequestId);
+  // Use realtime hook for payment status updates (with invoice_id for Kopo Kopo)
+  const { transaction, isListening } = useRealtimeMpesaStatus(checkoutRequestId, {
+    invoiceId: invoice.id,
+    provider: paymentProvider
+  });
   
   // Polling state
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -226,11 +229,27 @@ export function MpesaPaymentModal({
       console.log(`🔍 Polling attempt ${pollingAttemptsRef.current}/${maxPollingAttempts}`);
 
       try {
-        const { data, error } = await supabase
+        // First try by checkout_request_id
+        let { data, error } = await supabase
           .from('mpesa_transactions')
           .select('*')
           .eq('checkout_request_id', checkoutRequestId)
           .maybeSingle();
+
+        // If no result and Kopo Kopo, also try by invoice_id (after a few attempts)
+        if (!data && paymentProvider === 'kopokopo' && pollingAttemptsRef.current > 2) {
+          console.log('🔄 Polling by invoice_id as fallback for Kopo Kopo');
+          const invoiceQuery = await supabase
+            .from('mpesa_transactions')
+            .select('*')
+            .eq('invoice_id', invoice.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          data = invoiceQuery.data;
+          error = invoiceQuery.error;
+        }
 
         if (error) {
           console.error('Polling error:', error);
@@ -319,7 +338,7 @@ export function MpesaPaymentModal({
         pollingIntervalRef.current = null;
       }
     };
-  }, [status, checkoutRequestId, invoice.id, onPaymentInitiated, onOpenChange]);
+  }, [status, checkoutRequestId, paymentProvider, invoice.id, onPaymentInitiated, onOpenChange, queryClient]);
 
   const handlePayment = async () => {
     if (!phoneNumber.trim()) {
