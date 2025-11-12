@@ -686,19 +686,20 @@ serve(async (req) => {
             value: amount // Amount in KES (not cents)
           },
           metadata: {
-            customer_id: landlordConfigId,
-            invoice_id: invoiceId || accountReference,
-            payment_type: paymentType || 'rent',
-            landlord_id: landlordConfigId,
-            reference: `INV-${invoiceId || Date.now()}`,
-            notes: transactionDesc || 'Property rent payment'
+            reference: accountReference || `PAY${Date.now()}`,
+            notes: (transactionDesc || 'Payment request').substring(0, 100)
           },
           _links: {
             callback_url: callbackUrl
           }
         };
 
-        console.log('Kopo Kopo STK Push payload:', JSON.stringify(kopokopoPayload, null, 2));
+        console.log('📦 Kopo Kopo STK Push payload:', JSON.stringify(kopokopoPayload, null, 2));
+        console.log('📊 Metadata details:', {
+          fieldCount: Object.keys(kopokopoPayload.metadata).length,
+          stringifiedLength: JSON.stringify(kopokopoPayload.metadata).length,
+          fields: Object.keys(kopokopoPayload.metadata)
+        });
 
         // Call Kopo Kopo API
         const kopokopoBaseUrl = environment === 'production'
@@ -736,6 +737,82 @@ serve(async (req) => {
             } else {
               userMessage = 'Too many payment requests. Please wait a moment and try again.';
               shouldRetry = true;
+            }
+          } else if (kopokopoData.error_message?.includes('metadata')) {
+            console.log('⚠️ Metadata validation failed, retrying without metadata...');
+            
+            // Retry without metadata
+            const simplePayload = {
+              payment_channel: 'M-PESA STK Push',
+              till_number: `K${tillNumber}`,
+              subscriber: {
+                first_name: 'Customer',
+                last_name: 'Payment',
+                phone_number: phoneNumber,
+                email: 'customer@property.com'
+              },
+              amount: {
+                currency: 'KES',
+                value: amount
+              },
+              _links: {
+                callback_url: callbackUrl
+              }
+            };
+            
+            console.log('🔄 Retrying without metadata:', JSON.stringify(simplePayload, null, 2));
+            
+            const retryResponse = await fetch(
+              `${kopokopoBaseUrl}/api/v1/incoming_payments`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'User-Agent': 'PropertyManagement/1.0'
+                },
+                body: JSON.stringify(simplePayload)
+              }
+            );
+            
+            const retryData = await retryResponse.json();
+            console.log('🔄 Retry response:', JSON.stringify(retryData, null, 2));
+            
+            if (retryResponse.ok) {
+              // Success on retry - use retryData instead
+              console.log('✅ Kopo Kopo STK Push successful (without metadata)');
+              
+              // Store transaction - continue with success flow
+              const { error: txnError } = await supabaseAdmin
+                .from('mpesa_transactions')
+                .insert({
+                  merchant_request_id: retryData.data?.id || `KK-${Date.now()}`,
+                  checkout_request_id: retryData.data?.resource_id || `checkout-${Date.now()}`,
+                  phone_number: phoneNumber,
+                  amount: amount,
+                  account_reference: accountReference,
+                  transaction_desc: transactionDesc,
+                  transaction_type: paymentType || 'rent',
+                  status: 'pending',
+                  invoice_id: invoiceId,
+                  landlord_id: landlordConfigId
+                });
+
+              if (txnError) {
+                console.error('Failed to store transaction:', txnError);
+              }
+
+              return new Response(
+                JSON.stringify({ 
+                  success: true, 
+                  message: 'Payment request sent successfully',
+                  transaction: retryData.data
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            } else {
+              userMessage = retryData.error_message || 'Failed to initiate payment even without metadata';
             }
           } else if (kopokopoData.error_message) {
             userMessage = kopokopoData.error_message;
