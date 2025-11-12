@@ -674,7 +674,7 @@ serve(async (req) => {
         // Reference: https://developers.kopokopo.com/guides/receive-money/mpesa-stk.html
         const kopokopoPayload = {
           payment_channel: 'M-PESA STK Push',
-          till_number: `K${tillNumber}`, // Till number must be prefixed with K
+          till_number: tillNumber, // ✅ Raw till number (no prefix)
           subscriber: {
             first_name: 'Customer',
             last_name: 'Payment',
@@ -694,7 +694,8 @@ serve(async (req) => {
           }
         };
 
-        console.log('📦 Kopo Kopo STK Push payload:', JSON.stringify(kopokopoPayload, null, 2));
+        console.log('📦 Kopo Kopo STK Push payload (snake_case):', JSON.stringify(kopokopoPayload, null, 2));
+        console.log('📊 Till number used:', tillNumber);
         console.log('📊 Metadata details:', {
           fieldCount: Object.keys(kopokopoPayload.metadata).length,
           stringifiedLength: JSON.stringify(kopokopoPayload.metadata).length,
@@ -738,13 +739,86 @@ serve(async (req) => {
               userMessage = 'Too many payment requests. Please wait a moment and try again.';
               shouldRetry = true;
             }
+          } else if (kopokopoData.error_message?.includes('Till number is invalid')) {
+            console.log('⚠️ Till number validation failed, trying camelCase payload (PHP-style)...');
+            
+            // Retry with camelCase payload matching the working PHP example
+            const camelCasePayload = {
+              paymentChannel: 'M-PESA STK Push',
+              tillNumber: tillNumber,
+              firstName: 'Customer',
+              lastName: 'Payment',
+              phoneNumber: phoneNumber,
+              amount: Number(amount),
+              currency: 'KES',
+              callbackUrl: callbackUrl,
+              metadata: {
+                customerId: `CUST${Date.now()}`,
+                reference: accountReference || `ORD-${Date.now()}`,
+                notes: (transactionDesc || 'Payment request').substring(0, 100)
+              }
+            };
+            
+            console.log('🔄 Retrying with camelCase payload:', JSON.stringify(camelCasePayload, null, 2));
+            
+            const camelRetryResponse = await fetch(
+              `${kopokopoBaseUrl}/api/v1/incoming_payments`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'User-Agent': 'PropertyManagement/1.0'
+                },
+                body: JSON.stringify(camelCasePayload)
+              }
+            );
+            
+            const camelRetryData = await camelRetryResponse.json();
+            console.log('🔄 CamelCase retry response:', JSON.stringify(camelRetryData, null, 2));
+            
+            if (camelRetryResponse.ok) {
+              console.log('✅ Kopo Kopo STK Push successful (camelCase format)');
+              
+              // Store transaction
+              const { error: txnError } = await supabaseAdmin
+                .from('mpesa_transactions')
+                .insert({
+                  merchant_request_id: camelRetryData.data?.id || `KK-${Date.now()}`,
+                  checkout_request_id: camelRetryData.data?.resource_id || `checkout-${Date.now()}`,
+                  phone_number: phoneNumber,
+                  amount: amount,
+                  account_reference: accountReference,
+                  transaction_desc: transactionDesc,
+                  transaction_type: paymentType || 'rent',
+                  status: 'pending',
+                  invoice_id: invoiceId,
+                  landlord_id: landlordConfigId
+                });
+
+              if (txnError) {
+                console.error('Failed to store transaction:', txnError);
+              }
+
+              return new Response(
+                JSON.stringify({ 
+                  success: true, 
+                  message: 'Payment request sent successfully',
+                  transaction: camelRetryData.data
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            } else {
+              userMessage = 'Till number appears invalid for STK Push. Please verify the exact till number in your Kopo Kopo dashboard and ensure STK Push is enabled for this till.';
+            }
           } else if (kopokopoData.error_message?.includes('metadata')) {
             console.log('⚠️ Metadata validation failed, retrying without metadata...');
             
             // Retry without metadata
             const simplePayload = {
               payment_channel: 'M-PESA STK Push',
-              till_number: `K${tillNumber}`,
+              till_number: tillNumber, // ✅ Raw till number without "K" prefix
               subscriber: {
                 first_name: 'Customer',
                 last_name: 'Payment',
