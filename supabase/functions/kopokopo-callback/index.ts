@@ -214,8 +214,42 @@ serve(async (req) => {
         // This would be handled by the existing trigger or logic
       }
 
-      // Send SMS confirmation (if SMS functionality exists)
-      console.log('📱 Payment confirmation SMS would be sent here');
+      // Send SMS receipt confirmation to tenant
+      try {
+        const { data: invoice } = await supabase
+          .from('invoices')
+          .select('tenant_id')
+          .eq('id', invoiceId)
+          .single();
+
+        if (invoice?.tenant_id) {
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('phone, first_name, last_name')
+            .eq('id', invoice.tenant_id)
+            .single();
+
+          if (tenant?.phone) {
+            const smsResponse = await supabase.functions.invoke('send-sms', {
+              body: {
+                phone_number: tenant.phone,
+                message: `Payment of KES ${amount} received. Thank you! - Zira Homes. Receipt: ${transactionId}`
+              }
+            });
+
+            if (smsResponse.error) {
+              console.error('❌ Error sending SMS receipt confirmation:', smsResponse.error);
+            } else {
+              console.log('✅ SMS receipt confirmation sent to:', tenant.phone);
+            }
+          } else {
+            console.log('⚠️ No phone number found for tenant, skipping SMS');
+          }
+        }
+      } catch (smsError) {
+        console.error('❌ Error in SMS receipt confirmation process:', smsError);
+        // Don't fail the payment process if SMS fails
+      }
     } else if (finalStatus === 'failed') {
       console.log('❌ Payment failed - no further action taken');
     }
