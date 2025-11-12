@@ -9,6 +9,8 @@ interface LockedMenuItemProps {
   isPartiallyLocked?: boolean;
   lockMessage?: string;
   className?: string;
+  requiredPlan?: string;
+  featureTier?: 'starter' | 'professional' | 'enterprise' | 'core';
 }
 
 export function LockedMenuItem({ 
@@ -16,7 +18,9 @@ export function LockedMenuItem({
   isLocked, 
   isPartiallyLocked = false,
   lockMessage = "Upgrade to Pro to access this feature",
-  className 
+  className,
+  requiredPlan,
+  featureTier = 'professional'
 }: LockedMenuItemProps) {
   if (!isLocked && !isPartiallyLocked) {
     return <>{children}</>;
@@ -24,7 +28,25 @@ export function LockedMenuItem({
 
   const LockIcon = isPartiallyLocked ? LockKeyhole : Lock;
   const opacity = isLocked ? "opacity-60" : "opacity-80";
-  const iconOpacity = isPartiallyLocked ? "text-warning/70" : "text-muted-foreground/60";
+  
+  // Color-code locks based on plan tier
+  const getTierColor = () => {
+    if (isPartiallyLocked) return "text-warning/70";
+    switch (featureTier) {
+      case 'starter': return "text-yellow-500/70";
+      case 'professional': return "text-purple-500/70";
+      case 'enterprise': return "text-amber-500/70";
+      default: return "text-muted-foreground/60";
+    }
+  };
+  
+  const iconOpacity = getTierColor();
+  
+  const getTooltipMessage = () => {
+    if (isPartiallyLocked) return "Some features require Pro plan";
+    if (requiredPlan) return `Upgrade to ${requiredPlan} to access this feature`;
+    return lockMessage;
+  };
   
   return (
     <TooltipProvider>
@@ -40,12 +62,7 @@ export function LockedMenuItem({
           </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs">
-          <p className="text-sm">
-            {isPartiallyLocked 
-              ? "Some features require Pro plan"
-              : lockMessage
-            }
-          </p>
+          <p className="text-sm">{getTooltipMessage()}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

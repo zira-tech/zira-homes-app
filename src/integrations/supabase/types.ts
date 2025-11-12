@@ -115,6 +115,48 @@ export type Database = {
           },
         ]
       }
+      billing_plan_features: {
+        Row: {
+          billing_plan_id: string | null
+          created_at: string | null
+          custom_limit: number | null
+          feature_key: string | null
+          id: string
+          is_enabled: boolean | null
+        }
+        Insert: {
+          billing_plan_id?: string | null
+          created_at?: string | null
+          custom_limit?: number | null
+          feature_key?: string | null
+          id?: string
+          is_enabled?: boolean | null
+        }
+        Update: {
+          billing_plan_id?: string | null
+          created_at?: string | null
+          custom_limit?: number | null
+          feature_key?: string | null
+          id?: string
+          is_enabled?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_plan_features_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_plan_features_feature_key_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "plan_features"
+            referencedColumns: ["feature_key"]
+          },
+        ]
+      }
       billing_plans: {
         Row: {
           billing_cycle: string
@@ -1991,6 +2033,48 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      plan_features: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string | null
+          display_name: string
+          feature_key: string
+          icon_name: string | null
+          id: string
+          is_active: boolean | null
+          menu_item_title: string | null
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          feature_key: string
+          icon_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          menu_item_title?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          feature_key?: string
+          icon_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          menu_item_title?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -4219,6 +4303,18 @@ export type Database = {
       get_pl_underlying_revenue: {
         Args: { p_end_date: string; p_start_date: string }
         Returns: Json
+      }
+      get_plan_features: {
+        Args: { plan_id: string }
+        Returns: {
+          category: string
+          custom_limit: number
+          description: string
+          display_name: string
+          feature_key: string
+          icon_name: string
+          is_enabled: boolean
+        }[]
       }
       get_platform_market_rent: {
         Args: { p_end_date?: string; p_start_date?: string }

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Crown, Zap, Shield } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Check, Star, Crown, Zap, Shield, LayoutGrid, TableProperties } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { UpgradeConfirmationModal } from "@/components/upgrade/UpgradeConfirmationModal";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
+import { PlanComparisonTable } from "@/components/billing/PlanComparisonTable";
 
 interface BillingPlan {
   id: string;
@@ -314,14 +316,30 @@ export function Upgrade() {
           )}
         </div>
 
-        {/* Pricing Cards */}
+        {/* View Toggle */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
             <p className="text-muted-foreground mt-4">Loading plans...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+          <Tabs defaultValue="cards" className="mb-12">
+            <div className="flex justify-center mb-6">
+              <TabsList>
+                <TabsTrigger value="cards" className="gap-2">
+                  <LayoutGrid className="h-4 w-4" />
+                  Plans
+                </TabsTrigger>
+                <TabsTrigger value="compare" className="gap-2">
+                  <TableProperties className="h-4 w-4" />
+                  Compare Features
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* Card View */}
+            <TabsContent value="cards">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {billingPlans.map((plan) => (
             <Card 
               key={plan.id}
@@ -426,7 +444,21 @@ export function Upgrade() {
               </CardContent>
             </Card>
             ))}
-          </div>
+              </div>
+            </TabsContent>
+
+            {/* Comparison View */}
+            <TabsContent value="compare">
+              <PlanComparisonTable
+                plans={billingPlans.map(plan => ({
+                  ...plan,
+                  is_recommended: plan.recommended || plan.popular
+                }))}
+                currentPlanId={currentSubscription?.billing_plan_id}
+                onSelectPlan={handlePlanSelect}
+              />
+            </TabsContent>
+          </Tabs>
         )}
 
         {/* Upgrade Confirmation Modal */}

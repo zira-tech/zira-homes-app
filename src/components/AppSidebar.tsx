@@ -104,11 +104,23 @@ export function AppSidebar() {
                       <SidebarMenuItem key={item.title}>
                         <LockedMenuItem 
                           isLocked={isLocked}
+                          requiredPlan={
+                            isReportsItem ? "Professional" :
+                            isSubUsersItem ? "Professional" :
+                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Professional" :
+                            "Professional"
+                          }
+                          featureTier={
+                            isReportsItem ? "professional" :
+                            isSubUsersItem ? "professional" :
+                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "professional" :
+                            "professional"
+                          }
                           lockMessage={
-                            isReportsItem ? "Upgrade to access advanced reporting" :
-                            isSubUsersItem ? "Upgrade to manage team members" :
-                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to create custom templates" :
-                            "Upgrade to Pro to access this feature"
+                            isReportsItem ? "Upgrade to Professional for advanced reporting" :
+                            isSubUsersItem ? "Upgrade to Professional to manage team members" :
+                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to Professional for custom templates" :
+                            "Upgrade to Professional to access this feature"
                           }
                         >
                           <SidebarMenuButton asChild size="sm">
@@ -217,12 +229,26 @@ export function AppSidebar() {
                        <LockedMenuItem 
                          isLocked={isFullyLocked}
                          isPartiallyLocked={isPartiallyLocked}
+                         requiredPlan={
+                           isReportsItem && isPartiallyLocked ? "Professional" :
+                           isReportsItem ? "Starter" :
+                           isSubUsersItem ? "Professional" :
+                           (isEmailTemplatesItem || isMessageTemplatesItem) ? "Professional" :
+                           "Professional"
+                         }
+                         featureTier={
+                           isReportsItem && !isPartiallyLocked ? "starter" :
+                           isReportsItem ? "professional" :
+                           isSubUsersItem ? "professional" :
+                           (isEmailTemplatesItem || isMessageTemplatesItem) ? "professional" :
+                           "professional"
+                         }
                          lockMessage={
-                           isReportsItem && isPartiallyLocked ? "Some reports require Pro plan" :
-                           isReportsItem ? "Upgrade to access reporting features" :
-                           isSubUsersItem ? "Upgrade to manage team members" :
-                           (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to create custom templates" :
-                           "Upgrade to Pro to access this feature"
+                           isReportsItem && isPartiallyLocked ? "Some reports require Professional plan" :
+                           isReportsItem ? "Upgrade to Starter for reporting features" :
+                           isSubUsersItem ? "Upgrade to Professional to manage team members" :
+                           (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to Professional for custom templates" :
+                           "Upgrade to Professional to access this feature"
                          }
                        >
                          <SidebarMenuButton asChild size="sm">
