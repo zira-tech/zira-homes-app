@@ -48,6 +48,7 @@ serve(async (req) => {
     // Extract payment details
     const transactionId = resource.id || '';
     const reference = metadata.reference || '';
+    const kopokopoReference = resource.reference || ''; // User-friendly receipt code (e.g., TKCLU9YGR2)
     const phoneNumber = resource.sender_phone_number || '';
     const amount = parseFloat(resource.amount || '0');
     const senderFirstName = resource.sender_first_name || '';
@@ -254,8 +255,7 @@ serve(async (req) => {
       const { error: invoiceError } = await supabase
         .from('invoices')
         .update({ 
-          status: 'paid',
-          payment_date: new Date().toISOString()
+          status: 'paid'
         })
         .eq('id', finalInvoiceId);
 
@@ -279,13 +279,14 @@ serve(async (req) => {
           invoice_id: finalInvoiceId,
           lease_id: invoice?.lease_id,
           tenant_id: invoice?.tenant_id,
-          landlord_id: landlordId || null,
           amount: amount,
           payment_date: new Date().toISOString(),
           payment_method: 'mpesa_kopokopo',
+          payment_type: paymentType || 'rent',
           status: 'completed',
           payment_reference: transactionId,
-          mpesa_receipt_number: transactionId
+          transaction_id: transactionId,
+          notes: `Kopo Kopo payment - ${kopokopoReference || 'N/A'}`
         });
 
       if (paymentError) {
@@ -319,7 +320,7 @@ serve(async (req) => {
             const smsResponse = await supabase.functions.invoke('send-sms', {
               body: {
                 phone_number: tenant.phone,
-                message: `Payment of KES ${amount} received. Thank you! - Zira Homes. Receipt: ${transactionId}`
+                message: `Payment of KES ${amount} received. Thank you! - Zira Homes. Receipt: ${kopokopoReference || transactionId.substring(0, 10)}`
               }
             });
 
