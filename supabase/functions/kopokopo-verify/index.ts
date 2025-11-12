@@ -338,9 +338,7 @@ serve(async (req) => {
       const { error: invoiceError } = await supabaseAdmin
         .from('invoices')
         .update({ 
-          status: 'paid',
-          payment_date: new Date().toISOString(),
-          mpesa_receipt_number: mpesaReceipt
+          status: 'paid'
         })
         .eq('id', transaction.invoice_id);
 
@@ -365,13 +363,14 @@ serve(async (req) => {
           invoice_id: transaction.invoice_id,
           lease_id: invoice?.lease_id,
           tenant_id: invoice?.tenant_id,
-          landlord_id: landlordId || null,
           amount: amount,
           payment_date: new Date().toISOString(),
           payment_method: 'mpesa_kopokopo',
+          payment_type: transaction.metadata?.paymentType || 'rent',
           status: 'completed',
           payment_reference: mpesaReceipt,
-          mpesa_receipt_number: mpesaReceipt
+          transaction_id: mpesaReceipt,
+          notes: `Kopo Kopo payment verified manually - ${resource.reference || 'N/A'}`
         });
 
       if (paymentError) {
