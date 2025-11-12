@@ -161,6 +161,14 @@ serve(async (req) => {
     if (existingTxn) {
       // Update existing pending transaction
       console.log('✅ Updating existing pending transaction:', existingTxn.checkout_request_id);
+      
+      // Use the invoice_id from the existing transaction if not in callback
+      const effectiveInvoiceId = invoiceId || existingTxn.invoice_id;
+      if (effectiveInvoiceId) {
+        console.log('📋 Using invoice ID for reconciliation:', effectiveInvoiceId);
+        console.log('   - From callback metadata:', invoiceId || '(empty)');
+        console.log('   - From existing transaction:', existingTxn.invoice_id || '(empty)');
+      }
   const { error: updateError } = await supabase
     .from('mpesa_transactions')
     .update({
@@ -229,8 +237,18 @@ serve(async (req) => {
     }
 
     // If successful, update invoice and create payment record
-    if (finalStatus === 'completed' && invoiceId) {
-      console.log(`📝 Processing successful payment for invoice ${invoiceId}`);
+    // Use invoice ID from existing transaction if available
+    const finalInvoiceId = existingTxn?.invoice_id || invoiceId;
+    
+    console.log('🔍 Reconciliation check:', {
+      finalStatus,
+      callbackInvoiceId: invoiceId || '(empty)',
+      existingTxnInvoiceId: existingTxn?.invoice_id || '(empty)',
+      finalInvoiceId: finalInvoiceId || '(empty)'
+    });
+    
+    if (finalStatus === 'completed' && finalInvoiceId) {
+      console.log(`📝 Processing successful payment for invoice ${finalInvoiceId}`);
 
       // Update invoice status
       const { error: invoiceError } = await supabase
@@ -239,7 +257,7 @@ serve(async (req) => {
           status: 'paid',
           payment_date: new Date().toISOString()
         })
-        .eq('id', invoiceId);
+        .eq('id', finalInvoiceId);
 
       if (invoiceError) {
         console.error('❌ Failed to update invoice:', invoiceError);
@@ -251,14 +269,14 @@ serve(async (req) => {
       const { data: invoice } = await supabase
         .from('invoices')
         .select('lease_id, tenant_id')
-        .eq('id', invoiceId)
+        .eq('id', finalInvoiceId)
         .single();
 
       // Create payment record
       const { error: paymentError } = await supabase
         .from('payments')
         .insert({
-          invoice_id: invoiceId,
+          invoice_id: finalInvoiceId,
           lease_id: invoice?.lease_id,
           tenant_id: invoice?.tenant_id,
           landlord_id: landlordId || null,
@@ -287,7 +305,7 @@ serve(async (req) => {
         const { data: invoice } = await supabase
           .from('invoices')
           .select('tenant_id')
-          .eq('id', invoiceId)
+          .eq('id', finalInvoiceId)
           .single();
 
         if (invoice?.tenant_id) {
