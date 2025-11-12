@@ -67,7 +67,7 @@ export function useUpgrade(): UseUpgradeResult {
       console.log('✅ Activating plan immediately - billing at end of month');
 
       const { data, error: activateError } = await supabase.functions.invoke(
-        'activate-commission-plan',
+        'activate-billing-plan',
         {
           body: { 
             planId,
@@ -76,7 +76,15 @@ export function useUpgrade(): UseUpgradeResult {
         }
       );
 
-      if (activateError) throw activateError;
+      if (activateError) {
+        console.error('❌ Activation error:', activateError);
+        throw new Error(activateError.message || 'Failed to activate plan');
+      }
+
+      if (!data || data.error) {
+        console.error('❌ Activation failed:', data?.error);
+        throw new Error(data?.error || 'Failed to activate plan');
+      }
 
       console.log('✅ Plan activated:', data);
 

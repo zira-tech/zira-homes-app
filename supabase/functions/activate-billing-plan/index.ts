@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[ACTIVATE-COMMISSION-PLAN] ${step}${detailsStr}`);
+  console.log(`[ACTIVATE-BILLING-PLAN] ${step}${detailsStr}`);
 };
 
 serve(async (req) => {
@@ -42,19 +42,23 @@ serve(async (req) => {
     }
     logStep("Request parsed", { planId, nextBillingDate });
 
-    // Get the billing plan and verify it's commission-based
+    // Get the billing plan (support all billing models)
     const { data: plan, error: planError } = await supabaseService
       .from('billing_plans')
       .select('*')
       .eq('id', planId)
-      .eq('billing_model', 'percentage')
       .eq('is_active', true)
       .single();
 
     if (planError || !plan) {
-      throw new Error("Commission-based billing plan not found or inactive");
+      throw new Error("Billing plan not found or inactive");
     }
-    logStep("Plan retrieved", { planName: plan.name, percentageRate: plan.percentage_rate });
+    logStep("Plan retrieved", { 
+      planName: plan.name, 
+      billingModel: plan.billing_model,
+      percentageRate: plan.percentage_rate,
+      fixedAmountPerUnit: plan.fixed_amount_per_unit
+    });
 
     // Calculate next billing date if not provided (default to end of current month)
     const billingDate = nextBillingDate || (() => {
@@ -89,13 +93,15 @@ serve(async (req) => {
     // Log the activation action
     await supabaseService.rpc('log_user_activity', {
       _user_id: user.id,
-      _action: 'commission_plan_activated',
+      _action: 'billing_plan_activated',
       _entity_type: 'billing_plan',
       _entity_id: planId,
       _details: {
         plan_name: plan.name,
         billing_model: plan.billing_model,
-        percentage_rate: plan.percentage_rate
+        percentage_rate: plan.percentage_rate,
+        fixed_amount_per_unit: plan.fixed_amount_per_unit,
+        price: plan.price
       }
     });
     logStep("Activity logged");
@@ -107,25 +113,38 @@ serve(async (req) => {
       year: 'numeric' 
     });
 
-    // Insert a notification about monthly billing
+    // Build billing info message based on billing model
+    let billingInfo = '';
+    if (plan.billing_model === 'percentage') {
+      billingInfo = `You'll be charged ${plan.percentage_rate}% commission on rent collected.`;
+    } else if (plan.billing_model === 'fixed_per_unit') {
+      billingInfo = `You'll be charged KES ${plan.fixed_amount_per_unit} per unit.`;
+    } else if (plan.billing_model === 'tiered') {
+      billingInfo = `You'll be charged based on tier pricing.`;
+    }
+
+    // Insert a notification about billing
     await supabaseService
       .from('notifications')
       .insert({
         user_id: user.id,
         type: 'billing',
         title: `${plan.name} Plan Activated`,
-        message: `Your ${plan.name} plan is now active! You'll be charged ${plan.percentage_rate}% commission on rent collected. Your first billing will be on ${formattedBillingDate}.`,
+        message: `Your ${plan.name} plan is now active! ${billingInfo} Your first billing will be on ${formattedBillingDate}.`,
         related_type: 'subscription',
         related_id: subscription?.[0]?.id
       });
 
     return new Response(JSON.stringify({
       success: true,
-      message: "Commission-based plan activated successfully",
+      message: "Billing plan activated successfully",
       subscription: subscription?.[0],
       plan: {
         name: plan.name,
-        percentage_rate: plan.percentage_rate
+        billing_model: plan.billing_model,
+        percentage_rate: plan.percentage_rate,
+        fixed_amount_per_unit: plan.fixed_amount_per_unit,
+        price: plan.price
       }
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
