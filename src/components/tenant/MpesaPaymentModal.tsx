@@ -59,6 +59,7 @@ export function MpesaPaymentModal({
   // Kopo Kopo verify fallback state
   const verifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const verifyAttemptedRef = useRef(false);
+  const [manualVerifyLoading, setManualVerifyLoading] = useState(false);
   
   // Refs to prevent duplicate processing and status flicker
   const lastProcessedResultCodeRef = useRef<number | null>(null);
@@ -573,6 +574,70 @@ export function MpesaPaymentModal({
     resetDialog();
   };
 
+  const handleManualVerify = async () => {
+    if (!checkoutRequestId || paymentProvider !== 'kopokopo' || manualVerifyLoading) {
+      return;
+    }
+
+    console.log('🔍 Manual verification triggered by user');
+    setManualVerifyLoading(true);
+    
+    try {
+      setStatusMessage('Verifying payment with provider...');
+      
+      const { data, error } = await supabase.functions.invoke('kopokopo-verify', {
+        body: { checkoutRequestId }
+      });
+
+      if (error) {
+        console.error('❌ Manual verify error:', error);
+        toast.error('Verification failed. We\'ll keep trying automatically.');
+        setStatusMessage('Waiting for payment confirmation...');
+        return;
+      }
+
+      console.log('✅ Manual verify response:', data);
+
+      if (data.status === 'completed') {
+        verifyAttemptedRef.current = true; // Prevent duplicate auto-verify
+        setStatus('success');
+        setStatusMessage('Payment completed successfully!');
+        
+        // Update invoice
+        await supabase
+          .from('invoices')
+          .update({ 
+            status: 'paid',
+            mpesa_receipt_number: data.receipt
+          })
+          .eq('id', invoice.id);
+
+        toast.success("Payment verified successfully!");
+        queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
+        
+        setTimeout(() => {
+          onPaymentInitiated?.();
+          onOpenChange(false);
+          resetDialog();
+        }, 2000);
+      } else if (data.status === 'failed') {
+        setStatus('error');
+        setStatusMessage(data.result_desc || 'Payment failed');
+        toast.error(data.result_desc || 'Payment failed');
+      } else {
+        // Still pending
+        toast.info('Payment still processing. Please wait...');
+        setStatusMessage('Payment still processing at provider...');
+      }
+    } catch (err) {
+      console.error('Manual verify exception:', err);
+      toast.error('Verification failed. We\'ll keep trying automatically.');
+      setStatusMessage('Waiting for payment confirmation...');
+    } finally {
+      setManualVerifyLoading(false);
+    }
+  };
+
   const getStatusIcon = () => {
     switch (status) {
       case 'sending':
@@ -739,9 +804,28 @@ export function MpesaPaymentModal({
             )}
 
             {(status === 'sent' || status === 'verifying') && (
-              <Button variant="outline" onClick={handleClose} className="flex-1">
-                Cancel
-              </Button>
+              <>
+                <Button variant="outline" onClick={handleClose} className="flex-1">
+                  Cancel
+                </Button>
+                {status === 'verifying' && paymentProvider === 'kopokopo' && (
+                  <Button 
+                    onClick={handleManualVerify}
+                    disabled={manualVerifyLoading}
+                    className="flex-1"
+                    variant="default"
+                  >
+                    {manualVerifyLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify Payment"
+                    )}
+                  </Button>
+                )}
+              </>
             )}
 
             {status === 'success' && (
