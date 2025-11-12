@@ -677,6 +677,47 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_overdue_reminders: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string
+          phone_number: string | null
+          reminder_type: string
+          sent_at: string
+          sms_status: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id: string
+          phone_number?: string | null
+          reminder_type: string
+          sent_at?: string
+          sms_status?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          phone_number?: string | null
+          reminder_type?: string
+          sent_at?: string
+          sms_status?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_overdue_reminders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number

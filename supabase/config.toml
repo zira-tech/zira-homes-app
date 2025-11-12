@@ -110,3 +110,6 @@ verify_jwt = true
 
 [functions.kopokopo-verify]
 verify_jwt = true
+
+[functions.send-overdue-reminders]
+verify_jwt = false
