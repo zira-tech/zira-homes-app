@@ -65,45 +65,99 @@ serve(async (req) => {
     // Determine final status
     const finalStatus = status?.toLowerCase() === 'success' ? 'completed' : 'failed';
 
-    // Check if transaction already processed (idempotency)
-    const { data: existingTransaction } = await supabase
-      .from('mpesa_transactions')
-      .select('*')
-      .eq('checkout_request_id', reference)
-      .maybeSingle();
-
-    if (existingTransaction) {
-      console.log('⚠️ Transaction already processed:', reference);
-      return new Response(
-        JSON.stringify({ status: 'ok', message: 'Already processed' }), 
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // Check if we should update existing transaction or insert new one
+    // Look for pending transaction by phone number and amount (most recent)
+    let existingTxn = null;
+    if (phoneNumber && amount) {
+      const { data } = await supabase
+        .from('mpesa_transactions')
+        .select('*')
+        .eq('phone_number', phoneNumber)
+        .eq('amount', amount)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      existingTxn = data;
+      
+      // Also check if this exact transaction was already processed (idempotency)
+      if (!existingTxn && transactionId) {
+        const { data: completedTxn } = await supabase
+          .from('mpesa_transactions')
+          .select('*')
+          .eq('transaction_id', transactionId)
+          .maybeSingle();
+        
+        if (completedTxn) {
+          console.log('⚠️ Transaction already processed:', transactionId);
+          return new Response(
+            JSON.stringify({ status: 'ok', message: 'Already processed' }), 
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
-      );
+      }
     }
 
-    // Insert transaction record
-    console.log('💾 Inserting transaction record...');
-    const { error: transactionError } = await supabase
-      .from('mpesa_transactions')
-      .insert({
-        merchant_request_id: reference,
-        checkout_request_id: reference,
-        result_code: status === 'Success' ? '0' : '1',
-        result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
-        transaction_id: transactionId,
-        phone_number: phoneNumber,
-        amount: amount,
-        status: finalStatus,
-        provider: 'kopokopo',
-        raw_callback: callbackData
-      });
+    if (existingTxn) {
+      // Update existing pending transaction
+      console.log('📝 Updating existing transaction:', existingTxn.id);
+      const { error: updateError } = await supabase
+        .from('mpesa_transactions')
+        .update({
+          result_code: status === 'Success' ? '0' : '1',
+          result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
+          transaction_id: transactionId,
+          mpesa_receipt_number: transactionId,
+          status: finalStatus,
+          metadata: {
+            ...existingTxn.metadata,
+            provider: 'kopokopo',
+            callback_reference: reference,
+            sender_first_name: senderFirstName,
+            sender_last_name: senderLastName,
+            raw_callback: callbackData
+          }
+        })
+        .eq('id', existingTxn.id);
 
-    if (transactionError) {
-      console.error('❌ Failed to insert transaction:', transactionError);
+      if (updateError) {
+        console.error('❌ Failed to update transaction:', updateError);
+      } else {
+        console.log('✅ Transaction updated successfully');
+      }
     } else {
-      console.log('✅ Transaction record inserted');
+      // Insert new transaction record
+      console.log('💾 Inserting new transaction record...');
+      const { error: transactionError } = await supabase
+        .from('mpesa_transactions')
+        .insert({
+          merchant_request_id: reference,
+          checkout_request_id: transactionId || reference,
+          result_code: status === 'Success' ? '0' : '1',
+          result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
+          transaction_id: transactionId,
+          mpesa_receipt_number: transactionId,
+          phone_number: phoneNumber,
+          amount: amount,
+          status: finalStatus,
+          invoice_id: invoiceId || null,
+          payment_type: paymentType || 'rent',
+          metadata: {
+            provider: 'kopokopo',
+            reference: reference,
+            landlord_id: landlordId,
+            sender_first_name: senderFirstName,
+            sender_last_name: senderLastName,
+            raw_callback: callbackData
+          }
+        });
+
+      if (transactionError) {
+        console.error('❌ Failed to insert transaction:', transactionError);
+      } else {
+        console.log('✅ Transaction record inserted');
+      }
     }
 
     // If successful, update invoice and create payment record

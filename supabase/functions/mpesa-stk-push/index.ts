@@ -721,6 +721,63 @@ serve(async (req) => {
           }
         );
 
+        // Handle 202 Accepted (STK Push successfully queued)
+        if (kopokopoResponse.status === 202) {
+          console.log('✅ STK Push accepted by Kopo Kopo (202) - Payment queued');
+          
+          // Generate unique reference for this payment
+          const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Insert pending transaction record
+          const { data: txnData, error: txnError } = await supabaseAdmin
+            .from('mpesa_transactions')
+            .insert({
+              merchant_request_id: checkoutRequestId,
+              checkout_request_id: checkoutRequestId,
+              phone_number: phoneNumber,
+              amount: amount,
+              status: 'pending',
+              result_code: '0',
+              result_desc: 'STK Push initiated - awaiting user action',
+              invoice_id: invoiceId || null,
+              payment_type: paymentType || 'rent',
+              metadata: {
+                reference: accountReference,
+                description: transactionDesc,
+                landlord_id: landlordConfigId,
+                provider: 'kopokopo',
+                till_number: tillNumber
+              },
+              initiated_by: userId
+            })
+            .select()
+            .single();
+
+          if (txnError) {
+            console.error('❌ Failed to store pending transaction:', txnError);
+          } else {
+            console.log('✅ Pending transaction stored:', txnData?.id);
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              provider: 'kopokopo',
+              CheckoutRequestID: checkoutRequestId,
+              MerchantRequestID: checkoutRequestId,
+              message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
+              data: {
+                CheckoutRequestID: checkoutRequestId,
+                ResponseDescription: 'Kopo Kopo STK push queued',
+                TillNumber: tillNumber,
+                status: 'pending'
+              }
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // For other status codes, try to parse JSON response
         const kopokopoData = await kopokopoResponse.json();
         console.log('Kopo Kopo response:', JSON.stringify(kopokopoData, null, 2));
 
