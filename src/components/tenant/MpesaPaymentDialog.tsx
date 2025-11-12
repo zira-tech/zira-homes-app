@@ -55,9 +55,16 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
             }
           });
           
-          if (data?.data?.BusinessShortCode) {
+          const provider = data?.data?.Provider ?? data?.Provider;
+          const till = data?.data?.TillNumber ?? data?.TillNumber ?? data?.data?.BusinessShortCode;
+          const txType = data?.data?.TransactionType;
+          
+          if (provider === 'kopokopo' && till) {
+            setLandlordShortcode(till);
+            setLandlordTransactionType('CustomerBuyGoodsOnline');
+          } else if (data?.data?.BusinessShortCode) {
             setLandlordShortcode(data.data.BusinessShortCode);
-            setLandlordTransactionType(data.data.TransactionType);
+            setLandlordTransactionType(txType);
           }
         } catch (error) {
           console.log('Could not determine landlord shortcode');
@@ -88,6 +95,55 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
           .select('result_code, result_desc, status, mpesa_receipt_number')
           .eq('checkout_request_id', requestId)
           .maybeSingle();
+        
+        // If no result by checkout_request_id after a few attempts, try by invoice_id (for Kopo Kopo)
+        if ((!transaction || (transaction.result_code === null && transaction.status === 'pending')) && pollCount > 3) {
+          const { data: invoiceTransaction } = await supabase
+            .from('mpesa_transactions')
+            .select('result_code, result_desc, status, mpesa_receipt_number')
+            .eq('invoice_id', invoice?.id || '')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (invoiceTransaction && (String(invoiceTransaction.result_code) === '0' || invoiceTransaction.status === 'completed')) {
+            clearInterval(pollingIntervalRef.current!);
+            setStatus('success');
+            setStatusMessage('Payment completed successfully!');
+            
+            if (invoice?.id) {
+              await supabase
+                .from('invoices')
+                .update({ 
+                  status: 'paid',
+                  mpesa_receipt_number: invoiceTransaction.mpesa_receipt_number || invoiceTransaction.result_desc 
+                })
+                .eq('id', invoice.id);
+            }
+            
+            toast({
+              title: "Payment Successful",
+              description: "Your rent payment has been processed.",
+            });
+            
+            setTimeout(() => {
+              onPaymentInitiated?.();
+              onOpenChange(false);
+              resetDialog();
+            }, 2000);
+            return;
+          } else if (invoiceTransaction && (invoiceTransaction.status === 'failed' || invoiceTransaction.status === 'cancelled' || (invoiceTransaction.result_code != null && Number(invoiceTransaction.result_code) !== 0))) {
+            clearInterval(pollingIntervalRef.current!);
+            setStatus('error');
+            setStatusMessage(invoiceTransaction.result_desc || 'Payment failed');
+            toast({
+              title: "Payment Failed",
+              description: invoiceTransaction.result_desc || 'Payment was not completed',
+              variant: "destructive",
+            });
+            return;
+          }
+        }
         
         // Continue polling if no transaction or result not yet available
         if (!transaction || (transaction.result_code === null && transaction.status === 'pending')) {
@@ -390,8 +446,8 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
                 <div className="flex-1">
                   <AlertTitle className="mb-1">
                     {status === 'sending' && 'Processing...'}
-                    {status === 'sent' && 'Check Your Phone'}
-                    {status === 'verifying' && 'Verifying Payment...'}
+                    {status === 'sent' && `Check Your Phone${landlordShortcode && landlordTransactionType === 'CustomerBuyGoodsOnline' ? ` • Kopo Kopo Till ${landlordShortcode}` : ''}`}
+                    {status === 'verifying' && `Verifying Payment...${landlordShortcode && landlordTransactionType === 'CustomerBuyGoodsOnline' ? ` • Kopo Kopo Till ${landlordShortcode}` : ''}`}
                     {status === 'success' && 'Payment Successful!'}
                     {status === 'error' && 'Payment Failed'}
                   </AlertTitle>

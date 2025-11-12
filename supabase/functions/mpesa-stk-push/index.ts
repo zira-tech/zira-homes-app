@@ -1213,15 +1213,19 @@ serve(async (req) => {
     // Handle dry run - return config without initiating payment
     if (dryRun) {
       console.log('🔍 Dry run mode - returning config only');
-      const transactionType = (mpesaConfig?.shortcode_type === 'till_safaricom' || mpesaConfig?.shortcode_type === 'till') 
-        ? 'CustomerBuyGoodsOnline' 
-        : 'CustomerPayBillOnline';
+      const isKopoKopo = mpesaConfig?.shortcode_type === 'till_kopokopo';
+      const isTill = mpesaConfig?.shortcode_type === 'till_safaricom' || 
+                     mpesaConfig?.shortcode_type === 'till' || 
+                     isKopoKopo;
+      const transactionType = isTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
       
       return new Response(
         JSON.stringify({
           success: true,
           dryRun: true,
           data: {
+            Provider: isKopoKopo ? 'kopokopo' : 'mpesa',
+            TillNumber: isKopoKopo ? tillNumber : null,
             BusinessShortCode: shortcode,
             Environment: environment,
             UsingLandlordConfig: !!mpesaConfig,
