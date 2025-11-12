@@ -86,6 +86,23 @@ Deno.serve(async (req) => {
       trial_config: requestData.custom_trial_config
     });
 
+    // Check if email already exists before creating
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const emailExists = existingUsers?.users?.find(u => u.email === requestData.email);
+
+    if (emailExists) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'A user with this email address already exists. Each email can only be used once in the system.',
+          duplicate: true
+        }),
+        { 
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Generate a temporary password
     const tempPassword = 'Welcome' + Math.floor(Math.random() * 10000) + '!';
     

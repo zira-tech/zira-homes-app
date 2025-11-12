@@ -10,7 +10,7 @@ interface RoleBasedRouteProps {
 export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const { effectiveRole, assignedRoles, loading: roleLoading, switchRole } = useRole();
+  const { effectiveRole, assignedRoles, loading: roleLoading } = useRole();
 
   if (loading || roleLoading) {
     return (
@@ -29,19 +29,6 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
   
   // Helper to check if we're in actual tenant area (not /tenants which is for landlords)
   const isTenantArea = location.pathname === "/tenant" || location.pathname.startsWith("/tenant/");
-  
-  // Multi-role user accessing tenant area: auto-switch to tenant role
-  if (isTenantArea && effectiveRole !== "tenant" && assignedRoles.includes("tenant")) {
-    switchRole("tenant");
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-sm text-muted-foreground">Switching to tenant view...</p>
-        </div>
-      </div>
-    );
-  }
   
   // Redirect from "/" based on effectiveRole (the currently selected/active role)
   if (location.pathname === "/") {

@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 
 export function Header() {
   const { user, signOut } = useAuth();
-  const { effectiveRole, assignedRoles, switchRole, selectedRole } = useRole();
+  const { effectiveRole, assignedRoles } = useRole();
   const { theme, setTheme } = useTheme();
   const routeTitle = useRouteTitle();
   const isDev = import.meta.env.DEV;
@@ -76,11 +76,6 @@ export function Header() {
             <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-white/10 rounded text-xs text-white/80 font-mono">
               <span className="font-semibold">Role:</span>
               <span>{effectiveRole || 'null'}</span>
-              {selectedRole && selectedRole !== effectiveRole && (
-                <span className="text-white/60">({selectedRole})</span>
-              )}
-              <span className="text-white/40">|</span>
-              <span className="text-white/60">[{assignedRoles.join(', ')}]</span>
             </div>
           )}
 
@@ -155,22 +150,6 @@ export function Header() {
                 <Bell className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
-              {assignedRoles.length > 1 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="font-medium text-xs">Switch Role</DropdownMenuLabel>
-                  {assignedRoles.map((role) => (
-                    <DropdownMenuItem 
-                      key={role} 
-                      className="cursor-pointer"
-                      onClick={() => switchRole(role)}
-                    >
-                      {role === "admin" ? "Admin" : role === "landlord" ? "Landlord" : role === "manager" ? "Manager" : role === "agent" ? "Agent" : "Tenant"}
-                      {effectiveRole === role && <span className="ml-auto text-xs">✓</span>}
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer text-red-600" onClick={handleSignOut}>
                 Sign Out

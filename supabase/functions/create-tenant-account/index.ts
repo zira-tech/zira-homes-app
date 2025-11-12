@@ -202,21 +202,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (existingAuthUser) {
       console.log("User already exists with email:", tenantData.email);
-      userId = existingAuthUser.id;
       
-      // Check if this user is already a tenant
-      const { data: existingTenant } = await supabaseAdmin
-        .from('tenants')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-      
-      if (existingTenant) {
-        return new Response(JSON.stringify({ error: "This email is already associated with a tenant account" }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      // Reject duplicate email - enforce one email per user policy
+      return new Response(JSON.stringify({ 
+        error: "A user with this email address already exists. Each email can only be used once in the system.",
+        duplicate: true,
+        email: tenantData.email
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     } else {
       // Create new auth user
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({

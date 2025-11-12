@@ -8,7 +8,6 @@ interface RoleContextType {
   userRole: string | null;
   effectiveRole: string | null;
   assignedRoles: string[];
-  selectedRole: string | null;
   isAdmin: boolean;
   isLandlord: boolean;
   isTenant: boolean;
@@ -19,7 +18,6 @@ interface RoleContextType {
   landlordId?: string | null;
   isOnLandlordTrial?: boolean;
   loading: boolean;
-  switchRole: (role: string) => void;
 }
 
 const RoleContext = createContext<RoleContextType | null>(null);
@@ -41,175 +39,105 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const { isImpersonating, impersonatedRole } = useImpersonation();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [assignedRoles, setAssignedRoles] = useState<string[]>([]);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [subUserPermissions, setSubUserPermissions] = useState<Record<string, boolean> | null>(null);
   const [landlordId, setLandlordId] = useState<string | null>(null);
   const [isOnLandlordTrial, setIsOnLandlordTrial] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Optimistic role hydration from localStorage and metadata
-  const hydrateFromCache = (user: any) => {
-    if (!user) return;
-    
-    // SECURITY FIX: Don't trust localStorage until server verification
-    // Remove optimistic role setting to prevent privilege confusion
-    const metadataRole = user.user_metadata?.role?.toLowerCase();
-    
-    if (metadataRole) {
-      setSelectedRole(metadataRole);
-      setUserRole(metadataRole);
-    }
-  };
-
   useEffect(() => {
     if (!user) {
       setUserRole(null);
       setAssignedRoles([]);
-      setSelectedRole(null);
       setLoading(false);
       return;
     }
 
-    // Immediate optimistic hydration
-    hydrateFromCache(user);
-
     const fetchUserRole = async () => {
       try {
-        const result = await measureApiCall("role-resolution", async () => {
-          // Check metadata first (fastest)
-          const metadataRole = user.user_metadata?.role;
+        // If impersonating, set role from impersonation context
+        if (isImpersonating && impersonatedRole) {
+          setUserRole(impersonatedRole.toLowerCase());
+          setAssignedRoles([impersonatedRole.toLowerCase()]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch the single role assigned to the user
+        const { data: roleData, error: roleError } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .single();
+
+        if (roleError) {
+          console.error("Error fetching role:", roleError);
+          setUserRole(null);
+          setAssignedRoles([]);
+          setLoading(false);
+          return;
+        }
+
+        const role = roleData?.role?.toLowerCase() || null;
+        setUserRole(role);
+        setAssignedRoles(role ? [role] : []);
+
+        // Special handling for specific roles
+        if (role === "landlord") {
+          // Check if landlord is on trial
+          const { data: subscriptionData } = await supabase
+            .from('landlord_subscriptions')
+            .select('status, trial_end_date')
+            .eq('landlord_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
           
-          // Early tenant detection via metadata
-          if (metadataRole === "Tenant") {
-            setAssignedRoles(["tenant"]);
-            return "tenant";
+          if (subscriptionData?.status === 'trial' && subscriptionData?.trial_end_date) {
+            const trialEndDate = new Date(subscriptionData.trial_end_date);
+            setIsOnLandlordTrial(trialEndDate > new Date());
           }
-
-          // OPTIMIZATION: Run tenant and role checks in parallel for faster loading
-          const rolesToCheck = ["Admin", "Landlord", "Manager", "Agent"] as const;
-          const [tenantResult, ...roleResults] = await Promise.all([
-            supabase.rpc('is_user_tenant', { _user_id: user.id }),
-            ...rolesToCheck.map(async (r) => {
-              const { data } = await supabase.rpc('has_role_safe', { _user_id: user.id, _role: r as any });
-              return { role: r.toLowerCase(), has: Boolean(data) } as { role: string; has: boolean };
-            })
-          ]);
+        } else if (role === "subuser") {
+          // Fetch sub-user permissions and landlord_id
+          const { data: subUserData } = await supabase.rpc('get_my_sub_user_permissions');
+          const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
           
-          const isTenant = tenantResult.data;
-          const roleChecks = roleResults;
-
-          let allRoles = roleChecks.filter(rc => rc.has).map(rc => rc.role);
-          
-          // Add tenant to roles if they have an active lease
-          if (isTenant && !allRoles.includes("tenant")) {
-            allRoles.push("tenant");
-          }
-          
-          setAssignedRoles(allRoles);
-
-          // Sub-user check via secure RPC
-          try {
-            const { data: subUserData } = await supabase.rpc("get_my_sub_user_permissions");
-            const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
-            if (subUserInfo && (subUserInfo.permissions || subUserInfo.status)) {
-              if (subUserInfo.permissions) setSubUserPermissions(subUserInfo.permissions);
-              setLandlordId(subUserInfo.landlord_id || null);
-              if (subUserInfo.landlord_id) {
-                const { data: landlordSubscription } = await supabase
-                  .from('landlord_subscriptions')
-                  .select('status, trial_end_date')
-                  .eq('landlord_id', subUserInfo.landlord_id)
-                  .eq('status', 'trial')
-                  .maybeSingle();
-                if (landlordSubscription) {
-                  const trialEndDate = new Date(landlordSubscription.trial_end_date);
-                  const today = new Date();
-                  const isActive = trialEndDate > today;
-                  setIsOnLandlordTrial(isActive);
-                }
-              }
-              // Don't auto-select subuser role, let user choose between their roles
-              if (!allRoles.includes("subuser")) {
-                allRoles.push("subuser");
-                setAssignedRoles(allRoles);
+          if (subUserInfo && (subUserInfo.permissions || subUserInfo.status)) {
+            if (subUserInfo.permissions) setSubUserPermissions(subUserInfo.permissions);
+            setLandlordId(subUserInfo.landlord_id || null);
+            
+            // Check if the landlord is on trial
+            if (subUserInfo.landlord_id) {
+              const { data: landlordSubscription } = await supabase
+                .from('landlord_subscriptions')
+                .select('status, trial_end_date')
+                .eq('landlord_id', subUserInfo.landlord_id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+              
+              if (landlordSubscription?.status === 'trial' && landlordSubscription?.trial_end_date) {
+                const trialEndDate = new Date(landlordSubscription.trial_end_date);
+                setIsOnLandlordTrial(trialEndDate > new Date());
               }
             }
-          } catch {}
-
-          // SECURITY: Check stored role preference (must be server-verified)
-          const storedSelectedRole = localStorage.getItem('selectedRole');
-          if (storedSelectedRole && allRoles.includes(storedSelectedRole.toLowerCase())) {
-            setSelectedRole(storedSelectedRole.toLowerCase());
-            return storedSelectedRole.toLowerCase();
           }
-
-          // Priority for multi-role users: Admin > Landlord > Manager > Agent > Tenant
-          // Higher-level roles should take precedence over tenant role
-          if (allRoles.includes("admin")) { 
-            setSelectedRole("admin"); 
-            return "admin"; 
-          }
-          if (allRoles.includes("landlord")) { 
-            setSelectedRole("landlord"); 
-            return "landlord"; 
-          }
-          if (allRoles.includes("manager")) { 
-            setSelectedRole("manager"); 
-            return "manager"; 
-          }
-          if (allRoles.includes("agent")) { 
-            setSelectedRole("agent"); 
-            return "agent"; 
-          }
-          // Default to tenant if they have an active lease
-          if (isTenant && allRoles.includes("tenant")) {
-            setSelectedRole("tenant");
-            return "tenant";
-          }
-          
-          // Clean up invalid stored role
-          if (storedSelectedRole && !allRoles.includes(storedSelectedRole.toLowerCase())) {
-            localStorage.removeItem('selectedRole');
-          }
-
-          // Fallback to metadata or tenant
-          const fallbackRole = metadataRole?.toLowerCase() || (isTenant ? "tenant" : null) || selectedRole || "tenant";
-          setSelectedRole(fallbackRole);
-          return fallbackRole;
-        });
-
-        // Only update if different from optimistic value
-        if (result !== userRole) {
-          setUserRole(result);
-        }
-        
-        // Set selected role to stored preference or primary role
-        const storedRole = localStorage.getItem('selectedRole');
-        if (storedRole && assignedRoles.includes(storedRole)) {
-          setSelectedRole(storedRole);
-        } else if (!selectedRole || selectedRole !== result) {
-          setSelectedRole(result);
         }
       } catch (error) {
-        console.error("Error fetching user role:", error);
-        if (!selectedRole && !userRole) {
-          setUserRole("tenant");
-          setAssignedRoles(["tenant"]);
-          setSelectedRole("tenant");
-        }
+        console.error("Error in fetchUserRole:", error);
+        setUserRole(null);
+        setAssignedRoles([]);
       } finally {
         setLoading(false);
       }
     };
 
-    // Defer actual API call slightly to allow optimistic render
-    setTimeout(fetchUserRole, 0);
-  }, [user]);
+    fetchUserRole();
+  }, [user, isImpersonating, impersonatedRole]);
 
-  // Calculate effective role (considering impersonation and role switching)
+  // Calculate effective role (only impersonation can override, no role switching)
   const effectiveRole = (isImpersonating && impersonatedRole)
     ? impersonatedRole.toLowerCase()
-    : selectedRole || userRole;
+    : userRole;
 
   // Role flags
   const isAdmin = effectiveRole === "admin";
@@ -219,18 +147,10 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const isAgent = effectiveRole === "agent";
   const isSubUser = effectiveRole === "subuser";
 
-  const switchRole = (role: string) => {
-    if (assignedRoles.includes(role)) {
-      setSelectedRole(role);
-      localStorage.setItem('selectedRole', role);
-    }
-  };
-
   const value: RoleContextType = {
     userRole,
     effectiveRole,
     assignedRoles,
-    selectedRole,
     isAdmin,
     isLandlord,
     isTenant,
@@ -241,7 +161,6 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
     landlordId,
     isOnLandlordTrial,
     loading,
-    switchRole,
   };
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;

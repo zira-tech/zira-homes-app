@@ -73,6 +73,24 @@ serve(async (req) => {
 
     console.log(`Admin ${user.email} creating admin user: ${email}`);
 
+    // Check if email already exists
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    const emailExists = existingUsers?.users?.find(u => u.email === email);
+
+    if (emailExists) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'A user with this email address already exists. Each email can only be used once in the system.',
+          duplicate: true
+        }),
+        { 
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
+
     // Create the user with admin privileges
     const { data: authData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email: email,

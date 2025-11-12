@@ -121,63 +121,21 @@ serve(async (req) => {
     if (authError) {
       console.error('Auth error:', authError);
 
-      // If the email is already registered, attach role and update profile instead of failing
-      if (authError.message.includes('already been registered')) {
-        console.log('Email already registered. Attempting to attach role to existing user.');
-
-        // Find existing user via public profiles table
-        const { data: existingProfile, error: profileLookupError } = await supabaseAdmin
-          .from('profiles')
-          .select('id, first_name, last_name, phone')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (profileLookupError) {
-          console.error('Profile lookup error:', profileLookupError);
-          return new Response(
-            JSON.stringify({ error: `Failed to look up existing user profile: ${profileLookupError.message}` }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        if (!existingProfile) {
-          return new Response(
-            JSON.stringify({ error: 'This email is already registered, but no profile was found. Ask the user to sign in once to initialize their profile, then try again.' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const existingUserId = existingProfile.id;
-
-        // Optionally update profile details if provided
-        const { error: profileUpdateError } = await supabaseAdmin
-          .from('profiles')
-          .update({ first_name, last_name, phone })
-          .eq('id', existingUserId);
-        if (profileUpdateError) {
-          console.warn('Profile update warning:', profileUpdateError);
-        }
-
-        // Assign role if not already assigned
-        const { error: roleInsertError } = await supabaseAdmin
-          .from('user_roles')
-          .insert({ user_id: existingUserId, role });
-        if (roleInsertError && !roleInsertError.message.includes('duplicate key')) {
-          console.error('Role assignment error (existing user):', roleInsertError);
-          return new Response(
-            JSON.stringify({ error: `Failed to assign role to existing user: ${roleInsertError.message}` }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
+      // If the email is already registered, reject with clear error message
+      if (authError.message.includes('already been registered') || 
+          authError.message.includes('already exists')) {
+        console.log('Email already registered. Rejecting duplicate user creation.');
+        
         return new Response(
-          JSON.stringify({
-            success: true,
-            user_id: existingUserId,
-            email,
-            message: `Existing user found. Assigned role: ${role}.`
+          JSON.stringify({ 
+            error: 'A user with this email address already exists. Each email can only be used once in the system.',
+            duplicate: true,
+            email: email
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { 
+            status: 409, // Conflict status code
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
         );
       }
       

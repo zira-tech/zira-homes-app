@@ -32,7 +32,7 @@ const prefetchTenantRoute = (path: string) => {
 
 export function TenantHeader() {
   const { user, signOut } = useAuth();
-  const { assignedRoles, effectiveRole, switchRole } = useRole();
+  const { assignedRoles, effectiveRole } = useRole();
   const routeTitle = useRouteTitle();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -168,22 +168,6 @@ export function TenantHeader() {
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
-              {assignedRoles.length > 1 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="font-medium text-xs">Switch Role</DropdownMenuLabel>
-                  {assignedRoles.map((role) => (
-                    <DropdownMenuItem 
-                      key={role} 
-                      className="cursor-pointer"
-                      onClick={() => switchRole(role)}
-                    >
-                      {role === "admin" ? "Admin" : role === "landlord" ? "Landlord" : role === "manager" ? "Manager" : role === "agent" ? "Agent" : "Tenant"}
-                      {effectiveRole === role && <span className="ml-auto text-xs">✓</span>}
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer text-red-600" onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />

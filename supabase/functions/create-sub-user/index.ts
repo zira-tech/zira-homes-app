@@ -146,8 +146,13 @@ const handler = async (req: Request): Promise<Response> => {
 
       if (!existingSubUserErr && existingSubUser) {
         return new Response(
-          JSON.stringify({ error: 'This email is already associated with an active sub-user for your organization', success: false }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ 
+            error: 'A user with this email address already exists. Each email can only be used once in the system.',
+            duplicate: true,
+            email: email,
+            success: false 
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
