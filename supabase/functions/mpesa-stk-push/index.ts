@@ -7,6 +7,9 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // 🔖 VERSION: 2025-11-12-v2 - Fixed 202 response handling for Kopo Kopo
+  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2 (202 response fix deployed)');
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
