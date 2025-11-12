@@ -1,7 +1,6 @@
 import React from "react";
 import { OptimizedChartsSection } from "./OptimizedChartsSection";
 import { FeatureGate } from "@/components/ui/feature-gate";
-import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 
 interface GatedOptimizedChartsSectionProps {
   chartData: any[];
@@ -11,11 +10,10 @@ interface GatedOptimizedChartsSectionProps {
 export function GatedOptimizedChartsSection({ chartData, isLoading }: GatedOptimizedChartsSectionProps) {
   return (
     <FeatureGate
-      feature={FEATURES.ADVANCED_REPORTING}
+      feature="dashboard.charts"
       fallbackTitle="Advanced Charts & Analytics"
       fallbackDescription="Visualize your property data with comprehensive charts and trend analysis."
-      allowReadOnly={true}
-      readOnlyMessage="Basic charts only - upgrade for advanced analytics"
+      allowReadOnly={false}
     >
       <OptimizedChartsSection chartData={chartData} isLoading={isLoading} />
     </FeatureGate>

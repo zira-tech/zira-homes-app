@@ -15,6 +15,7 @@ import { FeatureGate } from "@/components/ui/feature-gate";
 import { FEATURES } from "@/hooks/usePlanFeatureAccess";
 import { getReportFeature, canAccessReport } from "@/lib/reporting/reportAccess";
 import { usePlanFeatureAccess } from "@/hooks/usePlanFeatureAccess";
+import { useReportAccess } from "@/hooks/useReportAccess";
 import { PlanUpgradeButton } from "@/components/feature-access/PlanUpgradeButton";
 import { useReportPrefetch } from "@/hooks/useReportPrefetch";
 import { supabase } from "@/integrations/supabase/client";
@@ -90,18 +91,26 @@ const Reports = () => {
   const allReportsForRole = reportConfigs
     .filter(config => config.roles.includes(displayRole as any));
   
-  // Build allowed features array based on plan checks
+  // Use granular report access checks
+  const reportsWithAccess = allReportsForRole.map(config => {
+    const { hasAccess } = useReportAccess(config.id);
+    return { config, hasAccess };
+  });
+
+  // Separate available and locked reports based on granular access
+  const availableReports = reportsWithAccess
+    .filter(({ hasAccess }) => hasAccess)
+    .map(({ config }) => config);
+  
+  const lockedReports = reportsWithAccess
+    .filter(({ hasAccess }) => !hasAccess)
+    .map(({ config }) => config);
+  
+  // Build allowed features array for backwards compatibility
   const allowedFeatures: string[] = [];
   if (basicReporting.allowed) allowedFeatures.push(FEATURES.BASIC_REPORTING);
   if (advancedReporting.allowed) allowedFeatures.push(FEATURES.ADVANCED_REPORTING);
   if (financialReports.allowed) allowedFeatures.push(FEATURES.FINANCIAL_REPORTS);
-
-  // Separate available and locked reports
-  const availableReports = allReportsForRole
-    .filter(config => allowedFeatures.includes(getReportFeature(config.id)));
-  
-  const lockedReports = allReportsForRole
-    .filter(config => !allowedFeatures.includes(getReportFeature(config.id)));
 
   // Console logs for debugging
   console.log(`Reports: ${availableReports.length} available, ${lockedReports.length} locked`);

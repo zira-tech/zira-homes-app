@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Edit, Trash2, Save } from "lucide-react";
@@ -48,6 +49,7 @@ export default function PlanFeaturesManagement() {
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [editingFeature, setEditingFeature] = useState<PlanFeature | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("all");
 
   // Fetch features
   const { data: features = [], isLoading: loadingFeatures } = useQuery({
@@ -159,6 +161,65 @@ export default function PlanFeaturesManagement() {
     saveFeatureMutation.mutate(feature);
   };
 
+  // Filter features based on active tab
+  const getFilteredFeatures = () => {
+    switch (activeTab) {
+      case 'reports':
+        return features.filter(f => f.feature_key.startsWith('reports.'));
+      case 'dashboard':
+        return features.filter(f => f.feature_key.startsWith('dashboard.'));
+      default:
+        return features;
+    }
+  };
+
+  const filteredFeatures = getFilteredFeatures();
+
+  const renderFeaturesTable = (featuresToShow: PlanFeature[]) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Feature Key</TableHead>
+          <TableHead>Display Name</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Icon</TableHead>
+          <TableHead>Sort</TableHead>
+          <TableHead>Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {featuresToShow.map((feature) => {
+          const Icon = feature.icon_name ? (LucideIcons as any)[feature.icon_name] : null;
+          return (
+            <TableRow key={feature.id}>
+              <TableCell className="font-mono text-xs">{feature.feature_key}</TableCell>
+              <TableCell>{feature.display_name}</TableCell>
+              <TableCell>
+                <Badge variant={
+                  feature.category === 'enterprise' ? 'default' :
+                  feature.category === 'premium' ? 'secondary' :
+                  feature.category === 'advanced' ? 'outline' : 'secondary'
+                }>
+                  {feature.category}
+                </Badge>
+              </TableCell>
+              <TableCell>{Icon && <Icon className="h-4 w-4" />}</TableCell>
+              <TableCell>{feature.sort_order}</TableCell>
+              <TableCell className="space-x-2">
+                <Button size="sm" variant="ghost" onClick={() => { setEditingFeature(feature); setShowFeatureDialog(true); }}>
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setSelectedFeature(feature.feature_key); setShowAssignDialog(true); }}>
+                  <Save className="h-4 w-4" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
@@ -176,54 +237,45 @@ export default function PlanFeaturesManagement() {
         <Card>
           <CardHeader>
             <CardTitle>Features</CardTitle>
-            <CardDescription>Define features and their properties</CardDescription>
+            <CardDescription>Define features and their properties. Use tabs to filter by category.</CardDescription>
           </CardHeader>
           <CardContent>
             {loadingFeatures ? (
               <div className="text-center py-8">Loading...</div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Feature Key</TableHead>
-                    <TableHead>Display Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Icon</TableHead>
-                    <TableHead>Sort</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {features.map((feature) => {
-                    const Icon = feature.icon_name ? (LucideIcons as any)[feature.icon_name] : null;
-                    return (
-                      <TableRow key={feature.id}>
-                        <TableCell className="font-mono text-xs">{feature.feature_key}</TableCell>
-                        <TableCell>{feature.display_name}</TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            feature.category === 'enterprise' ? 'default' :
-                            feature.category === 'premium' ? 'secondary' :
-                            feature.category === 'advanced' ? 'outline' : 'secondary'
-                          }>
-                            {feature.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{Icon && <Icon className="h-4 w-4" />}</TableCell>
-                        <TableCell>{feature.sort_order}</TableCell>
-                        <TableCell className="space-x-2">
-                          <Button size="sm" variant="ghost" onClick={() => { setEditingFeature(feature); setShowFeatureDialog(true); }}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => { setSelectedFeature(feature.feature_key); setShowAssignDialog(true); }}>
-                            <Save className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="mb-4">
+                  <TabsTrigger value="all">All Features ({features.length})</TabsTrigger>
+                  <TabsTrigger value="reports">
+                    Reports ({features.filter(f => f.feature_key.startsWith('reports.')).length})
+                  </TabsTrigger>
+                  <TabsTrigger value="dashboard">
+                    Dashboard ({features.filter(f => f.feature_key.startsWith('dashboard.')).length})
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="all">
+                  {renderFeaturesTable(filteredFeatures)}
+                </TabsContent>
+                
+                <TabsContent value="reports">
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      🟢 Core (all plans) · 🟡 Advanced (Starter+) · 🟣 Premium (Professional+) · 👑 Enterprise
+                    </p>
+                  </div>
+                  {renderFeaturesTable(filteredFeatures)}
+                </TabsContent>
+                
+                <TabsContent value="dashboard">
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Configure which dashboard sections are visible for each plan tier.
+                    </p>
+                  </div>
+                  {renderFeaturesTable(filteredFeatures)}
+                </TabsContent>
+              </Tabs>
             )}
           </CardContent>
         </Card>

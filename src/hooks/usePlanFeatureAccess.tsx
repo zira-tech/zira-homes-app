@@ -151,6 +151,28 @@ export const FEATURES = {
   MANAGE_PAYMENTS: 'payments.management',
   EXPENSE_TRACKING: 'expenses.tracking',
   
+  // Dashboard Sections
+  DASHBOARD_STATS_CARDS: 'dashboard.stats_cards',
+  DASHBOARD_CHARTS: 'dashboard.charts',
+  DASHBOARD_RECENT_ACTIVITY: 'dashboard.recent_activity',
+  DASHBOARD_RECENT_PAYMENTS: 'dashboard.recent_payments',
+  
+  // Individual Reports
+  REPORT_RENT_COLLECTION: 'reports.rent_collection',
+  REPORT_OCCUPANCY: 'reports.occupancy',
+  REPORT_MAINTENANCE: 'reports.maintenance_summary',
+  REPORT_EXECUTIVE_SUMMARY: 'reports.executive_summary',
+  REPORT_FINANCIAL_SUMMARY: 'reports.financial_summary',
+  REPORT_LEASE_EXPIRY: 'reports.lease_expiry',
+  REPORT_OUTSTANDING_BALANCES: 'reports.outstanding_balances',
+  REPORT_TENANT_TURNOVER: 'reports.tenant_turnover',
+  REPORT_PROPERTY_PERFORMANCE: 'reports.property_performance',
+  REPORT_PROFIT_LOSS: 'reports.profit_loss',
+  REPORT_REVENUE_VS_EXPENSES: 'reports.revenue_vs_expenses',
+  REPORT_EXPENSE_SUMMARY: 'reports.expense_summary',
+  REPORT_CASH_FLOW: 'reports.cash_flow',
+  REPORT_MARKET_RENT: 'reports.market_rent',
+  
   // Integrations
   API_ACCESS: 'integrations.api',
   ACCOUNTING_INTEGRATION: 'integrations.accounting',
