@@ -86,6 +86,31 @@ export default function TenantPayments() {
     }
   }, [user]);
 
+  // Realtime subscription for invoice updates
+  useEffect(() => {
+    if (!user || !paymentData?.tenant?.id) return;
+    
+    console.log('📡 Setting up realtime subscription for invoice updates...');
+    
+    const channel = supabase
+      .channel('invoice-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'invoices',
+        filter: `tenant_id=eq.${paymentData.tenant.id}`
+      }, (payload) => {
+        console.log('📡 Invoice updated via realtime, refreshing data...', payload);
+        fetchPaymentData();
+      })
+      .subscribe();
+    
+    return () => {
+      console.log('🔌 Unsubscribing from invoice updates');
+      supabase.removeChannel(channel);
+    };
+  }, [user, paymentData?.tenant?.id]);
+
   const fetchPaymentData = async () => {
     try {
       const result = await measureApiCall('tenant-payments-fetch', async () => {

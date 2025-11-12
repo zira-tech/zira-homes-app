@@ -250,15 +250,7 @@ export function MpesaPaymentModal({
           setStatus('success');
           setStatusMessage('Payment completed successfully!');
           
-          // Update invoice
-          await supabase
-            .from('invoices')
-            .update({ 
-              status: 'paid',
-              mpesa_receipt_number: data.receipt
-            })
-            .eq('id', invoice.id);
-
+          // Invoice already updated by edge function
           toast.success("Payment successful!");
           queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
           
@@ -603,15 +595,7 @@ export function MpesaPaymentModal({
         setStatus('success');
         setStatusMessage('Payment completed successfully!');
         
-        // Update invoice
-        await supabase
-          .from('invoices')
-          .update({ 
-            status: 'paid',
-            mpesa_receipt_number: data.receipt
-          })
-          .eq('id', invoice.id);
-
+        // Invoice already updated by edge function
         toast.success("Payment verified successfully!");
         queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
         
