@@ -80,6 +80,7 @@ import AdminUserManagement from "@/pages/admin/UserManagement";
 import SelfHostedMonitoring from "@/pages/admin/SelfHostedMonitoring";
 import BillingPlanManager from "@/pages/admin/BillingPlanManager";
 import SMSLogs from "@/pages/admin/SMSLogs";
+import PlanFeaturesManagement from "@/pages/admin/PlanFeaturesManagement";
 import { MpesaTest } from "@/pages/MpesaTest";
 
 const LoadingSpinner = () => (
@@ -306,6 +307,7 @@ export const AppRoutes = () => {
                 <Route path="/users" element={<AdminUserManagement />} />
                 <Route path="/self-hosted" element={<SelfHostedMonitoring />} />
                 <Route path="/billing-plans" element={<BillingPlanManager />} />
+                <Route path="/plan-features" element={<PlanFeaturesManagement />} />
                 <Route path="/sms-logs" element={<SMSLogs />} />
                 <Route path="/mpesa-test" element={<MpesaTest />} />
                 <Route path="*" element={<NotFound />} />

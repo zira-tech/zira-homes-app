@@ -41,6 +41,7 @@ import {
   FileBarChart,
   CircleDollarSign,
   UserCog,
+  Layers,
 } from "lucide-react";
 
 export interface NavItem {
@@ -67,6 +68,8 @@ export const adminNav: NavGroup[] = [
       { title: "Communication", url: "/admin/communication", icon: MessageSquare },
       { title: "System Config", url: "/admin/system", icon: Settings },
       { title: "Billing Dashboard", url: "/admin/billing", icon: CircleDollarSign },
+      { title: "Billing Plans", url: "/admin/billing-plans", icon: Package },
+      { title: "Plan Features", url: "/admin/plan-features", icon: Layers },
       { title: "Trial Management", url: "/admin/trials", icon: Calendar },
       { title: "Email Templates", url: "/admin/email-templates", icon: Mail },
       { title: "Message Templates", url: "/admin/message-templates", icon: MessageCircle },
