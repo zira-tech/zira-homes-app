@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2.2 - Enhanced pending transaction lookup by reference
-  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2.2 (reference-based reconciliation)');
+  // 🔖 VERSION: 2025-11-12-v2.3 - Improved reconciliation + result_code: 0 for UI compat
+  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2.3 (reference-based reconciliation + result_code for UI)');
   
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -67,7 +67,7 @@ serve(async (req) => {
 
     // Determine final status
     const finalStatus = status?.toLowerCase() === 'success' ? 'completed' : 'failed';
-    const resultCode = status?.toLowerCase() === 'success' ? 0 : 1;
+    const resultCode = status?.toLowerCase() === 'success' ? 0 : 1; // 0 for success (UI compatibility)
     const resultDesc = status?.toLowerCase() === 'success' ? 'Payment successful' : (attributes.failure_reason || 'Payment failed');
 
     // Check if we should update existing transaction or insert new one
@@ -75,33 +75,66 @@ serve(async (req) => {
     let existingTxn = null;
     
     if (reference) {
-      const { data } = await supabase
+      console.log('🔍 Looking for pending transaction with metadata.reference:', reference);
+      const { data: allPending } = await supabase
         .from('mpesa_transactions')
         .select('*')
         .eq('status', 'pending')
-        .or(`metadata->reference.eq.${reference}`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      // Filter client-side for jsonb contains (more reliable)
+      if (allPending && allPending.length > 0) {
+        existingTxn = allPending.find(tx => 
+          tx.metadata && tx.metadata.reference === reference
+        );
+        
+        if (existingTxn) {
+          console.log('✅ Found pending transaction by reference match:', existingTxn.checkout_request_id);
+        } else {
+          console.log('No pending transaction matched reference:', reference);
+        }
+      }
+    }
+    
+    // Priority 2: Fallback to invoice_id if present
+    if (!existingTxn && invoiceId) {
+      console.log('🔍 Fallback: Looking for pending transaction by invoice_id:', invoiceId);
+      const { data } = await supabase
+        .from('mpesa_transactions')
+        .select('*')
+        .eq('invoice_id', invoiceId)
+        .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       
-      existingTxn = data;
-      console.log('🔍 Lookup by reference:', { reference, found: !!existingTxn });
+      if (data) {
+        existingTxn = data;
+        console.log('Found pending transaction by invoice_id:', existingTxn.checkout_request_id);
+      }
     }
     
-    // Priority 2: Fallback to phone + amount match if reference lookup failed
+    // Priority 3: Fallback to phone + amount within last 5 minutes
     if (!existingTxn && phoneNumber && amount) {
+      console.log('🔍 Fallback: Looking for pending transaction by phone and amount (recent)');
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
       const { data } = await supabase
         .from('mpesa_transactions')
         .select('*')
         .eq('phone_number', phoneNumber)
         .eq('amount', amount)
         .eq('status', 'pending')
+        .gte('created_at', fiveMinutesAgo)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       
-      existingTxn = data;
-      console.log('🔍 Fallback lookup by phone+amount:', { phoneNumber, amount, found: !!existingTxn });
+      if (data) {
+        existingTxn = data;
+        console.log('Found pending transaction by phone/amount:', existingTxn.checkout_request_id);
+      }
     }
     
     // Check idempotency - if this exact transaction was already processed
@@ -123,7 +156,7 @@ serve(async (req) => {
 
     if (existingTxn) {
       // Update existing pending transaction
-      console.log('📝 Updating existing transaction:', existingTxn.id);
+      console.log('✅ Updating existing pending transaction:', existingTxn.checkout_request_id);
       const { error: updateError } = await supabase
         .from('mpesa_transactions')
         .update({
@@ -140,7 +173,8 @@ serve(async (req) => {
             transaction_id: transactionId,
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
-            raw_callback: callbackData
+            raw_callback: callbackData,
+            reconciled: true
           }
         })
         .eq('id', existingTxn.id);
@@ -148,11 +182,11 @@ serve(async (req) => {
       if (updateError) {
         console.error('❌ Failed to update transaction:', updateError);
       } else {
-        console.log('✅ Transaction updated successfully');
+        console.log('✅ Transaction updated to', finalStatus, 'with result_code:', resultCode);
       }
     } else {
       // Insert new transaction record with unique checkout_request_id to avoid conflicts
-      console.log('💾 Inserting new transaction record (no pending match found)...');
+      console.log('⚠️  No existing pending transaction found, creating new record (last resort)');
       const uniqueCheckoutId = `kk_cb_${transactionId || Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       
       const { error: transactionError } = await supabase
@@ -176,6 +210,7 @@ serve(async (req) => {
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
             raw_callback: callbackData,
+            reconciled: false,
             note: 'Created from callback (no pending transaction found)'
           }
         });

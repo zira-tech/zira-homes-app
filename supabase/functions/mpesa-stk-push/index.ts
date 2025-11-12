@@ -692,6 +692,10 @@ serve(async (req) => {
         // Construct callback URL
         const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/kopokopo-callback`;
 
+        // Standardize reference for consistent reconciliation
+        const standardReference = accountReference || `PAY${Date.now()}`;
+        console.log('📋 Standardized reference:', standardReference);
+
         // Kopo Kopo STK Push payload (following official API format)
         // Reference: https://developers.kopokopo.com/guides/receive-money/mpesa-stk.html
         const kopokopoPayload = {
@@ -708,7 +712,7 @@ serve(async (req) => {
             value: amount // Amount in KES (not cents)
           },
           metadata: {
-            reference: accountReference || `PAY${Date.now()}`,
+            reference: standardReference,
             notes: (transactionDesc || 'Payment request').substring(0, 100)
           },
           _links: {
@@ -749,7 +753,6 @@ serve(async (req) => {
           
           // Generate unique synthetic checkout ID
           const checkoutRequestId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const reference = accountReference || `PAY${Date.now()}`;
           
           // Insert pending transaction record
           const { data: txnData, error: txnError } = await supabaseAdmin
@@ -765,7 +768,7 @@ serve(async (req) => {
               invoice_id: invoiceId || null,
               payment_type: paymentType || 'rent',
               metadata: {
-                reference: reference,
+                reference: standardReference,
                 description: transactionDesc,
                 landlord_id: landlordConfigId,
                 provider: 'kopokopo',
@@ -854,7 +857,7 @@ serve(async (req) => {
               callbackUrl: callbackUrl,
               metadata: {
                 customerId: `CUST${Date.now()}`,
-                reference: accountReference || `ORD-${Date.now()}`,
+                reference: standardReference,
                 notes: (transactionDesc || 'Payment request').substring(0, 100)
               }
             };
@@ -880,7 +883,6 @@ serve(async (req) => {
               console.log(`✅ [CAMEL_${camelRetryResponse.status}] CamelCase retry: STK Push accepted (${camelRetryResponse.status}) - Payment queued`);
               
               const checkoutRequestId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-              const reference = accountReference || `PAY${Date.now()}`;
               
               await supabaseAdmin
                 .from('mpesa_transactions')
@@ -895,7 +897,7 @@ serve(async (req) => {
                   invoice_id: invoiceId || null,
                   payment_type: paymentType || 'rent',
                   metadata: {
-                    reference: reference,
+                    reference: standardReference,
                     description: transactionDesc,
                     landlord_id: landlordConfigId,
                     provider: 'kopokopo',

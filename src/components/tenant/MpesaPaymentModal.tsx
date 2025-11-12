@@ -103,6 +103,9 @@ export function MpesaPaymentModal({
       pollingAttemptsRef.current = 0;
     }
 
+    const txStatus = transaction.status?.toLowerCase();
+    
+    // Success conditions: result_code === 0 (Safaricom) OR status === 'completed' (Kopo Kopo)
     if (transaction.result_code !== null && transaction.result_code !== undefined) {
       // Convert to number for reliable comparison
       const resultCode = Number(transaction.result_code);
@@ -117,6 +120,7 @@ export function MpesaPaymentModal({
         raw: transaction.result_code,
         converted: resultCode,
         isZero: resultCode === 0,
+        status: txStatus,
         previouslyProcessed: lastProcessedResultCodeRef.current
       });
       
@@ -160,6 +164,50 @@ export function MpesaPaymentModal({
         toast.error(transaction.result_desc || 'Payment failed');
         isProcessingRef.current = false;
       }
+    } else if (txStatus === 'completed') {
+      // Kopo Kopo completed status (no result_code set yet)
+      console.log('✅ Kopo Kopo payment completed (status-based)');
+      lastProcessedResultCodeRef.current = 0; // Mark as processed
+      
+      isProcessingRef.current = true;
+      setStatus('success');
+      setStatusMessage('Payment completed successfully!');
+      
+      // Update invoice status
+      (async () => {
+        try {
+          await supabase
+            .from('invoices')
+            .update({ 
+              status: 'paid',
+              mpesa_receipt_number: transaction.mpesa_receipt_number || transaction.result_desc 
+            })
+            .eq('id', invoice.id);
+          
+          toast.success("Payment successful!");
+          
+          // Invalidate tenant dashboard cache for instant refresh
+          queryClient.invalidateQueries({ queryKey: ['tenant-dashboard'] });
+          
+          setTimeout(() => {
+            onPaymentInitiated?.();
+            onOpenChange(false);
+            resetDialog();
+          }, 2000);
+        } finally {
+          isProcessingRef.current = false;
+        }
+      })();
+    } else if (txStatus === 'failed') {
+      // Kopo Kopo failed status
+      console.log('❌ Kopo Kopo payment failed (status-based)');
+      lastProcessedResultCodeRef.current = 1; // Mark as processed
+      
+      isProcessingRef.current = true;
+      setStatus('error');
+      setStatusMessage(transaction.result_desc || 'Payment failed');
+      toast.error(transaction.result_desc || 'Payment failed');
+      isProcessingRef.current = false;
     }
   }, [transaction, status, invoice.id, onPaymentInitiated, onOpenChange, queryClient]);
 
@@ -189,10 +237,14 @@ export function MpesaPaymentModal({
           return;
         }
 
-        if (data && data.result_code !== null && data.result_code !== undefined) {
+        const pollStatus = data?.status?.toLowerCase();
+        
+        // Success conditions: result_code === 0 OR status === 'completed'
+        if ((data && data.result_code !== null && data.result_code !== undefined) || pollStatus === 'completed' || pollStatus === 'failed') {
           console.log('✅ Polling found transaction result:', {
             resultCode: data.result_code,
             resultCodeType: typeof data.result_code,
+            status: pollStatus,
             resultDesc: data.result_desc
           });
           
@@ -203,16 +255,17 @@ export function MpesaPaymentModal({
           }
 
           // Convert to number for reliable comparison
-          const resultCode = Number(data.result_code);
+          const resultCode = data.result_code !== null ? Number(data.result_code) : null;
           
           console.log('🔍 Polling result code comparison:', {
             raw: data.result_code,
             converted: resultCode,
-            isZero: resultCode === 0
+            status: pollStatus,
+            isSuccess: resultCode === 0 || pollStatus === 'completed'
           });
 
-          // Process the result the same way as realtime
-          if (resultCode === 0) {
+          // Process the result: result_code === 0 OR status === 'completed'
+          if (resultCode === 0 || pollStatus === 'completed') {
             setStatus('success');
             setStatusMessage('Payment completed successfully!');
             
@@ -237,7 +290,7 @@ export function MpesaPaymentModal({
             }, 2000);
           } else {
             setStatus('error');
-            setStatusMessage(data.result_desc || `Payment failed (Code: ${data.result_code})`);
+            setStatusMessage(data.result_desc || `Payment failed (Code: ${data.result_code || 'N/A'})`);
             toast.error(data.result_desc || 'Payment failed');
           }
         } else if (pollingAttemptsRef.current >= maxPollingAttempts) {
@@ -354,10 +407,10 @@ export function MpesaPaymentModal({
       // Handle both top-level and nested CheckoutRequestID
       const crId = data?.CheckoutRequestID ?? data?.data?.CheckoutRequestID;
       const branch = data?.branch || 'unknown';
-      const provider = data?.provider || 'mpesa';
-      const till = data?.tillNumber || '';
+      const provider = data?.provider ?? data?.data?.provider ?? 'mpesa';
+      const till = data?.tillNumber ?? data?.data?.tillNumber ?? '';
       
-      console.log('✅ Payment initiated:', { branch, crId, success: data?.success, provider, till });
+      console.log('✅ Payment initiated:', { branch, crId, success: data?.success, provider, till, fullData: data });
       
       // Capture provider and till info
       setPaymentProvider(provider);
