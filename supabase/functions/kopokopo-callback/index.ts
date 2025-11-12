@@ -105,15 +105,15 @@ serve(async (req) => {
       const { error: updateError } = await supabase
         .from('mpesa_transactions')
         .update({
-          result_code: status === 'Success' ? '0' : '1',
+          result_code: status === 'Success' ? 0 : 1,
           result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
-          transaction_id: transactionId,
           mpesa_receipt_number: transactionId,
           status: finalStatus,
           metadata: {
             ...existingTxn.metadata,
             provider: 'kopokopo',
             callback_reference: reference,
+            transaction_id: transactionId,
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
             raw_callback: callbackData
@@ -134,9 +134,8 @@ serve(async (req) => {
         .insert({
           merchant_request_id: reference,
           checkout_request_id: transactionId || reference,
-          result_code: status === 'Success' ? '0' : '1',
+          result_code: status === 'Success' ? 0 : 1,
           result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
-          transaction_id: transactionId,
           mpesa_receipt_number: transactionId,
           phone_number: phoneNumber,
           amount: amount,
@@ -146,6 +145,7 @@ serve(async (req) => {
           metadata: {
             provider: 'kopokopo',
             reference: reference,
+            transaction_id: transactionId,
             landlord_id: landlordId,
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
