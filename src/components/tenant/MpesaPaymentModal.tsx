@@ -39,6 +39,8 @@ export function MpesaPaymentModal({
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  const [paymentProvider, setPaymentProvider] = useState<string>('');
+  const [tillNumber, setTillNumber] = useState<string>('');
   
   // React Query client for cache invalidation
   const queryClient = useQueryClient();
@@ -352,8 +354,14 @@ export function MpesaPaymentModal({
       // Handle both top-level and nested CheckoutRequestID
       const crId = data?.CheckoutRequestID ?? data?.data?.CheckoutRequestID;
       const branch = data?.branch || 'unknown';
+      const provider = data?.provider || 'mpesa';
+      const till = data?.tillNumber || '';
       
-      console.log('✅ Payment initiated:', { branch, crId, success: data?.success });
+      console.log('✅ Payment initiated:', { branch, crId, success: data?.success, provider, till });
+      
+      // Capture provider and till info
+      setPaymentProvider(provider);
+      setTillNumber(till);
       
       if (crId) {
         setCheckoutRequestId(crId);
@@ -401,6 +409,8 @@ export function MpesaPaymentModal({
     setStatus('idle');
     setStatusMessage('');
     setCheckoutRequestId(null);
+    setPaymentProvider('');
+    setTillNumber('');
     setPhoneNumber('');
   };
 
@@ -484,6 +494,18 @@ export function MpesaPaymentModal({
                 {getStatusIcon()}
                 <div className="flex-1">
                   <AlertTitle className="mb-1 flex items-center gap-2">
+                    {status === 'success' && 'Payment Successful'}
+                    {status === 'error' && 'Payment Failed'}
+                    {status === 'sent' && 'STK Push Sent'}
+                    {status === 'verifying' && 'Verifying Payment'}
+                    {status === 'sending' && 'Initiating Payment'}
+                    {paymentProvider === 'kopokopo' && tillNumber && (
+                      <span className="text-xs font-normal text-muted-foreground ml-2">
+                        • Kopo Kopo Till {tillNumber}
+                      </span>
+                    )}
+                  </AlertTitle>
+                  <AlertDescription className="mb-1 flex items-center gap-2">
                     {status === 'sending' && 'Processing...'}
                     {status === 'sent' && 'Check Your Phone'}
                     {status === 'verifying' && (
@@ -499,7 +521,7 @@ export function MpesaPaymentModal({
                     )}
                     {status === 'success' && 'Payment Successful!'}
                     {status === 'error' && 'Payment Failed'}
-                  </AlertTitle>
+                  </AlertDescription>
                   <AlertDescription>{statusMessage}</AlertDescription>
                 </div>
               </div>

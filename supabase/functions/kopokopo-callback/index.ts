@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2.1 - Enhanced logging and error handling
-  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2.1 (enhanced callback processing)');
+  // 🔖 VERSION: 2025-11-12-v2.2 - Enhanced pending transaction lookup by reference
+  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2.2 (reference-based reconciliation)');
   
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -67,11 +67,29 @@ serve(async (req) => {
 
     // Determine final status
     const finalStatus = status?.toLowerCase() === 'success' ? 'completed' : 'failed';
+    const resultCode = status?.toLowerCase() === 'success' ? 0 : 1;
+    const resultDesc = status?.toLowerCase() === 'success' ? 'Payment successful' : (attributes.failure_reason || 'Payment failed');
 
     // Check if we should update existing transaction or insert new one
-    // Look for pending transaction by phone number and amount (most recent)
+    // Priority 1: Look for pending transaction by metadata.reference (most reliable)
     let existingTxn = null;
-    if (phoneNumber && amount) {
+    
+    if (reference) {
+      const { data } = await supabase
+        .from('mpesa_transactions')
+        .select('*')
+        .eq('status', 'pending')
+        .or(`metadata->reference.eq.${reference}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      existingTxn = data;
+      console.log('🔍 Lookup by reference:', { reference, found: !!existingTxn });
+    }
+    
+    // Priority 2: Fallback to phone + amount match if reference lookup failed
+    if (!existingTxn && phoneNumber && amount) {
       const { data } = await supabase
         .from('mpesa_transactions')
         .select('*')
@@ -83,22 +101,23 @@ serve(async (req) => {
         .maybeSingle();
       
       existingTxn = data;
+      console.log('🔍 Fallback lookup by phone+amount:', { phoneNumber, amount, found: !!existingTxn });
+    }
+    
+    // Check idempotency - if this exact transaction was already processed
+    if (!existingTxn && transactionId) {
+      const { data: completedTxn } = await supabase
+        .from('mpesa_transactions')
+        .select('*')
+        .eq('mpesa_receipt_number', transactionId)
+        .maybeSingle();
       
-      // Also check if this exact transaction was already processed (idempotency)
-      if (!existingTxn && transactionId) {
-        const { data: completedTxn } = await supabase
-          .from('mpesa_transactions')
-          .select('*')
-          .eq('transaction_id', transactionId)
-          .maybeSingle();
-        
-        if (completedTxn) {
-          console.log('⚠️ Transaction already processed:', transactionId);
-          return new Response(
-            JSON.stringify({ status: 'ok', message: 'Already processed' }), 
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+      if (completedTxn) {
+        console.log('⚠️ Transaction already processed:', transactionId);
+        return new Response(
+          JSON.stringify({ status: 'ok', message: 'Already processed' }), 
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 
@@ -108,9 +127,11 @@ serve(async (req) => {
       const { error: updateError } = await supabase
         .from('mpesa_transactions')
         .update({
-          result_code: status === 'Success' ? 0 : 1,
-          result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
+          result_code: resultCode,
+          result_desc: resultDesc,
           mpesa_receipt_number: transactionId,
+          phone_number: phoneNumber || existingTxn.phone_number,
+          amount: amount || existingTxn.amount,
           status: finalStatus,
           metadata: {
             ...existingTxn.metadata,
@@ -130,15 +151,17 @@ serve(async (req) => {
         console.log('✅ Transaction updated successfully');
       }
     } else {
-      // Insert new transaction record
-      console.log('💾 Inserting new transaction record...');
+      // Insert new transaction record with unique checkout_request_id to avoid conflicts
+      console.log('💾 Inserting new transaction record (no pending match found)...');
+      const uniqueCheckoutId = `kk_cb_${transactionId || Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      
       const { error: transactionError } = await supabase
         .from('mpesa_transactions')
         .insert({
-          merchant_request_id: reference,
-          checkout_request_id: transactionId || reference,
-          result_code: status === 'Success' ? 0 : 1,
-          result_desc: status === 'Success' ? 'Payment successful' : 'Payment failed',
+          merchant_request_id: reference || uniqueCheckoutId,
+          checkout_request_id: uniqueCheckoutId,
+          result_code: resultCode,
+          result_desc: resultDesc,
           mpesa_receipt_number: transactionId,
           phone_number: phoneNumber,
           amount: amount,
@@ -152,14 +175,15 @@ serve(async (req) => {
             landlord_id: landlordId,
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
-            raw_callback: callbackData
+            raw_callback: callbackData,
+            note: 'Created from callback (no pending transaction found)'
           }
         });
 
       if (transactionError) {
         console.error('❌ Failed to insert transaction:', transactionError);
       } else {
-        console.log('✅ Transaction record inserted');
+        console.log('✅ Transaction record inserted with unique ID:', uniqueCheckoutId);
       }
     }
 

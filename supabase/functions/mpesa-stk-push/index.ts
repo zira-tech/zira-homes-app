@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2.1 - Comprehensive 202 handling, branch markers, and error details
-  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2.1 (hardened response parsing)');
+  // 🔖 VERSION: 2025-11-12-v2.2 - Enhanced 201/202 handling, synthetic checkout IDs, provider display
+  console.log('🚀 mpesa-stk-push VERSION: 2025-11-12-v2.2 (enhanced Kopo Kopo flow)');
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -743,12 +743,13 @@ serve(async (req) => {
           }
         );
 
-        // Handle 202 Accepted (STK Push successfully queued) - MAIN BRANCH
-        if (kopokopoResponse.status === 202) {
-          console.log('✅ [SNAKE_202] STK Push accepted by Kopo Kopo (202) - Payment queued');
+        // Handle 201/202 Accepted (STK Push successfully queued) - MAIN BRANCH
+        if (kopokopoResponse.status === 201 || kopokopoResponse.status === 202) {
+          console.log(`✅ [SNAKE_${kopokopoResponse.status}] STK Push accepted by Kopo Kopo (${kopokopoResponse.status}) - Payment queued`);
           
-          // Generate unique reference for this payment
-          const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          // Generate unique synthetic checkout ID
+          const checkoutRequestId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const reference = accountReference || `PAY${Date.now()}`;
           
           // Insert pending transaction record
           const { data: txnData, error: txnError } = await supabaseAdmin
@@ -759,19 +760,19 @@ serve(async (req) => {
               phone_number: phoneNumber,
               amount: amount,
               status: 'pending',
-              result_code: '0',
-              result_desc: 'STK Push initiated - awaiting user action',
+              result_code: null,
+              result_desc: 'Awaiting user input',
               invoice_id: invoiceId || null,
               payment_type: paymentType || 'rent',
               metadata: {
-                reference: accountReference,
+                reference: reference,
                 description: transactionDesc,
                 landlord_id: landlordConfigId,
                 provider: 'kopokopo',
-                till_number: tillNumber,
-                branch: 'snake_202'
-              },
-              initiated_by: userId
+                till: tillNumber,
+                incoming_payment_url: kopokopoResponse.headers.get('Location'),
+                branch: `snake_${kopokopoResponse.status}`
+              }
             })
             .select()
             .single();
@@ -786,14 +787,14 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               provider: 'kopokopo',
-              branch: 'snake_202',
+              tillNumber: tillNumber,
+              branch: `snake_${kopokopoResponse.status}`,
               CheckoutRequestID: checkoutRequestId,
               MerchantRequestID: checkoutRequestId,
               message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
               data: {
                 CheckoutRequestID: checkoutRequestId,
                 ResponseDescription: 'Kopo Kopo STK push queued',
-                TillNumber: tillNumber,
                 status: 'pending'
               }
             }),
@@ -874,11 +875,12 @@ serve(async (req) => {
               }
             );
             
-            // Handle 202 Accepted in retry - CAMELCASE BRANCH
-            if (camelRetryResponse.status === 202) {
-              console.log('✅ [CAMEL_202] CamelCase retry: STK Push accepted (202) - Payment queued');
+            // Handle 201/202 Accepted in retry - CAMELCASE BRANCH
+            if (camelRetryResponse.status === 201 || camelRetryResponse.status === 202) {
+              console.log(`✅ [CAMEL_${camelRetryResponse.status}] CamelCase retry: STK Push accepted (${camelRetryResponse.status}) - Payment queued`);
               
-              const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const checkoutRequestId = `kk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+              const reference = accountReference || `PAY${Date.now()}`;
               
               await supabaseAdmin
                 .from('mpesa_transactions')
@@ -888,33 +890,33 @@ serve(async (req) => {
                   phone_number: phoneNumber,
                   amount: amount,
                   status: 'pending',
-                  result_code: '0',
-                  result_desc: 'STK Push initiated - awaiting user action',
+                  result_code: null,
+                  result_desc: 'Awaiting user input',
                   invoice_id: invoiceId || null,
                   payment_type: paymentType || 'rent',
                   metadata: {
-                    reference: accountReference,
+                    reference: reference,
                     description: transactionDesc,
                     landlord_id: landlordConfigId,
                     provider: 'kopokopo',
-                    till_number: tillNumber,
-                    branch: 'camel_202'
-                  },
-                  initiated_by: userId
+                    till: tillNumber,
+                    incoming_payment_url: camelRetryResponse.headers.get('Location'),
+                    branch: `camel_${camelRetryResponse.status}`
+                  }
                 });
 
               return new Response(
                 JSON.stringify({
                   success: true,
                   provider: 'kopokopo',
-                  branch: 'camel_202',
+                  tillNumber: tillNumber,
+                  branch: `camel_${camelRetryResponse.status}`,
                   CheckoutRequestID: checkoutRequestId,
                   MerchantRequestID: checkoutRequestId,
                   message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
                   data: {
                     CheckoutRequestID: checkoutRequestId,
                     ResponseDescription: 'Kopo Kopo STK push queued (camelCase retry)',
-                    TillNumber: tillNumber,
                     status: 'pending'
                   }
                 }),
