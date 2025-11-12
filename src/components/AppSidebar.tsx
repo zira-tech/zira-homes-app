@@ -36,6 +36,8 @@ export function AppSidebar() {
   const { allowed: hasSubUsers } = usePlanFeatureAccess(FEATURES.SUB_USERS);
   const { allowed: hasCustomTemplates } = usePlanFeatureAccess(FEATURES.CUSTOM_EMAIL_TEMPLATES);
   const { allowed: hasAdvancedReports } = usePlanFeatureAccess(FEATURES.ADVANCED_REPORTING);
+  const { allowed: hasExpenseTracking } = usePlanFeatureAccess(FEATURES.EXPENSE_TRACKING);
+  const { allowed: hasSmsFeatures } = usePlanFeatureAccess(FEATURES.SMS_NOTIFICATIONS);
 
   // Check if user has Professional, Enterprise, Admin plan, OR is on trial - no locks for these
   const isPremiumPlan = (trialStatus?.planName && 
@@ -214,6 +216,9 @@ export function AppSidebar() {
                   const isSubUsersItem = item.title === "Sub Users";
                   const isEmailTemplatesItem = item.title === "Email Templates";
                   const isMessageTemplatesItem = item.title === "Message Templates";
+                  const isExpensesItem = item.title === "Expenses";
+                  const isBulkSMSItem = item.title === "Bulk SMS";
+                  const isSMSUsageItem = item.title === "SMS Usage";
                   
                    // Show partial lock for Reports since some reports are locked (skip for premium plans)
                    const isPartiallyLocked = !isPremiumPlan && isReportsItem && (hasReports || hasAdvancedReports) && !hasAdvancedReports;
@@ -221,7 +226,10 @@ export function AppSidebar() {
                      (isReportsItem && !hasReports && !hasAdvancedReports) || 
                      (isSubUsersItem && !hasSubUsers) ||
                      (isEmailTemplatesItem && !hasCustomTemplates) ||
-                     (isMessageTemplatesItem && !hasCustomTemplates)
+                     (isMessageTemplatesItem && !hasCustomTemplates) ||
+                     (isExpensesItem && !hasExpenseTracking) ||
+                     (isBulkSMSItem && !hasSmsFeatures) ||
+                     (isSMSUsageItem && !hasSmsFeatures)
                    );
 
                    return (
@@ -234,6 +242,8 @@ export function AppSidebar() {
                            isReportsItem ? "Starter" :
                            isSubUsersItem ? "Professional" :
                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Professional" :
+                           isExpensesItem ? "Starter" :
+                           (isBulkSMSItem || isSMSUsageItem) ? "Professional" :
                            "Professional"
                          }
                          featureTier={
@@ -241,6 +251,8 @@ export function AppSidebar() {
                            isReportsItem ? "professional" :
                            isSubUsersItem ? "professional" :
                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "professional" :
+                           isExpensesItem ? "starter" :
+                           (isBulkSMSItem || isSMSUsageItem) ? "professional" :
                            "professional"
                          }
                          lockMessage={
@@ -248,6 +260,9 @@ export function AppSidebar() {
                            isReportsItem ? "Upgrade to Starter for reporting features" :
                            isSubUsersItem ? "Upgrade to Professional to manage team members" :
                            (isEmailTemplatesItem || isMessageTemplatesItem) ? "Upgrade to Professional for custom templates" :
+                           isExpensesItem ? "Upgrade to Starter for expense tracking" :
+                           isBulkSMSItem ? "Upgrade to Professional for bulk SMS messaging" :
+                           isSMSUsageItem ? "Upgrade to Professional to view SMS usage analytics" :
                            "Upgrade to Professional to access this feature"
                          }
                        >
