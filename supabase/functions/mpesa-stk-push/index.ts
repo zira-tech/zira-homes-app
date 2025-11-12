@@ -835,6 +835,53 @@ serve(async (req) => {
               }
             );
             
+            // Handle 202 Accepted in retry
+            if (camelRetryResponse.status === 202) {
+              console.log('✅ CamelCase retry: STK Push accepted (202) - Payment queued');
+              
+              const checkoutRequestId = `KK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              
+              await supabaseAdmin
+                .from('mpesa_transactions')
+                .insert({
+                  merchant_request_id: checkoutRequestId,
+                  checkout_request_id: checkoutRequestId,
+                  phone_number: phoneNumber,
+                  amount: amount,
+                  status: 'pending',
+                  result_code: '0',
+                  result_desc: 'STK Push initiated - awaiting user action',
+                  invoice_id: invoiceId || null,
+                  payment_type: paymentType || 'rent',
+                  metadata: {
+                    reference: accountReference,
+                    description: transactionDesc,
+                    landlord_id: landlordConfigId,
+                    provider: 'kopokopo',
+                    till_number: tillNumber,
+                    retry_format: 'camelCase'
+                  },
+                  initiated_by: userId
+                });
+
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  provider: 'kopokopo',
+                  CheckoutRequestID: checkoutRequestId,
+                  MerchantRequestID: checkoutRequestId,
+                  message: 'STK push sent successfully. Please check your phone and enter your M-Pesa PIN.',
+                  data: {
+                    CheckoutRequestID: checkoutRequestId,
+                    ResponseDescription: 'Kopo Kopo STK push queued (camelCase retry)',
+                    TillNumber: tillNumber,
+                    status: 'pending'
+                  }
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            
             const camelRetryData = await camelRetryResponse.json();
             console.log('🔄 CamelCase retry response:', JSON.stringify(camelRetryData, null, 2));
             
