@@ -332,18 +332,28 @@ export function MpesaPaymentModal({
         
         setStatus('error');
         
+        // Build detailed error message
+        let fullMessage = mpesaError.userMessage;
+        if (mpesaError.errorId) {
+          fullMessage += `\n\nError code: ${mpesaError.errorId}`;
+        }
         if (mpesaError.requiresAction) {
-          setStatusMessage(`${mpesaError.userMessage}\n\n${mpesaError.requiresAction}`);
-        } else {
-          setStatusMessage(mpesaError.userMessage);
+          fullMessage += `\n\n${mpesaError.requiresAction}`;
         }
         
-        toast.error(mpesaError.userMessage);
+        setStatusMessage(fullMessage);
+        
+        toast.error(mpesaError.userMessage, {
+          description: mpesaError.errorId ? `Error: ${mpesaError.errorId}` : undefined
+        });
         return;
       }
 
       // Handle both top-level and nested CheckoutRequestID
       const crId = data?.CheckoutRequestID ?? data?.data?.CheckoutRequestID;
+      const branch = data?.branch || 'unknown';
+      
+      console.log('✅ Payment initiated:', { branch, crId, success: data?.success });
       
       if (crId) {
         setCheckoutRequestId(crId);
@@ -359,11 +369,12 @@ export function MpesaPaymentModal({
         }, 1500);
       } else if (data?.success) {
         // Fallback for unexpected response shape - still try to stay in verifying
+        console.warn('⚠️ Success but no CheckoutRequestID:', data);
         toast.success("Payment request sent! Please check your phone and enter your M-Pesa PIN.");
         setStatus('verifying');
         setStatusMessage('Waiting for payment confirmation...');
       } else {
-        throw new Error(data?.error || "Failed to initiate payment");
+        throw new Error(data?.error || data?.userMessage || "Failed to initiate payment");
       }
     } catch (error: any) {
       console.error("Error initiating M-Pesa payment:", error);
