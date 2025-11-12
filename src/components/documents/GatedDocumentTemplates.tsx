@@ -13,7 +13,7 @@ export function GatedDocumentTemplates({ children }: GatedDocumentTemplatesProps
       fallbackTitle="Document Templates"
       fallbackDescription="Create and customize professional document templates for leases, invoices, notices, and more."
       allowReadOnly={true}
-      readOnlyMessage="Basic templates only - upgrade for custom templates"
+      readOnlyMessage="Document Templates - View-only mode. Upgrade for custom template creation"
     >
       {children}
     </FeatureGate>

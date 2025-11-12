@@ -152,9 +152,12 @@ export function FeatureGate({
         </div>
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
           <div className="text-center p-4">
-            <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-              <Lock className="h-4 w-4" />
-              <span className="text-sm font-medium">{readOnlyMessage}</span>
+            <div className="flex flex-col items-center justify-center gap-3 mb-3">
+              <div className="relative inline-flex">
+                {getPlanIcon(plan_name)}
+                <Lock className="absolute -bottom-1 -right-1 h-3 w-3 text-muted-foreground bg-background rounded-full p-0.5" />
+              </div>
+              <p className="text-sm font-medium text-foreground">{readOnlyMessage}</p>
             </div>
             {showUpgradePrompt && (
               <Button size="sm" onClick={handleUpgrade}>

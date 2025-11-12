@@ -167,7 +167,7 @@ const MessageTemplates = () => {
           fallbackTitle="Custom SMS Templates"
           fallbackDescription="Create and manage custom SMS templates for your property communications. Personalize messages with variables and organize by category."
           allowReadOnly={true}
-          readOnlyMessage="View-only mode - upgrade to Pro to create and edit custom templates"
+          readOnlyMessage="SMS Templates - View-only mode. Upgrade for custom template creation"
         >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
