@@ -7,6 +7,9 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // 🔖 VERSION: 2025-11-12-v2 - Fixed transaction_id column issue
+  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2 (column fix deployed)');
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
