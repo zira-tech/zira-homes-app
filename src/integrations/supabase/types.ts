@@ -113,6 +113,13 @@ export type Database = {
             referencedRelation: "billing_plans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "billing_plan_audit_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
         ]
       }
       billing_plan_features: {
@@ -537,7 +544,15 @@ export type Database = {
           updated_at?: string
           variables?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       expenses: {
         Row: {
@@ -598,6 +613,13 @@ export type Database = {
           vendor_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_expenses_meter_reading_id"
             columns: ["meter_reading_id"]
@@ -888,7 +910,15 @@ export type Database = {
           updated_at?: string
           view_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_articles_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       landlord_mpesa_configs: {
         Row: {
@@ -1005,7 +1035,15 @@ export type Database = {
           preferred_payment_method?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "landlord_payment_preferences_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       landlord_subscriptions: {
         Row: {
@@ -1345,7 +1383,15 @@ export type Database = {
           updated_at?: string
           variables?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       meter_readings: {
         Row: {
@@ -1679,7 +1725,15 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       onboarding_steps: {
         Row: {
@@ -2109,7 +2163,15 @@ export type Database = {
           phone?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles_backup: {
         Row: {
@@ -2196,7 +2258,22 @@ export type Database = {
           updated_at?: string
           zip_code?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "properties_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       report_runs: {
         Row: {
@@ -2507,7 +2584,15 @@ export type Database = {
           total_amount?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "service_charge_invoices_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       service_providers: {
         Row: {
@@ -2632,6 +2717,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "sms_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sms_campaigns_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -2681,6 +2773,13 @@ export type Database = {
           transaction_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sms_credit_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sms_credit_transactions_landlord_id_fkey"
             columns: ["landlord_id"]
@@ -2754,7 +2853,29 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sms_logs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_logs_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sms_providers: {
         Row: {
@@ -3388,6 +3509,13 @@ export type Database = {
             referencedRelation: "properties"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tenants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
         ]
       }
       translations: {
@@ -3701,7 +3829,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_getting_started_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_onboarding_progress: {
         Row: {
@@ -3766,7 +3902,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_sessions: {
         Row: {
@@ -3880,7 +4024,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_tour_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -3899,6 +4051,17 @@ export type Database = {
           sub_user_record_id: string | null
           title: string | null
           user_id: string | null
+        }
+        Relationships: []
+      }
+      orphaned_users_monitor: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          first_name: string | null
+          id: string | null
+          last_name: string | null
+          status: string | null
         }
         Relationships: []
       }
@@ -3945,7 +4108,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tenants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {

@@ -256,13 +256,27 @@ const Auth = () => {
       });
 
       if (error) {
+        console.error('Signup error details:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          email: signupData.email
+        });
+        
+        // Provide specific error messages
         if (error.message.includes("User already registered")) {
           setExistingAccountEmail(signupData.email);
           setActiveTab('login');
           setLoginData((prev) => ({ ...prev, email: signupData.email }));
           setError("An account with this email already exists. You can sign in, reset your password, or resend confirmation below.");
+        } else if (error.message.includes("Database error") || error.message.includes("profile") || error.message.includes("handle_new_user")) {
+          setError("We encountered an issue creating your account. Our team has been notified. Please try again in a few moments, or contact support if the issue persists.");
+        } else if (error.message.includes("Invalid phone")) {
+          setError("Please enter a valid phone number in international format (e.g., +254712345678).");
+        } else if (error.message.includes("Failed to create")) {
+          setError("Account creation failed due to a technical issue. Please try again or contact support.");
         } else {
-          setError(error.message);
+          setError(error.message || "An unexpected error occurred. Please try again.");
         }
         return;
       }
