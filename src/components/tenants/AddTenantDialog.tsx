@@ -20,7 +20,12 @@ const tenantFormSchemaBase = z.object({
   first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
   last_name: z.string().min(1, "Last name is required").transform((s) => s.trim()),
   email: z.string().email("Invalid email address").transform((s) => s.trim()),
-  phone: z.string().min(1, "Phone number is required").transform((s) => s.trim()),
+  phone: z.string()
+    .min(1, "Phone number is required")
+    .transform((s) => s.trim())
+    .refine((phone) => /^\+[1-9][0-9]{7,14}$/.test(phone), {
+      message: "Please enter a valid phone number in international format (e.g., +254712345678)"
+    }),
   national_id: z.string().min(1, "National ID or Passport is required").transform((s) => s.trim()),
   profession: z.string().optional(),
   employment_status: z.string().optional(),
@@ -218,7 +223,33 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       });
 
       if (rpcError) {
-        throw new Error(rpcError.message);
+        console.error('Tenant creation RPC error:', {
+          message: rpcError.message,
+          code: rpcError.code,
+          details: rpcError.details
+        });
+        
+        // Provide specific error messages
+        if (rpcError.message.includes('phone') || rpcError.message.includes('Invalid phone')) {
+          toast({
+            title: 'Invalid Phone Number',
+            description: 'Please enter a valid phone number in international format (e.g., +254712345678)',
+            variant: 'destructive',
+          });
+        } else if (rpcError.message.includes('duplicate') || rpcError.message.includes('already exists')) {
+          toast({
+            title: 'Duplicate Tenant',
+            description: 'A tenant with this email or phone number already exists.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Error Creating Tenant',
+            description: rpcError.message || 'An unexpected error occurred. Please try again.',
+            variant: 'destructive',
+          });
+        }
+        return;
       }
 
       const rpcRes = (result ?? {}) as { success?: boolean; tenant?: any; lease?: any; error?: any; code?: any };
