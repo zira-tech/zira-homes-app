@@ -184,13 +184,23 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     const startTime = performance.now();
     console.log('⏱️ Tenant creation started');
 
-    // Watchdog timer for long operations
+    // Hard timeout fallback (20 seconds)
+    const hardTimeout = setTimeout(() => {
+      setLoading(false);
+      toast({
+        title: "Request Timed Out",
+        description: "The request took too long. Please try again.",
+        variant: "destructive",
+      });
+    }, 20000);
+
+    // Watchdog timer for progress notification
     const watchdog = setTimeout(() => {
       toast({
         title: "Taking longer than usual",
-        description: "Still working on creating the tenant. You can wait or cancel and try again.",
+        description: "Still working on creating the tenant. Please wait...",
       });
-    }, 12000);
+    }, 10000);
 
     try {
       // Non-blocking activity log
@@ -200,27 +210,79 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         has_lease: !!data.unit_id 
       }).catch(console.error);
 
+      // Preflight duplicate check for better UX
+      if (data.property_id) {
+        const { count } = await supabase
+          .from('tenants')
+          .select('id', { count: 'exact', head: true })
+          .eq('property_id', data.property_id)
+          .or(`email.eq.${data.email},phone.eq.${data.phone}`);
+
+        if (count && count > 0) {
+          // Check which field is duplicate
+          const { data: existingTenants } = await supabase
+            .from('tenants')
+            .select('email, phone')
+            .eq('property_id', data.property_id)
+            .or(`email.eq.${data.email},phone.eq.${data.phone}`);
+
+          const duplicateEmail = existingTenants?.some(t => t.email.toLowerCase() === data.email.toLowerCase());
+          const duplicatePhone = existingTenants?.some(t => t.phone === data.phone);
+
+          if (duplicateEmail) {
+            form.setError('email', {
+              type: 'manual',
+              message: 'This email is already used for one of your properties'
+            });
+            toast({
+              title: 'Duplicate Email',
+              description: 'This email is already used for one of your properties.',
+              variant: 'destructive',
+            });
+          }
+
+          if (duplicatePhone) {
+            form.setError('phone', {
+              type: 'manual',
+              message: 'This phone number is already used for one of your properties'
+            });
+            toast({
+              title: 'Duplicate Phone',
+              description: 'This phone number is already used for one of your properties.',
+              variant: 'destructive',
+            });
+          }
+
+          // Focus first error field
+          setTimeout(() => {
+            const firstError = document.querySelector('[data-error="true"]') as HTMLElement;
+            firstError?.focus();
+          }, 100);
+
+          return;
+        }
+      }
+
       // Use secure RPC to create tenant (and optional lease) in a single transaction.
       const { data: result, error: rpcError } = await supabase.rpc('create_tenant_and_optional_lease', {
         p_first_name: data.first_name,
         p_last_name: data.last_name,
         p_email: data.email,
         p_phone: data.phone || null,
-        p_national_id: data.national_id || null,
-        p_employment_status: data.employment_status || null,
-        p_profession: data.profession || null,
-        p_employer_name: data.employer_name || null,
-        p_monthly_income: data.monthly_income != null ? Number(data.monthly_income) : null,
+        p_date_of_birth: null,
+        p_id_number: data.national_id || null,
+        p_employer: data.employer_name || null,
         p_emergency_contact_name: data.emergency_contact_name || null,
         p_emergency_contact_phone: data.emergency_contact_phone || null,
-        p_previous_address: data.previous_address || null,
+        p_notes: null,
         p_property_id: data.property_id || null,
         p_unit_id: data.unit_id || null,
         p_lease_start_date: data.lease_start_date || null,
         p_lease_end_date: data.lease_end_date || null,
         p_monthly_rent: data.monthly_rent != null ? Number(data.monthly_rent) : null,
         p_security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
-      });
+        p_lease_terms: null,
+      } as any);
 
       if (rpcError) {
         console.error('Tenant creation RPC error:', {
@@ -229,17 +291,53 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           details: rpcError.details
         });
         
-        // Provide specific error messages
-        if (rpcError.message.includes('phone') || rpcError.message.includes('Invalid phone')) {
+        // Handle specific error messages with form field errors
+        if (rpcError.message.includes('email already exists')) {
+          form.setError('email', {
+            type: 'manual',
+            message: 'This email is already used for one of your properties'
+          });
+          toast({
+            title: 'Duplicate Email',
+            description: 'This email is already used for one of your properties.',
+            variant: 'destructive',
+          });
+          setTimeout(() => {
+            const emailField = document.querySelector('[name="email"]') as HTMLElement;
+            emailField?.focus();
+          }, 100);
+        } else if (rpcError.message.includes('phone number already exists')) {
+          form.setError('phone', {
+            type: 'manual',
+            message: 'This phone number is already used for one of your properties'
+          });
+          toast({
+            title: 'Duplicate Phone',
+            description: 'This phone number is already used for one of your properties.',
+            variant: 'destructive',
+          });
+          setTimeout(() => {
+            const phoneField = document.querySelector('[name="phone"]') as HTMLElement;
+            phoneField?.focus();
+          }, 100);
+        } else if (rpcError.message.includes('already occupied')) {
+          form.setError('unit_id', {
+            type: 'manual',
+            message: 'This unit is already occupied'
+          });
+          toast({
+            title: 'Unit Occupied',
+            description: 'This unit is already occupied by another tenant.',
+            variant: 'destructive',
+          });
+        } else if (rpcError.message.includes('phone') || rpcError.message.includes('Invalid phone')) {
+          form.setError('phone', {
+            type: 'manual',
+            message: 'Invalid phone format'
+          });
           toast({
             title: 'Invalid Phone Number',
             description: 'Please enter a valid phone number in international format (e.g., +254712345678)',
-            variant: 'destructive',
-          });
-        } else if (rpcError.message.includes('duplicate') || rpcError.message.includes('already exists')) {
-          toast({
-            title: 'Duplicate Tenant',
-            description: 'A tenant with this email or phone number already exists.',
             variant: 'destructive',
           });
         } else {
@@ -252,32 +350,20 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         return;
       }
 
-      const rpcRes = (result ?? {}) as { success?: boolean; tenant?: any; lease?: any; error?: any; code?: any };
+      const rpcRes = (result ?? {}) as { success?: boolean; tenant_id?: string; lease_id?: string };
 
       if (!rpcRes || rpcRes.success === false) {
-        const code = (rpcRes && rpcRes.code) || '';
-        const msg = (rpcRes && rpcRes.error) || 'Failed to create tenant';
-        // Duplicate email
-        if (/23505/.test(String(code)) || /already exists/i.test(String(msg))) {
-          toast({
-            title: 'Duplicate Tenant',
-            description: 'A tenant with this email already exists.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Tenant Creation Failed',
-            description: msg,
-            variant: 'destructive',
-          });
-        }
-        // Failure log (non-blocking)
-        logActivity('tenant_creation_failed', 'tenant', undefined, { error: msg, code }).catch(console.error);
+        toast({
+          title: 'Tenant Creation Failed',
+          description: 'Failed to create tenant. Please try again.',
+          variant: 'destructive',
+        });
+        logActivity('tenant_creation_failed', 'tenant', undefined, { error: 'RPC returned success=false' }).catch(console.error);
         return;
       }
 
-      const leaseCreated = !!rpcRes.lease;
-      const tenantId = rpcRes.tenant?.id || undefined;
+      const leaseCreated = !!rpcRes.lease_id;
+      const tenantId = rpcRes.tenant_id;
 
       // Success activity log (non-blocking)
       logActivity(
@@ -321,7 +407,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         duration: 3000,
       });
 
-      reset();
+      form.reset();
       handleOpenChange(false);
       onTenantAdded();
 
@@ -339,6 +425,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         unit_id: data.unit_id
       }).catch(console.error);
     } finally {
+      clearTimeout(hardTimeout);
       clearTimeout(watchdog);
       setLoading(false);
     }
