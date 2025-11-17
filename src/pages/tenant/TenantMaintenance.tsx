@@ -35,6 +35,7 @@ export default function TenantMaintenance() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case "resolved":
       case "completed":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case "in_progress":
@@ -48,6 +49,7 @@ export default function TenantMaintenance() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "resolved":
       case "completed":
         return "bg-green-100 text-green-800 border-green-200";
       case "in_progress":
@@ -191,18 +193,18 @@ export default function TenantMaintenance() {
                   />
                 </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-full sm:w-40">
                   <SelectValue placeholder="Priority" />
