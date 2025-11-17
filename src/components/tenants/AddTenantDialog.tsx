@@ -230,8 +230,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       let rpcPromise;
       
       if (attachToExisting && existingTenant?.id) {
-        // For existing tenant, just create a new lease
-        rpcPromise = supabase.from("leases").insert({
+        // For existing tenant, just create a new lease and mark unit as occupied
+        const leaseResult = await supabase.from("leases").insert({
           tenant_id: existingTenant.id,
           unit_id: data.unit_id,
           lease_start_date: data.lease_start_date!,
@@ -240,28 +240,46 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           security_deposit: data.security_deposit || null,
           status: 'active',
         }).select();
+
+        if (leaseResult.error) throw leaseResult.error;
+
+        // Mark unit as occupied
+        const { error: unitError } = await supabase
+          .from('units')
+          .update({ status: 'occupied' })
+          .eq('id', data.unit_id);
+
+        if (unitError) console.error('Failed to update unit status:', unitError);
+
+        return leaseResult;
       } else {
-        // For new tenant, use the RPC
-        rpcPromise = supabase.rpc("create_tenant_and_optional_lease", {
+        // For new tenant, use the RPC (aligned with DB function signature)
+        const payload = {
           p_first_name: data.first_name,
           p_last_name: data.last_name,
           p_email: data.email,
-          p_phone: data.phone || null,
+          p_phone: data.phone,
           p_national_id: data.national_id || null,
-          p_profession: data.profession || null,
+          p_date_of_birth: null,
           p_employment_status: data.employment_status || null,
           p_employer_name: data.employer_name || null,
-          p_monthly_income: data.monthly_income || null,
+          p_employer_contact: null,
           p_emergency_contact_name: data.emergency_contact_name || null,
           p_emergency_contact_phone: data.emergency_contact_phone || null,
+          p_emergency_contact_relationship: null,
           p_previous_address: data.previous_address || null,
-          p_property_id: data.property_id || null,
-          p_unit_id: data.unit_id || null,
-          p_lease_start_date: data.lease_start_date || null,
-          p_lease_end_date: data.lease_end_date || null,
-          p_monthly_rent: data.monthly_rent || null,
+          p_previous_landlord_name: null,
+          p_previous_landlord_contact: null,
+          p_unit_id: data.unit_id,
+          p_lease_start_date: data.lease_start_date!,
+          p_lease_end_date: data.lease_end_date!,
+          p_monthly_rent: data.monthly_rent!,
           p_security_deposit: data.security_deposit || null,
-        });
+          p_lease_terms: null
+        };
+
+        console.log('[createTenant] Payload keys:', Object.keys(payload));
+        rpcPromise = supabase.rpc("create_tenant_and_optional_lease", payload);
       }
 
       const result = await Promise.race([rpcPromise, timeoutPromise]);
@@ -275,7 +293,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       // For new tenant creation, check RPC response format
       if (!attachToExisting) {
-        console.log('RPC Response:', rpcData);
+        console.log('[createTenant] RPC Response:', rpcData);
         
         if (!rpcData || (typeof rpcData === 'object' && !rpcData.success)) {
           const errorMsg = rpcData?.error || 'Failed to create tenant';
