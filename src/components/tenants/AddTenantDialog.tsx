@@ -251,7 +251,24 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       const { data: rpcData, error: rpcError } = result as any;
 
-      if (rpcError) throw rpcError;
+      if (rpcError) {
+        console.error('RPC error:', rpcError);
+        throw rpcError;
+      }
+
+      // For new tenant creation, check RPC response format
+      if (!attachToExisting) {
+        if (!rpcData || (typeof rpcData === 'object' && !rpcData.success)) {
+          const errorMsg = rpcData?.error || 'Failed to create tenant';
+          console.error('Tenant creation failed:', errorMsg, rpcData);
+          throw new Error(errorMsg);
+        }
+        
+        if (!rpcData.tenant_id) {
+          console.error('Invalid response - no tenant_id:', rpcData);
+          throw new Error('Failed to create tenant - invalid response');
+        }
+      }
 
       toast({
         title: "Success",
@@ -297,6 +314,16 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
           description: "This phone number is already registered to another tenant",
           variant: "destructive",
         });
+      } else if (errorMessage.toLowerCase().includes("e.164") || errorMessage.toLowerCase().includes("phone must be")) {
+        form.setError("phone", {
+          type: "manual",
+          message: "Phone must be in E.164 format (e.g., +254712345678)",
+        });
+        toast({
+          title: "Invalid Phone Format",
+          description: "Phone must be in E.164 format (e.g., +254712345678)",
+          variant: "destructive",
+        });
       } else if (errorMessage.toLowerCase().includes("national") || errorMessage.toLowerCase().includes("id number")) {
         form.setError("national_id", {
           type: "manual",
@@ -305,6 +332,38 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         toast({
           title: "Duplicate ID",
           description: "This ID number is already registered to another tenant",
+          variant: "destructive",
+        });
+      } else if (errorMessage.toLowerCase().includes("unit is already occupied")) {
+        form.setError("unit_id", {
+          type: "manual",
+          message: "This unit is already occupied",
+        });
+        toast({
+          title: "Unit Occupied",
+          description: "This unit is already occupied. Please select a different unit.",
+          variant: "destructive",
+        });
+      } else if (errorMessage.toLowerCase().includes("unit not found")) {
+        form.setError("unit_id", {
+          type: "manual",
+          message: "Unit not found",
+        });
+        toast({
+          title: "Unit Not Found",
+          description: "The selected unit could not be found.",
+          variant: "destructive",
+        });
+      } else if (errorMessage.toLowerCase().includes("permission") || errorMessage.toLowerCase().includes("do not have permission")) {
+        toast({
+          title: "Permission Denied",
+          description: "You do not have permission to assign this unit.",
+          variant: "destructive",
+        });
+      } else if (errorMessage.toLowerCase().includes("lease") && errorMessage.toLowerCase().includes("required")) {
+        toast({
+          title: "Missing Lease Details",
+          description: errorMessage,
           variant: "destructive",
         });
       } else {
