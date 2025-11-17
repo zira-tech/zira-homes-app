@@ -22,25 +22,60 @@ async function decryptCredential(encrypted: string): Promise<string> {
     throw new Error('Encryption key not configured');
   }
 
-  const [ivHex, encryptedHex] = encrypted.split(':');
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-  const encryptedData = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  // Handle two formats:
+  // 1. New format with IV: "ivHex:encryptedHex"
+  // 2. Legacy format without IV (base64 encoded)
+  
+  if (encrypted.includes(':')) {
+    // New format with IV separator
+    const [ivHex, encryptedHex] = encrypted.split(':');
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encryptedData = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(encryptionKey.padEnd(32).slice(0, 32)),
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(encryptionKey.padEnd(32).slice(0, 32)),
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    encryptedData
-  );
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encryptedData
+    );
 
-  return new TextDecoder().decode(decrypted);
+    return new TextDecoder().decode(decrypted);
+  } else {
+    // Legacy format: assume it's base64 encoded without IV
+    // Generate a zero IV for backward compatibility
+    console.log('⚠️ Using legacy decryption format (no IV separator found)');
+    
+    const iv = new Uint8Array(12); // Zero IV for legacy data
+    const encryptedData = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(encryptionKey.padEnd(32).slice(0, 32)),
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
+
+    try {
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encryptedData
+      );
+
+      return new TextDecoder().decode(decrypted);
+    } catch (error) {
+      console.error('❌ Legacy decryption failed:', error);
+      throw new Error('Unable to decrypt stored credentials. Please re-enter your credentials.');
+    }
+  }
 }
 
 serve(async (req) => {
