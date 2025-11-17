@@ -82,6 +82,37 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
     return null;
   };
 
+  // Mark Safaricom configs as verified after successful test payment
+  const markConfigAsVerified = async () => {
+    try {
+      const { data: activeConfig } = await supabase
+        .from('landlord_mpesa_configs')
+        .select('id, shortcode_type')
+        .eq('landlord_id', landlordId)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      // Only auto-verify Safaricom configs (Kopo Kopo uses OAuth verification)
+      if (activeConfig && activeConfig.shortcode_type !== 'till_kopokopo') {
+        const { error } = await supabase
+          .from('landlord_mpesa_configs')
+          .update({
+            credentials_verified: true,
+            last_verified_at: new Date().toISOString()
+          })
+          .eq('id', activeConfig.id);
+        
+        if (error) {
+          console.error('Error marking config as verified:', error);
+        } else {
+          console.log('✅ Config auto-verified after successful test payment');
+        }
+      }
+    } catch (error) {
+      console.error('Error in markConfigAsVerified:', error);
+    }
+  };
+
   const startStatusPolling = (txnId: string) => {
     let pollCount = 0;
     const maxPolls = 60; // 5 minutes (60 * 5 seconds)
@@ -118,6 +149,10 @@ export function MpesaTestPaymentDialog({ open, onOpenChange, landlordId }: Mpesa
         if (data.result_code === 0 || data.status === 'completed') {
           setStatus('success');
           setReceiptNumber(data.mpesa_receipt_number || null);
+          
+          // Auto-verify Safaricom configs on successful test payment
+          await markConfigAsVerified();
+          
           toast({
             title: "✅ Test Payment Successful!",
             description: `Your M-Pesa configuration is working correctly. Receipt: ${data.mpesa_receipt_number}`,
