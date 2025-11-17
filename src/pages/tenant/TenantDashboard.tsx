@@ -225,7 +225,10 @@ export default function TenantDashboard() {
     differenceInDays(new Date(lease.lease_end_date), new Date()) : null;
   
   const daysUntilRentDue = currentInvoice?.due_date ? 
-    differenceInDays(new Date(currentInvoice.due_date), new Date()) : null;
+    differenceInDays(
+      new Date(new Date(currentInvoice.due_date).setHours(0, 0, 0, 0)),
+      new Date(new Date().setHours(0, 0, 0, 0))
+    ) : null;
 
   const isRentOverdue = currentInvoice && isAfter(new Date(), new Date(currentInvoice.due_date));
 
@@ -351,11 +354,17 @@ export default function TenantDashboard() {
                     <p className="text-sm text-white/90">Due Date</p>
                     <p className="text-lg font-medium text-white">
                       {format(new Date(currentInvoice.due_date), "MMM dd, yyyy")}
-                      {daysUntilRentDue !== null && (
-                        <span className={`ml-2 text-sm ${daysUntilRentDue <= 3 ? 'text-white/90' : 'text-white/75'}`}>
-                          ({daysUntilRentDue > 0 ? `${daysUntilRentDue} days left` : 'Due today'})
-                        </span>
-                      )}
+                {daysUntilRentDue !== null && (
+                  <span className={`ml-2 text-sm ${daysUntilRentDue <= 3 ? 'text-white/90' : 'text-white/75'}`}>
+                    ({
+                      daysUntilRentDue > 1 
+                        ? `${daysUntilRentDue} days left`
+                        : daysUntilRentDue === 1 
+                          ? 'Due tomorrow'
+                          : 'Due today'
+                    })
+                  </span>
+                )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
