@@ -34,6 +34,7 @@ import { format, differenceInDays, isAfter } from "date-fns";
 import { TenantQuickActions } from "@/components/tenant/TenantQuickActions";
 import { useTenantContacts } from "@/hooks/useTenantContacts";
 import { useNavigate } from "react-router-dom";
+import { isInvoicePayable, getInvoiceCardClass } from "@/utils/invoiceStatusUtils";
 
 export default function TenantDashboard() {
   const { user } = useAuth();
@@ -329,7 +330,7 @@ export default function TenantDashboard() {
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-1">
           {/* Current Rent Status */}
           {currentInvoice && (
-            <Card className={`${currentInvoice.status === 'overdue' ? 'card-gradient-red' : currentInvoice.status === 'pending' ? 'card-gradient-orange' : 'card-gradient-green'}`}>
+            <Card className={getInvoiceCardClass(currentInvoice.status)}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <div className="icon-bg-white">
@@ -358,20 +359,20 @@ export default function TenantDashboard() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                      {getStatusIcon(currentInvoice.status)}
-                      {currentInvoice.status.toUpperCase()}
-                    </Badge>
-                    {currentInvoice.status === "pending" && (
-                      <Button 
-                        size="sm" 
-                        variant="secondary"
-                        className="ml-2 bg-white text-primary hover:bg-white/90"
-                        onClick={() => navigate("/tenant/payments")}
-                      >
-                        Pay Now
-                      </Button>
-                    )}
+                  <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
+                    {getStatusIcon(currentInvoice.status)}
+                    {currentInvoice.status.toUpperCase()}
+                  </Badge>
+                  {isInvoicePayable(currentInvoice.status) && (
+                    <Button 
+                      size="sm" 
+                      variant="secondary"
+                      className="ml-2 bg-white text-primary hover:bg-white/90"
+                      onClick={() => navigate("/tenant/payments")}
+                    >
+                      Pay Now
+                    </Button>
+                  )}
                   </div>
                 </div>
               </CardContent>
