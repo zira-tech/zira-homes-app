@@ -1159,6 +1159,16 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                         </AlertDescription>
                       </Alert>
                     );
+                  } else if (mpesaConfigPreference === 'platform_default' && mpesaShortcode) {
+                    return (
+                      <Alert className="bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertTitle>Tenant Payment Status: Active</AlertTitle>
+                        <AlertDescription>
+                          Tenants can pay using: <strong>Paybill {mpesaShortcode}</strong> (Platform Defaults)
+                        </AlertDescription>
+                      </Alert>
+                    );
                   } else if (activeUnverifiedConfig) {
                     return (
                       <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800">
