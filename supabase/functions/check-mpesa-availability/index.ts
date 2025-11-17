@@ -195,6 +195,13 @@ Deno.serve(async (req) => {
         console.log(`✅ M-Pesa available via custom Paybill: ${config.paybill_number}`);
       }
 
+      return new Response(
+        JSON.stringify(response),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
     // Step 4b: Check if landlord uses platform defaults
@@ -273,14 +280,6 @@ Deno.serve(async (req) => {
         error: 'M-Pesa not configured',
         details: 'The landlord has not set up M-Pesa payments yet' 
       }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-
-    return new Response(
-      JSON.stringify(response),
       { 
         status: 200, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
