@@ -64,7 +64,7 @@ interface TenantPaymentsRpcResult {
 export default function TenantPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isChecking, checkAvailability } = useMpesaAvailability();
+  const { isChecking, checkAvailability, lastErrorType, lastErrorDetails, lastCheck } = useMpesaAvailability();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -444,11 +444,87 @@ export default function TenantPayments() {
   };
 
   const handleMpesaPayment = async (invoice: any) => {
+    console.log('💳 [M-Pesa Payment] Button clicked for invoice:', {
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      amount: invoice.amount,
+      tenant_id: invoice.tenant_id
+    });
+    
     // Check M-Pesa availability before opening the dialog
     const isAvailable = await checkAvailability(invoice.id);
-    if (isAvailable) {
+    
+    console.log('💳 [M-Pesa Payment] Availability check result:', {
+      isAvailable,
+      lastErrorType,
+      lastErrorDetails,
+      lastCheck
+    });
+    
+    // Debug bypass flag
+    const debugBypass = import.meta.env.VITE_MPESA_DEBUG_BYPASS_CHECK === 'true';
+    
+    if (isAvailable || debugBypass) {
+      if (debugBypass && !isAvailable) {
+        console.warn('⚠️ [M-Pesa Payment] Debug bypass enabled - opening dialog despite availability check failure');
+        toast({
+          title: "Debug Mode Active",
+          description: "M-Pesa dialog opened in diagnostic mode. Check console for details.",
+          variant: "default",
+        });
+      }
+      
+      console.log('✅ [M-Pesa Payment] Opening payment dialog');
       setSelectedInvoice(invoice);
       setMpesaDialogOpen(true);
+    } else {
+      console.error('❌ [M-Pesa Payment] Cannot open dialog - availability check failed');
+      
+      // Show detailed error message based on diagnostics
+      let errorTitle = "M-Pesa Payment Unavailable";
+      let errorMessage = "M-Pesa payments are not available for this invoice.";
+      
+      if (lastErrorType) {
+        switch (lastErrorType) {
+          case 'config_check_failed':
+            errorTitle = "Configuration Issue";
+            errorMessage = lastErrorDetails?.includes('RLS') || lastErrorDetails?.includes('permission')
+              ? "Unable to verify M-Pesa configuration due to permission restrictions. Please try logging out and back in."
+              : "No active M-Pesa configuration found for this property. Please contact your landlord.";
+            break;
+          case 'landlord_not_found':
+            errorTitle = "Property Configuration Issue";
+            errorMessage = "Property owner information is missing. Please contact support.";
+            break;
+          case 'network_error':
+            errorTitle = "Network Error";
+            errorMessage = "Please check your internet connection and try again.";
+            break;
+          default:
+            errorMessage = lastErrorDetails || "Please contact your landlord to enable M-Pesa payments.";
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+        duration: 7000,
+      });
+      
+      // Debug UI - show detailed diagnostics
+      if (import.meta.env.VITE_MPESA_DEBUG_UI === 'true' && lastCheck) {
+        console.table({
+          'Invoice ID': lastCheck.invoiceId,
+          'Lease ID': lastCheck.leaseId || 'N/A',
+          'Unit ID': lastCheck.unitId || 'N/A',
+          'Property ID': lastCheck.propertyId || 'N/A',
+          'Landlord ID': lastCheck.landlordId || 'N/A',
+          'Has Custom Config': lastCheck.hasCustomConfig ? 'Yes' : 'No',
+          'Uses Platform Default': lastCheck.usesPlatformDefault ? 'Yes' : 'No',
+          'Failed At Step': lastCheck.step || 'Unknown'
+        });
+      }
     }
   };
 
