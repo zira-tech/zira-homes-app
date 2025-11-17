@@ -69,11 +69,12 @@ serve(async (req) => {
 
     // Extract token explicitly
     const token = authHeader.replace('Bearer ', '').trim();
-    console.log('✅ Authorization token extracted:', token.substring(0, 20) + '...');
+  console.log('✅ Authorization token extracted:', token.substring(0, 20) + '...');
 
-    // Create user-scoped client and pass token explicitly to getUser
-    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser(token);
+  // Create user-scoped client and pass token explicitly to getUser
+  const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey);
+  console.log('🔐 Validating user token with Supabase Auth...');
+  const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser(token);
     
     if (authError || !user) {
       console.error('❌ AUTH FAIL: Token validation failed', {
@@ -130,9 +131,19 @@ serve(async (req) => {
     });
 
   const requestBody = await req.json();
+  console.log('📦 REQUEST BODY:', JSON.stringify(requestBody, null, 2));
   
   // Input validation with enhanced security
   const { phone, amount, accountReference, transactionDesc, invoiceId, paymentType, landlordId, dryRun } = requestBody;
+  
+  console.log('📋 Parsed request parameters:', {
+    hasPhone: !!phone,
+    amount,
+    paymentType,
+    invoiceId,
+    landlordId,
+    dryRun
+  });
 
   // Rate limiting check (basic implementation)
   const rateLimitKey = `mpesa_stk_${user.id}`;
@@ -228,7 +239,13 @@ serve(async (req) => {
     let shouldProcessDryRun = dryRun;
 
     // Authorization checks based on payment type
-    console.log('🔐 Starting authorization checks for paymentType:', paymentType, 'invoiceId:', invoiceId);
+    console.log('🔐 AUTHORIZATION CHECK START:', {
+      paymentType,
+      invoiceId,
+      userId: user.id,
+      userEmail: user.email,
+      providedLandlordId: landlordId
+    });
     let authorized = false;
     let landlordConfigId = landlordId;
 
@@ -243,6 +260,7 @@ serve(async (req) => {
 
       if (isAdmin) {
         authorized = true;
+        console.log('✅ Authorization: Admin user');
       } else if (invoiceId) {
         // Check if user is the landlord for this service charge invoice
         const { data: serviceInvoice } = await supabase
@@ -255,12 +273,14 @@ serve(async (req) => {
         if (serviceInvoice) {
           authorized = true;
           landlordConfigId = serviceInvoice.landlord_id;
+          console.log('✅ Authorization: Service charge invoice owner');
         }
       }
     } else if (paymentType === 'subscription') {
       // Subscription payment: Any authenticated user can pay for their own subscription
       authorized = true;
       landlordConfigId = user.id;
+      console.log('✅ Authorization: Subscription payment (self)');
     } else if (paymentType === 'sms_bundle') {
       // SMS bundle purchase: Only landlords and admins can purchase SMS credits
       const { data: userRoles } = await supabase
@@ -274,6 +294,7 @@ serve(async (req) => {
       if (isAdmin || isLandlord) {
         authorized = true;
         landlordConfigId = user.id;
+        console.log('✅ Authorization: SMS bundle purchase (Admin/Landlord)');
       }
     } else if (paymentType === 'test') {
       // Test configuration: Allow landlords to test their own M-Pesa setup
@@ -287,6 +308,7 @@ serve(async (req) => {
       }
     } else {
       // Rent payment: Check if user is tenant for this invoice OR property owner/manager OR admin
+      console.log('🔍 Checking rent payment authorization for invoiceId:', invoiceId);
       if (invoiceId) {
         const { data: invoiceAuth, error: invoiceError } = await supabaseAdmin
           .from('invoices')
@@ -304,6 +326,14 @@ serve(async (req) => {
           `)
           .eq('id', invoiceId)
           .single();
+        
+        console.log('📋 Invoice authorization data:', {
+          found: !!invoiceAuth,
+          error: invoiceError?.message,
+          tenantUserId: invoiceAuth?.tenants?.user_id,
+          ownerId: invoiceAuth?.leases?.units?.properties?.owner_id,
+          currentUserId: user.id
+        });
 
         console.log('📋 Invoice authorization query result:', {
           found: !!invoiceAuth,
@@ -345,16 +375,32 @@ serve(async (req) => {
           const isTenant = invoiceAuth.tenants.user_id === user.id;
           const isOwner = invoiceAuth.leases.units.properties.owner_id === user.id;
           const isManager = invoiceAuth.leases.units.properties.manager_id === user.id;
+          
+          console.log('🔍 Authorization role check:', {
+            isTenant,
+            isOwner,
+            isManager,
+            tenantUserId: invoiceAuth.tenants.user_id,
+            ownerId: invoiceAuth.leases.units.properties.owner_id
+          });
 
           const { data: userRoles } = await supabaseAdmin
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id);
           const isAdmin = userRoles?.some(r => r.role === 'Admin');
+          
+          console.log('🔍 Admin check:', { isAdmin, roles: userRoles?.map(r => r.role) });
 
           if (isTenant || isOwner || isManager || isAdmin) {
             authorized = true;
             landlordConfigId = invoiceAuth.leases.units.properties.owner_id;
+            console.log('✅ Authorization SUCCESS:', { 
+              reason: isTenant ? 'tenant' : isOwner ? 'owner' : isManager ? 'manager' : 'admin',
+              landlordConfigId
+            });
+          } else {
+            console.log('❌ Authorization FAILED: User is not tenant, owner, manager, or admin');
           }
         }
       }
@@ -415,23 +461,41 @@ serve(async (req) => {
     let mpesaConfig = null;
     let mpesaConfigPreference = 'platform_default';
 
+    console.log('🔍 FETCHING M-PESA CONFIG for landlordId:', landlordConfigId);
+    
     if (landlordConfigId) {
       // Step 1: Check for active custom config first (robust approach)
-      const { data: config } = await supabaseAdmin
+      const { data: config, error: configError } = await supabaseAdmin
         .from('landlord_mpesa_configs')
         .select('*')
         .eq('landlord_id', landlordConfigId)
         .eq('is_active', true)
         .maybeSingle();
 
+      console.log('📊 M-PESA CONFIG QUERY RESULT:', {
+        found: !!config,
+        error: configError?.message,
+        configId: config?.id,
+        shortcode: config?.business_shortcode,
+        verified: config?.credentials_verified
+      });
+
       mpesaConfig = config;
 
       if (mpesaConfig) {
-        console.log('✅ Found active landlord M-Pesa config:', {
+        console.log('✅ LANDLORD M-PESA CONFIG FOUND:', {
           landlordId: landlordConfigId,
+          configId: mpesaConfig.id,
           shortcode: mpesaConfig.business_shortcode,
           shortcode_type: mpesaConfig.shortcode_type,
-          environment: mpesaConfig.environment
+          environment: mpesaConfig.environment,
+          credentials_verified: mpesaConfig.credentials_verified,
+          till_provider: mpesaConfig.till_provider,
+          has_consumer_key: !!mpesaConfig.consumer_key_encrypted,
+          has_consumer_secret: !!mpesaConfig.consumer_secret_encrypted,
+          has_passkey: !!mpesaConfig.passkey_encrypted,
+          has_kopokopo_client_id: !!mpesaConfig.kopokopo_client_id,
+          has_kopokopo_client_secret: !!mpesaConfig.kopokopo_client_secret_encrypted
         });
 
         // Step 2: Check preference setting
@@ -476,6 +540,7 @@ serve(async (req) => {
 
     // Helper function to decrypt credentials
     async function decryptCredential(encrypted: string, keyBase64: string): Promise<string> {
+      console.log('🔓 Attempting to decrypt credential...');
       try {
         // Decode the base64 encryption key (SAME AS ENCRYPTION)
         const keyData = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0));
@@ -499,9 +564,11 @@ serve(async (req) => {
           ciphertext
         );
 
-        return new TextDecoder().decode(decrypted);
+        const decryptedValue = new TextDecoder().decode(decrypted);
+        console.log('✅ Decryption successful');
+        return decryptedValue;
       } catch (e) {
-        console.error('Decryption error:', e);
+        console.error('❌ Decryption error:', e);
         throw new Error('Failed to decrypt credential');
       }
     }
@@ -511,9 +578,13 @@ serve(async (req) => {
     let kopokopoClientId: string | undefined, kopokopoClientSecret: string | undefined, tillNumber: string | undefined;
     let paymentProvider = 'mpesa'; // 'mpesa' or 'kopokopo'
     
+    console.log('🔐 Starting credential resolution process...');
+    
     // Normalize environment to handle case variations (PRODUCTION, production, prod, etc.)
     const rawEnv = mpesaConfig?.environment || Deno.env.get('MPESA_ENVIRONMENT') || 'sandbox';
     const environment = String(rawEnv).toLowerCase().includes('prod') ? 'production' : 'sandbox';
+    
+    console.log('🌍 Environment normalized:', { rawEnv, environment });
     
     if (mpesaConfig) {
       // Check payment provider type
@@ -526,9 +597,9 @@ serve(async (req) => {
       const encryptionKey = Deno.env.get('MPESA_ENCRYPTION_KEY');
       
       if (!encryptionKey) {
-        console.error('❌ MPESA_ENCRYPTION_KEY not configured');
+        console.error('❌ MPESA_ENCRYPTION_KEY not configured in environment');
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: 'Server encryption configuration missing',
             errorId: 'MPESA_ENCRYPTION_CONFIG_MISSING'
           }),
@@ -1282,6 +1353,12 @@ serve(async (req) => {
 
     console.log('🔑 Fetching M-Pesa OAuth token...');
     console.log('🌍 M-Pesa environment (normalized):', environment);
+    console.log('🔐 Credentials check:', {
+      hasConsumerKey: !!consumerKey,
+      hasConsumerSecret: !!consumerSecret,
+      consumerKeyLength: consumerKey?.length,
+      consumerSecretLength: consumerSecret?.length
+    });
     
     // Get OAuth token
     const authUrl = environment === 'production' 
@@ -1299,10 +1376,21 @@ serve(async (req) => {
 
     const authData = await authResponse.json();
     
+    console.log('📊 M-Pesa OAuth response:', {
+      status: authResponse.status,
+      ok: authResponse.ok,
+      hasAccessToken: !!authData.access_token,
+      tokenLength: authData.access_token?.length
+    });
+    
     if (!authResponse.ok || !authData.access_token) {
-      console.error('Failed to get M-Pesa token:', {
+      console.error('❌ M-Pesa OAuth failed:', {
         status: authResponse.status,
-        data: authData
+        statusText: authResponse.statusText,
+        data: authData,
+        environment,
+        authUrl,
+        landlordId: landlordConfigId
       });
       return new Response(
         JSON.stringify({ 
@@ -1319,10 +1407,18 @@ serve(async (req) => {
         }
       );
     }
+    
+    console.log('✅ M-Pesa OAuth token obtained successfully');
 
     // Generate timestamp and password
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3)
     const password = btoa(`${shortcode}${passkey}${timestamp}`)
+    
+    console.log('🔐 Generated STK credentials:', {
+      timestamp,
+      shortcode,
+      hasPassword: !!password
+    });
 
     // Format phone number
     let phoneNumber = phone.toString().replace(/\D/g, '')
@@ -1331,21 +1427,27 @@ serve(async (req) => {
     } else if (!phoneNumber.startsWith('254')) {
       phoneNumber = '254' + phoneNumber
     }
+    
+    console.log('📞 Phone number formatted:', phoneNumber);
 
     // STK Push request
     const stkUrl = environment === 'production'
       ? 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
       : 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
     
-    console.log('🔗 STK URL:', stkUrl);
+    console.log('🔗 STK Push URL:', stkUrl);
 
     // Use custom callback URL if provided in config
     const callbackUrl = mpesaConfig?.callback_url || `${Deno.env.get('SUPABASE_URL')}/functions/v1/mpesa-callback`;
+    
+    console.log('📞 Callback URL:', callbackUrl);
 
     // Determine transaction type based on shortcode type
     const transactionType = (mpesaConfig?.shortcode_type === 'till_safaricom' || mpesaConfig?.shortcode_type === 'till') 
       ? 'CustomerBuyGoodsOnline' 
       : 'CustomerPayBillOnline';
+      
+    console.log('💳 Transaction type:', transactionType);
 
     const stkPayload = {
       BusinessShortCode: shortcode,
@@ -1361,8 +1463,8 @@ serve(async (req) => {
       TransactionDesc: transactionDesc || (paymentType === 'service-charge' ? 'Zira Homes Service Charge' : 'Payment for ' + (accountReference || `INV-${invoiceId}`))
     }
 
-    console.log('STK Push payload:', JSON.stringify(stkPayload, null, 2))
-    console.log('📱 Sending STK push request to Safaricom API...');
+    console.log('📤 STK Push payload:', JSON.stringify(stkPayload, null, 2));
+    console.log('🚀 Sending STK push request to Safaricom API...');
 
     const stkResponse = await fetch(stkUrl, {
       method: 'POST',
@@ -1373,10 +1475,22 @@ serve(async (req) => {
       body: JSON.stringify(stkPayload)
     })
 
-    const stkData = await stkResponse.json()
-    console.log('STK Push response:', JSON.stringify(stkData, null, 2))
+    const stkData = await stkResponse.json();
+    
+    console.log('📥 STK Push response received:', {
+      status: stkResponse.status,
+      ok: stkResponse.ok,
+      ResponseCode: stkData.ResponseCode,
+      ResponseDescription: stkData.ResponseDescription,
+      CheckoutRequestID: stkData.CheckoutRequestID,
+      MerchantRequestID: stkData.MerchantRequestID,
+      CustomerMessage: stkData.CustomerMessage
+    });
+    console.log('📦 Full STK response:', JSON.stringify(stkData, null, 2));
 
     if (stkData.ResponseCode === '0') {
+      console.log('✅ STK push successful - creating transaction record');
+      
       // Store the transaction in database with security tracking
       const transactionData = {
         checkout_request_id: stkData.CheckoutRequestID,
@@ -1390,6 +1504,13 @@ serve(async (req) => {
         authorized_by: user.id,
         provider: 'mpesa'
       }
+      
+      console.log('💾 Preparing transaction record:', {
+        checkout_request_id: transactionData.checkout_request_id,
+        amount: transactionData.amount,
+        payment_type: transactionData.payment_type,
+        initiated_by: transactionData.initiated_by
+      });
 
       // Only add invoice_id if it's a valid UUID (for rent payments)
       if (invoiceId && paymentType !== 'service-charge') {
@@ -1497,16 +1618,27 @@ serve(async (req) => {
         .insert(transactionData)
 
       if (dbError) {
-        console.error('Database transaction insertion error:', {
+        console.error('❌ DATABASE ERROR: Failed to insert transaction:', {
           error: dbError,
           errorMessage: dbError?.message,
           errorDetails: dbError?.details,
-          transactionData
+          errorCode: dbError?.code,
+          transactionData: {
+            checkout_request_id: transactionData.checkout_request_id,
+            amount: transactionData.amount,
+            payment_type: transactionData.payment_type
+          }
         });
       } else {
-        console.log('M-Pesa transaction record created successfully:', transactionData.checkout_request_id);
+        console.log('✅ Transaction record created successfully:', {
+          checkout_request_id: transactionData.checkout_request_id,
+          amount: transactionData.amount,
+          payment_type: transactionData.payment_type
+        });
       }
 
+      console.log('🎉 STK PUSH COMPLETED SUCCESSFULLY - Returning success response');
+      
       return new Response(
         JSON.stringify({
           success: true,
@@ -1527,7 +1659,13 @@ serve(async (req) => {
         }
       )
     } else {
-      console.error('STK Push failed:', stkData);
+      console.error('❌ STK PUSH FAILED:', {
+        ResponseCode: stkData.ResponseCode,
+        ResponseDescription: stkData.ResponseDescription,
+        errorCode: stkData.errorCode,
+        errorMessage: stkData.errorMessage,
+        fullResponse: stkData
+      });
       
       // Map specific error codes to errorIds
       let errorId = 'MPESA_STK_FAILED';
@@ -1550,7 +1688,11 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('Error in STK push:', error)
+    console.error('❌ CRITICAL ERROR in mpesa-stk-push:', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    });
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : '';
     return new Response(
