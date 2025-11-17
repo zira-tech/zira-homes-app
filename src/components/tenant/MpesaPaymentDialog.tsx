@@ -43,8 +43,16 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
   // Get landlord M-Pesa config info when dialog opens
   useEffect(() => {
     if (open && invoice?.id) {
+      console.log('💳 [M-Pesa Dialog] Opened for invoice:', {
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        amount: invoice.amount,
+        tenant_id: invoice.tenant_id
+      });
+      
       const checkLandlordConfig = async () => {
         try {
+          console.log('🔍 [M-Pesa Dialog] Probing landlord config with dryRun...');
           const { data } = await supabase.functions.invoke('mpesa-stk-push', {
             body: {
               phone: '254700000000',
@@ -55,19 +63,25 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
             }
           });
           
+          console.log('📋 [M-Pesa Dialog] DryRun response:', data);
+          
           const provider = data?.data?.Provider ?? data?.Provider;
           const till = data?.data?.TillNumber ?? data?.TillNumber ?? data?.data?.BusinessShortCode;
           const txType = data?.data?.TransactionType;
           
           if (provider === 'kopokopo' && till) {
+            console.log('✅ [M-Pesa Dialog] Kopo Kopo config detected:', { till, txType });
             setLandlordShortcode(till);
             setLandlordTransactionType('CustomerBuyGoodsOnline');
           } else if (data?.data?.BusinessShortCode) {
+            console.log('✅ [M-Pesa Dialog] Paybill/Till config detected:', { shortcode: data.data.BusinessShortCode, txType });
             setLandlordShortcode(data.data.BusinessShortCode);
             setLandlordTransactionType(txType);
+          } else {
+            console.warn('⚠️ [M-Pesa Dialog] Could not determine landlord shortcode from response');
           }
         } catch (error) {
-          console.log('Could not determine landlord shortcode');
+          console.error('❌ [M-Pesa Dialog] Error during config probe:', error);
         }
       };
       
@@ -208,7 +222,10 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('📤 [M-Pesa Dialog] Payment submission started');
+    
     if (!invoice) {
+      console.warn('⚠️ [M-Pesa Dialog] Invoice information missing');
       toast({
         title: "Error",
         description: "Invoice information is missing",
@@ -218,6 +235,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
     }
     
     if (!phoneNumber.trim()) {
+      console.warn('⚠️ [M-Pesa Dialog] Phone number missing');
       toast({
         title: "Error",
         description: "Please enter your phone number",
@@ -229,6 +247,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
     // Validate phone number format
     const cleanPhone = phoneNumber.replace(/\D/g, '');
     if (cleanPhone.length < 9) {
+      console.warn('⚠️ [M-Pesa Dialog] Invalid phone number:', cleanPhone);
       toast({
         title: "Invalid phone number",
         description: "Please enter a valid Kenyan phone number",
@@ -237,6 +256,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       return;
     }
 
+    console.log('✅ [M-Pesa Dialog] Validation passed, initiating STK push');
     setStatus('sending');
     setStatusMessage('Initiating payment request...');
     setLoading(true);
@@ -246,6 +266,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
+        console.error('❌ [M-Pesa Dialog] Session expired or invalid');
         toast({
           title: "Session Expired",
           description: "Your session has expired. Please log in again.",
@@ -261,9 +282,10 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       const expiresAt = session.expires_at;
       const now = Math.floor(Date.now() / 1000);
       if (expiresAt && (expiresAt - now) < 300) {
-        console.log('🔄 Refreshing session before M-Pesa payment...');
+        console.log('🔄 [M-Pesa Dialog] Refreshing session before payment...');
         const { error: refreshError } = await supabase.auth.refreshSession();
         if (refreshError) {
+          console.error('❌ [M-Pesa Dialog] Session refresh failed:', refreshError);
           toast({
             title: "Session Refresh Failed",
             description: "Failed to refresh session. Please log in again.",
@@ -274,21 +296,29 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
           setLoading(false);
           return;
         }
+        console.log('✅ [M-Pesa Dialog] Session refreshed successfully');
       }
       
+      const payload = {
+        phone: phoneNumber,
+        amount: invoice.amount,
+        accountReference: invoice.invoice_number,
+        transactionDesc: `Rent payment for ${invoice.invoice_number}`,
+        invoiceId: invoice.id,
+        paymentType: 'rent'
+      };
+      
+      console.log('📤 [M-Pesa Dialog] Sending STK push payload:', {
+        ...payload,
+        phone: payload.phone.substring(0, 6) + '****' // Mask phone number in logs
+      });
+      
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
-        body: {
-          phone: phoneNumber,
-          amount: invoice.amount,
-          accountReference: invoice.invoice_number,
-          transactionDesc: `Rent payment for ${invoice.invoice_number}`,
-          invoiceId: invoice.id,
-          paymentType: 'rent'
-        }
+        body: payload
       });
 
       if (error) {
-        console.error('STK push error - FULL ERROR OBJECT:', JSON.stringify(error, null, 2));
+        console.error('❌ [M-Pesa Dialog] STK push error:', JSON.stringify(error, null, 2));
         
         const mpesaError = parseMpesaError(error);
         
@@ -308,7 +338,13 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
         return;
       }
       
+      console.log('📨 [M-Pesa Dialog] STK push response received:', {
+        hasCheckoutRequestID: !!data?.CheckoutRequestID,
+        success: data?.success
+      });
+      
       if (data?.CheckoutRequestID) {
+        console.log('✅ [M-Pesa Dialog] Payment request sent, CheckoutRequestID:', data.CheckoutRequestID);
         setCheckoutRequestId(data.CheckoutRequestID);
         setStatus('sent');
         setStatusMessage('Check your phone for the M-Pesa prompt and enter your PIN');
