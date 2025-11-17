@@ -4128,6 +4128,18 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number }
         Returns: Json
       }
+      attach_lease_and_occupy_unit: {
+        Args: {
+          p_lease_end_date: string
+          p_lease_start_date: string
+          p_lease_terms?: string
+          p_monthly_rent: number
+          p_security_deposit?: number
+          p_tenant_id: string
+          p_unit_id: string
+        }
+        Returns: Json
+      }
       audit_security_exposure: { Args: never; Returns: string }
       backfill_trial_periods: {
         Args: {

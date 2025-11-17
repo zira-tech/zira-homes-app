@@ -230,28 +230,16 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       let rpcPromise;
       
       if (attachToExisting && existingTenant?.id) {
-        // For existing tenant, just create a new lease and mark unit as occupied
-        const leaseResult = await supabase.from("leases").insert({
-          tenant_id: existingTenant.id,
-          unit_id: data.unit_id,
-          lease_start_date: data.lease_start_date!,
-          lease_end_date: data.lease_end_date!,
-          monthly_rent: data.monthly_rent!,
-          security_deposit: data.security_deposit || null,
-          status: 'active',
-        }).select();
-
-        if (leaseResult.error) throw leaseResult.error;
-
-        // Mark unit as occupied
-        const { error: unitError } = await supabase
-          .from('units')
-          .update({ status: 'occupied' })
-          .eq('id', data.unit_id);
-
-        if (unitError) console.error('Failed to update unit status:', unitError);
-
-        return leaseResult;
+        // For existing tenant, use RPC to attach lease
+        rpcPromise = supabase.rpc('attach_lease_and_occupy_unit', {
+          p_tenant_id: existingTenant.id,
+          p_unit_id: data.unit_id,
+          p_lease_start_date: data.lease_start_date!,
+          p_lease_end_date: data.lease_end_date!,
+          p_monthly_rent: data.monthly_rent!,
+          p_security_deposit: data.security_deposit || null,
+          p_lease_terms: null
+        });
       } else {
         // For new tenant, use the RPC (aligned with DB function signature)
         const payload = {
@@ -291,42 +279,41 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
         throw rpcError;
       }
 
-      // For new tenant creation, check RPC response format
-      if (!attachToExisting) {
-        console.log('[createTenant] RPC Response:', rpcData);
+      console.log('[createTenant] RPC Response:', rpcData);
+      
+      // Check RPC response format (works for both new tenant and attach existing)
+      if (!rpcData || (typeof rpcData === 'object' && !rpcData.success)) {
+        const errorMsg = rpcData?.error || (attachToExisting ? 'Failed to attach lease' : 'Failed to create tenant');
+        console.error(attachToExisting ? 'Lease attachment failed:' : 'Tenant creation failed:', errorMsg, rpcData);
         
-        if (!rpcData || (typeof rpcData === 'object' && !rpcData.success)) {
-          const errorMsg = rpcData?.error || 'Failed to create tenant';
-          console.error('Tenant creation failed:', errorMsg, rpcData);
-          
-          // Set specific form errors based on error message
-          if (errorMsg.toLowerCase().includes('phone')) {
-            form.setError('phone', { message: 'Phone number must be in E.164 format (e.g., +254712345678)' });
-          } else if (errorMsg.toLowerCase().includes('email')) {
-            form.setError('email', { message: errorMsg });
-          } else if (errorMsg.toLowerCase().includes('national id')) {
-            form.setError('national_id', { message: errorMsg });
-          } else if (errorMsg.toLowerCase().includes('unit')) {
-            form.setError('unit_id', { message: errorMsg });
-          }
-          
-          toast({
-            title: "Error",
-            description: errorMsg,
-            variant: "destructive",
-          });
-          throw new Error(errorMsg);
+        // Set specific form errors based on error message
+        if (errorMsg.toLowerCase().includes('phone')) {
+          form.setError('phone', { message: 'Phone number must be in E.164 format (e.g., +254712345678)' });
+        } else if (errorMsg.toLowerCase().includes('email')) {
+          form.setError('email', { message: errorMsg });
+        } else if (errorMsg.toLowerCase().includes('national id')) {
+          form.setError('national_id', { message: errorMsg });
+        } else if (errorMsg.toLowerCase().includes('unit')) {
+          form.setError('unit_id', { message: errorMsg });
         }
         
-        if (!rpcData.tenant_id) {
-          console.error('Invalid response - no tenant_id:', rpcData);
-          toast({
-            title: "Error",
-            description: "Failed to create tenant - invalid response from server",
-            variant: "destructive",
-          });
-          throw new Error('Failed to create tenant - invalid response');
-        }
+        toast({
+          title: "Error",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        throw new Error(errorMsg);
+      }
+      
+      // For new tenant creation, verify tenant_id exists
+      if (!attachToExisting && !rpcData.tenant_id) {
+        console.error('Invalid response - no tenant_id:', rpcData);
+        toast({
+          title: "Error",
+          description: "Failed to create tenant - invalid response from server",
+          variant: "destructive",
+        });
+        throw new Error('Failed to create tenant - invalid response');
       }
 
       toast({
