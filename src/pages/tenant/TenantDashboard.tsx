@@ -424,7 +424,7 @@ export default function TenantDashboard() {
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-white/90 truncate">Open Requests</p>
-                  <p className="text-sm sm:text-lg font-bold text-white">{maintenanceRequests.filter(r => r.status !== 'completed').length}</p>
+                  <p className="text-sm sm:text-lg font-bold text-white">{maintenanceRequests.filter(r => r.status !== 'completed' && r.status !== 'resolved').length}</p>
                 </div>
                 <div className="icon-bg-white flex-shrink-0 ml-1">
                   <Wrench className="h-4 w-4 sm:h-5 sm:w-5" />
