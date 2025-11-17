@@ -4804,6 +4804,10 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      tenant_belongs_to_user_safe: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
       tenant_has_lease_on_property: {
         Args: { _property_id: string; _user_id: string }
         Returns: boolean
