@@ -4240,29 +4240,56 @@ export type Database = {
         }
         Returns: Json
       }
-      create_tenant_and_optional_lease: {
-        Args: {
-          p_email: string
-          p_emergency_contact_name?: string
-          p_emergency_contact_phone?: string
-          p_employer_name?: string
-          p_employment_status?: string
-          p_first_name: string
-          p_last_name: string
-          p_lease_end_date?: string
-          p_lease_start_date?: string
-          p_monthly_income?: number
-          p_monthly_rent?: number
-          p_national_id?: string
-          p_phone?: string
-          p_previous_address?: string
-          p_profession?: string
-          p_property_id?: string
-          p_security_deposit?: number
-          p_unit_id?: string
-        }
-        Returns: Json
-      }
+      create_tenant_and_optional_lease:
+        | {
+            Args: {
+              p_date_of_birth?: string
+              p_email: string
+              p_emergency_contact_name?: string
+              p_emergency_contact_phone?: string
+              p_emergency_contact_relationship?: string
+              p_employer_contact?: string
+              p_employer_name?: string
+              p_employment_status?: string
+              p_first_name: string
+              p_last_name: string
+              p_lease_end_date?: string
+              p_lease_start_date?: string
+              p_lease_terms?: string
+              p_monthly_rent?: number
+              p_national_id?: string
+              p_phone: string
+              p_previous_address?: string
+              p_previous_landlord_contact?: string
+              p_previous_landlord_name?: string
+              p_security_deposit?: number
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_email: string
+              p_emergency_contact_name?: string
+              p_emergency_contact_phone?: string
+              p_employer_name?: string
+              p_employment_status?: string
+              p_first_name: string
+              p_last_name: string
+              p_lease_end_date?: string
+              p_lease_start_date?: string
+              p_monthly_income?: number
+              p_monthly_rent?: number
+              p_national_id?: string
+              p_phone?: string
+              p_previous_address?: string
+              p_profession?: string
+              p_property_id?: string
+              p_security_deposit?: number
+              p_unit_id?: string
+            }
+            Returns: Json
+          }
       create_tenant_with_encryption: {
         Args: {
           p1: string
