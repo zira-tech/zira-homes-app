@@ -23,6 +23,7 @@ interface MpesaAvailabilityResult {
   lastErrorDetails: string | null;
   lastCheck: MpesaCheckDiagnostics | null;
   lastCheckTimestamp: string | null;
+  configSource?: 'custom' | 'platform';
 }
 
 type MpesaCheckError = 
@@ -62,6 +63,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
   const [lastErrorDetails, setLastErrorDetails] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<MpesaCheckDiagnostics | null>(null);
   const [lastCheckTimestamp, setLastCheckTimestamp] = useState<string | null>(null);
+  const [configSource, setConfigSource] = useState<'custom' | 'platform' | undefined>(undefined);
 
   const handleError = (errorType: MpesaCheckError, details?: string, diagnosticData?: MpesaCheckDiagnostics) => {
     const timestamp = new Date().toISOString();
@@ -155,23 +157,27 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
 
       // M-Pesa is available!
       console.log('✅ M-Pesa is available!');
+      console.log(`   Source: ${data.source || 'custom'}`);
       console.log(`   Provider: ${data.provider}`);
       console.log(`   Type: ${data.configType}`);
       if (data.tillNumber) console.log(`   Till: ${data.tillNumber}`);
       if (data.paybillNumber) console.log(`   Paybill: ${data.paybillNumber}`);
 
       diagnostics.step = 'complete';
-      diagnostics.hasCustomConfig = true;
+      diagnostics.hasCustomConfig = data.source === 'custom';
+      diagnostics.usesPlatformDefault = data.source === 'platform';
       setLastCheck(diagnostics);
       setIsAvailable(true);
       setError(null);
       setLastErrorType(null);
       setLastCheckTimestamp(timestamp);
+      setConfigSource(data.source);
 
       logger.info('M-Pesa availability check successful (backend)', {
         invoiceId,
         provider: data.provider,
-        configType: data.configType
+        configType: data.configType,
+        source: data.source
       });
 
       return true;
@@ -223,5 +229,6 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
     lastErrorDetails,
     lastCheck,
     lastCheckTimestamp,
+    configSource,
   };
 }
