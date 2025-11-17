@@ -76,6 +76,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
+  const [unitTypeFilter, setUnitTypeFilter] = useState<string>("all");
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [existingTenant, setExistingTenant] = useState<any>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -141,7 +142,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
   const fetchUnits = async (propertyId: string) => {
     const { data, error } = await supabase
       .from("units")
-      .select("id, unit_number, status, rent_amount, security_deposit")
+      .select("id, unit_number, status, rent_amount, security_deposit, unit_type, bedrooms")
       .eq("property_id", propertyId)
       .eq("status", "vacant")
       .order("unit_number");
@@ -150,7 +151,16 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       toast({ title: "Error", description: "Failed to fetch units", variant: "destructive" });
     } else {
       setUnits(data || []);
+      setUnitTypeFilter("all");
     }
+  };
+
+  const formatKES = (amount?: number) => {
+    return new Intl.NumberFormat("en-KE", {
+      style: "currency",
+      currency: "KES",
+      maximumFractionDigits: 0,
+    }).format(Number(amount || 0));
   };
 
   const handleUnitChange = (unitId: string) => {
@@ -164,6 +174,13 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       }
     }
   };
+
+  const filteredUnits = units.filter(u => 
+    unitTypeFilter === "all" || (u.unit_type || "").toLowerCase() === unitTypeFilter.toLowerCase()
+  );
+
+  const uniqueUnitTypes = Array.from(new Set(units.map(u => u.unit_type).filter(Boolean)));
+
 
   const checkForExistingTenant = async (email: string, phone: string, nationalId: string) => {
     try {
@@ -258,14 +275,38 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
       // For new tenant creation, check RPC response format
       if (!attachToExisting) {
+        console.log('RPC Response:', rpcData);
+        
         if (!rpcData || (typeof rpcData === 'object' && !rpcData.success)) {
           const errorMsg = rpcData?.error || 'Failed to create tenant';
           console.error('Tenant creation failed:', errorMsg, rpcData);
+          
+          // Set specific form errors based on error message
+          if (errorMsg.toLowerCase().includes('phone')) {
+            form.setError('phone', { message: 'Phone number must be in E.164 format (e.g., +254712345678)' });
+          } else if (errorMsg.toLowerCase().includes('email')) {
+            form.setError('email', { message: errorMsg });
+          } else if (errorMsg.toLowerCase().includes('national id')) {
+            form.setError('national_id', { message: errorMsg });
+          } else if (errorMsg.toLowerCase().includes('unit')) {
+            form.setError('unit_id', { message: errorMsg });
+          }
+          
+          toast({
+            title: "Error",
+            description: errorMsg,
+            variant: "destructive",
+          });
           throw new Error(errorMsg);
         }
         
         if (!rpcData.tenant_id) {
           console.error('Invalid response - no tenant_id:', rpcData);
+          toast({
+            title: "Error",
+            description: "Failed to create tenant - invalid response from server",
+            variant: "destructive",
+          });
           throw new Error('Failed to create tenant - invalid response');
         }
       }
@@ -528,29 +569,56 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
                       )}
                     />
 
+                    {uniqueUnitTypes.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Filter by Unit Type</label>
+                        <Select
+                          value={unitTypeFilter}
+                          onValueChange={setUnitTypeFilter}
+                          disabled={!selectedProperty || units.length === 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="All unit types" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Types ({units.length})</SelectItem>
+                            {uniqueUnitTypes.map((type) => {
+                              const count = units.filter(u => u.unit_type === type).length;
+                              return (
+                                <SelectItem key={type} value={type.toLowerCase()}>
+                                  {type} ({count})
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
                     <FormField
                       control={form.control}
                       name="unit_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unit *</FormLabel>
+                          <FormLabel>Unit * {filteredUnits.length > 0 && `(${filteredUnits.length} available)`}</FormLabel>
                           <Select
                             onValueChange={(value) => {
                               field.onChange(value);
                               handleUnitChange(value);
                             }}
                             value={field.value}
-                            disabled={!selectedProperty}
+                            disabled={!selectedProperty || filteredUnits.length === 0}
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select unit" />
+                                <SelectValue placeholder={filteredUnits.length === 0 ? "No vacant units" : "Select unit"} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {units.map((unit) => (
+                              {filteredUnits.map((unit) => (
                                 <SelectItem key={unit.id} value={unit.id}>
-                                  {unit.unit_number}
+                                  {unit.unit_number} — {formatKES(unit.rent_amount)}/month
+                                  {unit.unit_type && ` • ${unit.unit_type}`}
                                 </SelectItem>
                               ))}
                             </SelectContent>
