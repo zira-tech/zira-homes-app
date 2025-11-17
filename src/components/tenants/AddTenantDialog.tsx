@@ -106,6 +106,19 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     },
   });
 
+  const getTabErrors = () => {
+    const errors = form.formState.errors;
+    const basicFields = ['first_name', 'last_name', 'email', 'phone', 'national_id'];
+    const leaseFields = ['property_id', 'unit_id', 'lease_start_date', 'lease_end_date', 'monthly_rent', 'security_deposit'];
+    const additionalFields = ['profession', 'employment_status', 'employer_name', 'monthly_income', 'emergency_contact_name', 'emergency_contact_phone', 'previous_address'];
+    
+    return {
+      basic: basicFields.filter(field => errors[field as keyof typeof errors]).length,
+      lease: leaseFields.filter(field => errors[field as keyof typeof errors]).length,
+      additional: additionalFields.filter(field => errors[field as keyof typeof errors]).length,
+    };
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchProperties();
@@ -200,6 +213,43 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
 
   const onSubmit = async (data: TenantFormData) => {
     try {
+      // Log form state for debugging
+      console.log('[AddTenant] Form submission started');
+      console.log('[AddTenant] Form values:', data);
+      console.log('[AddTenant] Form errors:', form.formState.errors);
+      
+      // Check if there are validation errors
+      const errors = form.formState.errors;
+      if (Object.keys(errors).length > 0) {
+        console.error('[AddTenant] Validation errors found:', errors);
+        
+        // Determine which tab has errors
+        const basicFields = ['first_name', 'last_name', 'email', 'phone', 'national_id'];
+        const leaseFields = ['property_id', 'unit_id', 'lease_start_date', 'lease_end_date', 'monthly_rent'];
+        
+        const hasBasicErrors = basicFields.some(field => errors[field as keyof typeof errors]);
+        const hasLeaseErrors = leaseFields.some(field => errors[field as keyof typeof errors]);
+        
+        // Switch to the first tab with errors
+        if (hasBasicErrors) {
+          setActiveTab('basic');
+          toast({
+            title: "Validation Error",
+            description: "Please fill in all required fields in Basic Info",
+            variant: "destructive",
+          });
+        } else if (hasLeaseErrors) {
+          setActiveTab('lease');
+          toast({
+            title: "Validation Error",
+            description: "Please complete all required fields in Lease Details",
+            variant: "destructive",
+          });
+        }
+        
+        return; // Stop submission
+      }
+      
       setLoading(true);
       
       const existing = await checkForExistingTenant(data.email, data.phone, data.national_id);
@@ -451,9 +501,24 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                  <TabsTrigger value="lease">Lease Details</TabsTrigger>
-                  <TabsTrigger value="additional">Additional Info</TabsTrigger>
+                  <TabsTrigger value="basic" className="relative">
+                    Basic Info
+                    {getTabErrors().basic > 0 && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive"></span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="lease" className="relative">
+                    Lease Details
+                    {getTabErrors().lease > 0 && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive"></span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="additional" className="relative">
+                    Additional Info
+                    {getTabErrors().additional > 0 && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive"></span>
+                    )}
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4 mt-4">
