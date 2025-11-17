@@ -208,6 +208,7 @@ export function MaintenanceDetailsModal({
       case "in_progress":
         return "bg-primary text-primary-foreground";
       case "resolved":
+      case "completed":
         return "bg-success text-success-foreground";
       case "rejected":
         return "bg-destructive text-destructive-foreground";

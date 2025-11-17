@@ -63,6 +63,7 @@ export function MaintenanceDetailsDialog({ request, mode, trigger }: Maintenance
         return "bg-warning text-warning-foreground";
       case "in_progress":
         return "bg-accent text-accent-foreground";
+      case "resolved":
       case "completed":
         return "bg-success text-success-foreground";
       case "cancelled":

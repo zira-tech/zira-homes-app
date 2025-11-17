@@ -484,6 +484,7 @@ const MaintenanceRequestsLandlord = () => {
         return <Clock className="h-4 w-4" />;
       case "in_progress":
         return <Play className="h-4 w-4" />;
+      case "resolved":
       case "completed":
         return <CheckCircle className="h-4 w-4" />;
       case "rejected":
@@ -955,7 +956,7 @@ const MaintenanceRequestsLandlord = () => {
                     <SelectContent>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="resolved">Completed</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1025,7 +1026,7 @@ const MaintenanceRequestsLandlord = () => {
   const totalRequests = requests.length;
   const pendingRequests = requests.filter(r => r.status === "pending").length;
   const inProgressRequests = requests.filter(r => r.status === "in_progress").length;
-  const completedRequests = requests.filter(r => r.status === "completed").length;
+  const completedRequests = requests.filter(r => r.status === "completed" || r.status === "resolved").length;
 
   return (
     <DashboardLayout>
@@ -1117,7 +1118,7 @@ const MaintenanceRequestsLandlord = () => {
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="resolved">Completed</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
