@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { FileText, Search, Filter, Plus, Eye, Edit, Download, Send, Calendar, DollarSign, Users, Building } from "lucide-react";
 import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 import { CreateInvoiceDialog } from "@/components/invoices/CreateInvoiceDialog";
+import { InvoiceStatusUpdater } from "@/components/admin/InvoiceStatusUpdater";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { TablePaginator } from "@/components/ui/table-paginator";
@@ -194,6 +195,9 @@ const AdminInvoicesManagement = () => {
             <CreateInvoiceDialog onInvoiceCreated={fetchInvoices} />
           </div>
         </div>
+
+        {/* Invoice Status Updater */}
+        <InvoiceStatusUpdater />
 
         {/* Admin KPI Summary Cards */}
         <div className="grid gap-6 md:grid-cols-5">
