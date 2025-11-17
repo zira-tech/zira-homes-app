@@ -905,17 +905,22 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
   const handleTestConfiguration = () => {
     if (!user?.id) return;
     
-    // Check if active config is verified (align with tenant validation)
+    // Check if active config is verified (ONLY for Kopo Kopo configs)
     const activeConfig = allConfigs.find(cfg => cfg.is_active);
-    if (activeConfig && !activeConfig.credentials_verified) {
+    
+    // Kopo Kopo configs must be verified via Test OAuth first
+    if (activeConfig && 
+        activeConfig.shortcode_type === 'till_kopokopo' && 
+        !activeConfig.credentials_verified) {
       toast({
         title: "Verification Required",
-        description: "This config must be verified before testing payments. Tenants face the same check. Please run 'Test OAuth' first for Kopo Kopo configs.",
+        description: "Kopo Kopo configurations must be verified first. Please click 'Test OAuth' to verify your credentials.",
         variant: "destructive",
       });
       return;
     }
     
+    // Safaricom configs can proceed directly - Test STK Push serves as verification
     setShowTestDialog(true);
   };
 
@@ -1289,7 +1294,9 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
                                 <TooltipContent className="max-w-xs">
                                   <p className="font-medium">Verification Required</p>
                                   <p className="text-xs mt-1">This config must be verified before activation. Tenants cannot pay with unverified configs.</p>
-                                  <p className="text-xs mt-1 text-yellow-600">💡 Tip: Activate this config first, then click "Test OAuth" to verify.</p>
+                                  <p className="text-xs mt-1 text-yellow-600">
+                                    💡 Tip: Activate this config first, then click {cfg.shortcode_type === 'till_kopokopo' ? '"Test OAuth"' : '"Test STK Push"'} to verify.
+                                  </p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
