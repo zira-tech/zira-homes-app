@@ -3416,6 +3416,7 @@ export type Database = {
       tenants: {
         Row: {
           created_at: string
+          date_of_birth: string | null
           email: string
           email_encrypted: string | null
           email_token: string | null
@@ -3424,6 +3425,8 @@ export type Database = {
           emergency_contact_phone: string | null
           emergency_contact_phone_encrypted: string | null
           emergency_contact_phone_plain: string | null
+          emergency_contact_relationship: string | null
+          employer_contact: string | null
           employer_name: string | null
           employment_status: string | null
           first_name: string
@@ -3438,6 +3441,8 @@ export type Database = {
           phone_plain: string | null
           phone_token: string | null
           previous_address: string | null
+          previous_landlord_contact: string | null
+          previous_landlord_name: string | null
           profession: string | null
           property_id: string | null
           updated_at: string
@@ -3445,6 +3450,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          date_of_birth?: string | null
           email: string
           email_encrypted?: string | null
           email_token?: string | null
@@ -3453,6 +3459,8 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_phone_encrypted?: string | null
           emergency_contact_phone_plain?: string | null
+          emergency_contact_relationship?: string | null
+          employer_contact?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name: string
@@ -3467,6 +3475,8 @@ export type Database = {
           phone_plain?: string | null
           phone_token?: string | null
           previous_address?: string | null
+          previous_landlord_contact?: string | null
+          previous_landlord_name?: string | null
           profession?: string | null
           property_id?: string | null
           updated_at?: string
@@ -3474,6 +3484,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          date_of_birth?: string | null
           email?: string
           email_encrypted?: string | null
           email_token?: string | null
@@ -3482,6 +3493,8 @@ export type Database = {
           emergency_contact_phone?: string | null
           emergency_contact_phone_encrypted?: string | null
           emergency_contact_phone_plain?: string | null
+          emergency_contact_relationship?: string | null
+          employer_contact?: string | null
           employer_name?: string | null
           employment_status?: string | null
           first_name?: string
@@ -3496,6 +3509,8 @@ export type Database = {
           phone_plain?: string | null
           phone_token?: string | null
           previous_address?: string | null
+          previous_landlord_contact?: string | null
+          previous_landlord_name?: string | null
           profession?: string | null
           property_id?: string | null
           updated_at?: string
