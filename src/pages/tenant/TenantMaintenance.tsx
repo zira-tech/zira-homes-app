@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from "react";
+import React, { useState } from "react";
 import { TenantLayout } from "@/components/TenantLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,6 @@ export default function TenantMaintenance() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const requests = data?.requests || [];
   const stats = data?.stats;
@@ -283,30 +281,20 @@ export default function TenantMaintenance() {
                       </div>
                     </div>
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRequest(request);
-                        setDetailsOpen(true);
-                      }}
-                    >
-                      View Details
-                    </Button>
+                    <TenantMaintenanceDetailsDialog
+                      request={request}
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          View Details
+                        </Button>
+                      }
+                    />
                   </div>
                 </CardContent>
               </Card>
             ))
           )}
         </div>
-
-        {selectedRequest && (
-          <Suspense fallback={<div className="flex items-center justify-center p-4"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-            <TenantMaintenanceDetailsDialog
-              request={selectedRequest}
-            />
-          </Suspense>
-        )}
       </div>
     </TenantLayout>
   );
