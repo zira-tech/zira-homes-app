@@ -170,6 +170,28 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     }
   };
 
+  // Preflight check for existing tenant
+  const checkForExistingTenant = async (email: string, phone: string) => {
+    try {
+      const { data: result, error } = await supabase
+        .rpc('lookup_tenant_in_portfolio', {
+          p_email: email,
+          p_phone: phone
+        });
+
+      if (error) {
+        console.error('Lookup error:', error);
+        return null;
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error checking for existing tenant:', error);
+      return null;
+    }
+  };
+
+  // Handle new tenant creation
   const onSubmit = async (data: TenantFormData) => {
     if (!user) {
       toast({

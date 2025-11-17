@@ -4200,6 +4200,31 @@ export type Database = {
         }
         Returns: string
       }
+      create_or_attach_tenant_lease: {
+        Args: {
+          p_allow_attach?: boolean
+          p_email: string
+          p_emergency_contact_name?: string
+          p_emergency_contact_phone?: string
+          p_employer_name?: string
+          p_employment_status?: string
+          p_existing_tenant_id?: string
+          p_first_name: string
+          p_last_name: string
+          p_lease_end_date?: string
+          p_lease_start_date?: string
+          p_monthly_income?: number
+          p_monthly_rent?: number
+          p_national_id?: string
+          p_phone?: string
+          p_previous_address?: string
+          p_profession?: string
+          p_property_id?: string
+          p_security_deposit?: number
+          p_unit_id?: string
+        }
+        Returns: Json
+      }
       create_search_token: {
         Args: { data: string; salt?: string }
         Returns: string
@@ -4736,6 +4761,10 @@ export type Database = {
           _user_id: string
         }
         Returns: undefined
+      }
+      lookup_tenant_in_portfolio: {
+        Args: { p_email?: string; p_phone?: string }
+        Returns: Json
       }
       map_feature_to_permission: { Args: { _feature: string }; Returns: string }
       mask_sensitive_data: {
