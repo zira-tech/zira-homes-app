@@ -11,6 +11,7 @@ interface CheckAvailabilityResponse {
   provider?: string;
   tillNumber?: string;
   paybillNumber?: string;
+  source?: 'custom' | 'platform';
   error?: string;
   details?: string;
 }
@@ -145,8 +146,8 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Property found: ${property.id}, owner: ${property.owner_id}`);
 
-    // Step 4: Check landlord's M-Pesa configuration
-    console.log('🔎 Step 4: Checking landlord M-Pesa config...');
+    // Step 4a: Check landlord's custom M-Pesa configuration
+    console.log('🔎 Step 4a: Checking landlord custom M-Pesa config...');
     const { data: mpesaConfigs, error: configError } = await supabase
       .from('landlord_mpesa_configs')
       .select('*')
@@ -170,43 +171,113 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!mpesaConfigs || mpesaConfigs.length === 0) {
-      console.log('⚠️ No active M-Pesa configuration found for landlord');
-      return new Response(
-        JSON.stringify({ 
-          available: false, 
-          error: 'M-Pesa not configured',
-          details: 'The landlord has not set up M-Pesa payments yet' 
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    // If custom config exists, use it
+    if (mpesaConfigs && mpesaConfigs.length > 0) {
+      const config = mpesaConfigs[0];
+      console.log(`✅ Custom M-Pesa config found: ${config.id}`);
+      console.log(`   Provider: ${config.till_provider || 'Safaricom'}`);
+      console.log(`   Till: ${config.till_number || 'N/A'}`);
+      console.log(`   Paybill: ${config.paybill_number || 'N/A'}`);
+
+      const response: CheckAvailabilityResponse = {
+        available: true,
+        provider: config.till_provider || 'safaricom',
+        source: 'custom',
+      };
+
+      if (config.till_number) {
+        response.configType = 'till';
+        response.tillNumber = config.till_number;
+        console.log(`✅ M-Pesa available via custom Till: ${config.till_number}`);
+      } else if (config.paybill_number) {
+        response.configType = 'paybill';
+        response.paybillNumber = config.paybill_number;
+        console.log(`✅ M-Pesa available via custom Paybill: ${config.paybill_number}`);
+      }
+
+    }
+
+    // Step 4b: Check if landlord uses platform defaults
+    console.log('🔎 Step 4b: Checking landlord payment preferences...');
+    const { data: preferences, error: preferencesError } = await supabase
+      .from('landlord_payment_preferences')
+      .select('mpesa_config_preference')
+      .eq('landlord_id', property.owner_id)
+      .single();
+
+    if (preferencesError && preferencesError.code !== 'PGRST116') {
+      console.error('❌ Error fetching payment preferences:', preferencesError);
+    }
+
+    if (preferences?.mpesa_config_preference === 'platform_default') {
+      console.log('🔎 Step 4c: Landlord uses platform defaults, fetching platform config...');
+      
+      const { data: platformConfigData, error: platformError } = await supabase
+        .from('billing_settings')
+        .select('setting_value')
+        .eq('setting_key', 'platform_mpesa_config')
+        .single();
+
+      if (platformError) {
+        console.error('❌ Error fetching platform M-Pesa config:', platformError);
+        return new Response(
+          JSON.stringify({ 
+            available: false, 
+            error: 'Error checking platform M-Pesa configuration',
+            details: platformError.message 
+          }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+
+      const platformConfig = platformConfigData?.setting_value as any;
+
+      if (platformConfig && platformConfig.shortcode) {
+        console.log(`✅ Platform M-Pesa config found: ${platformConfig.shortcode}`);
+        console.log(`   Type: ${platformConfig.shortcode_type}`);
+        console.log(`   Environment: ${platformConfig.environment}`);
+
+        const response: CheckAvailabilityResponse = {
+          available: true,
+          provider: 'safaricom',
+          source: 'platform',
+          configType: platformConfig.shortcode_type === 'till' ? 'till' : 'paybill',
+        };
+
+        if (platformConfig.shortcode_type === 'till') {
+          response.tillNumber = platformConfig.shortcode;
+          console.log(`✅ M-Pesa available via platform Till: ${platformConfig.shortcode}`);
+        } else {
+          response.paybillNumber = platformConfig.shortcode;
+          console.log(`✅ M-Pesa available via platform Paybill: ${platformConfig.shortcode}`);
         }
-      );
+
+        return new Response(
+          JSON.stringify(response),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
     }
 
-    // Get the most recent active config
-    const config = mpesaConfigs[0];
-    console.log(`✅ M-Pesa config found: ${config.id}`);
-    console.log(`   Provider: ${config.till_provider || 'Safaricom'}`);
-    console.log(`   Till: ${config.till_number || 'N/A'}`);
-    console.log(`   Paybill: ${config.paybill_number || 'N/A'}`);
-
-    // Determine config type and build response
-    const response: CheckAvailabilityResponse = {
-      available: true,
-      provider: config.till_provider || 'safaricom',
-    };
-
-    if (config.till_number) {
-      response.configType = 'till';
-      response.tillNumber = config.till_number;
-      console.log(`✅ M-Pesa available via Till: ${config.till_number}`);
-    } else if (config.paybill_number) {
-      response.configType = 'paybill';
-      response.paybillNumber = config.paybill_number;
-      console.log(`✅ M-Pesa available via Paybill: ${config.paybill_number}`);
-    }
+    // Step 4d: No M-Pesa configuration found
+    console.log('⚠️ No M-Pesa configuration found for landlord');
+    return new Response(
+      JSON.stringify({ 
+        available: false, 
+        error: 'M-Pesa not configured',
+        details: 'The landlord has not set up M-Pesa payments yet' 
+      }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
 
     return new Response(
       JSON.stringify(response),
