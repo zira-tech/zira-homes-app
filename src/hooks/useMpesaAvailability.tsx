@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
@@ -22,6 +22,7 @@ interface MpesaAvailabilityResult {
   lastErrorType: MpesaCheckError | null;
   lastErrorDetails: string | null;
   lastCheck: MpesaCheckDiagnostics | null;
+  lastCheckTimestamp: string | null;
 }
 
 type MpesaCheckError = 
@@ -60,6 +61,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
   const [lastErrorType, setLastErrorType] = useState<MpesaCheckError | null>(null);
   const [lastErrorDetails, setLastErrorDetails] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<MpesaCheckDiagnostics | null>(null);
+  const [lastCheckTimestamp, setLastCheckTimestamp] = useState<string | null>(null);
 
   const handleError = (errorType: MpesaCheckError, details?: string, diagnosticData?: MpesaCheckDiagnostics) => {
     const timestamp = new Date().toISOString();
@@ -77,7 +79,8 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
     setLastErrorType(errorType);
     setLastErrorDetails(details || null);
     setIsAvailable(false);
-    toast.error(`${message} (Last checked: ${new Date().toLocaleTimeString()})`, { duration: 5000 });
+    setLastCheckTimestamp(timestamp);
+    toast.error(`${message}`, { duration: 5000 });
     
     logger.error(`M-Pesa availability check failed: ${errorType}`, new Error(message), {
       errorType,
@@ -405,6 +408,11 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         usesPlatformDefault: available && !mpesaConfig
       });
 
+      setIsAvailable(true);
+      setError(null);
+      setLastErrorType(null);
+      setLastCheckTimestamp(new Date().toISOString());
+
       return true;
     } catch (error: any) {
       console.error('💥 [M-Pesa Availability] Unexpected error:', error);
@@ -425,6 +433,25 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
     }
   };
 
+  // Polling effect: Re-check M-Pesa availability every 30 seconds if currently unavailable
+  useEffect(() => {
+    if (!isAvailable && lastErrorType === 'no_mpesa_config' && lastCheck?.invoiceId) {
+      console.log('🔄 Setting up M-Pesa availability polling (30s interval)...');
+      
+      const interval = setInterval(() => {
+        if (!isChecking && lastCheck.invoiceId) {
+          console.log('🔄 Auto re-checking M-Pesa availability...');
+          checkAvailability(lastCheck.invoiceId);
+        }
+      }, 30000); // 30 seconds
+
+      return () => {
+        console.log('🛑 Clearing M-Pesa availability polling');
+        clearInterval(interval);
+      };
+    }
+  }, [isAvailable, lastErrorType, isChecking, lastCheck?.invoiceId]);
+
   return {
     isAvailable,
     isChecking,
@@ -433,5 +460,6 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
     lastErrorType,
     lastErrorDetails,
     lastCheck,
+    lastCheckTimestamp,
   };
 }

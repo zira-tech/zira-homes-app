@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MpesaPaymentModal } from "./MpesaPaymentModal";
 import { MpesaErrorBoundary } from "@/components/mpesa/MpesaErrorBoundary";
-import { MoreHorizontal, Smartphone, Download, Eye } from "lucide-react";
+import { MoreHorizontal, Smartphone, Download, Eye, RefreshCw } from "lucide-react";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
+import { useToast } from "@/hooks/use-toast";
 
 interface TenantInvoiceActionsProps {
   invoice: {
@@ -19,7 +20,8 @@ interface TenantInvoiceActionsProps {
 
 export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoiceActionsProps) {
   const [mpesaModalOpen, setMpesaModalOpen] = useState(false);
-  const { isChecking, checkAvailability } = useMpesaAvailability();
+  const { isChecking, checkAvailability, lastCheckTimestamp, lastErrorType } = useMpesaAvailability();
+  const { toast } = useToast();
 
   const handleDownload = () => {
     // TODO: Implement invoice download functionality
@@ -59,14 +61,31 @@ export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoic
             Download PDF
           </DropdownMenuItem>
           {canPay && (
-            <DropdownMenuItem 
-              onClick={handleMpesaPayment}
-              disabled={isChecking}
-              className="text-green-600"
-            >
-              <Smartphone className="h-4 w-4 mr-2" />
-              {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem 
+                onClick={handleMpesaPayment}
+                disabled={isChecking}
+                className="text-green-600"
+              >
+                <Smartphone className="h-4 w-4 mr-2" />
+                {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  await checkAvailability(invoice.id);
+                  toast({
+                    title: "Payment options refreshed",
+                    description: lastCheckTimestamp 
+                      ? `Last checked: ${new Date(lastCheckTimestamp).toLocaleTimeString()}`
+                      : "M-Pesa availability updated",
+                  });
+                }}
+                disabled={isChecking}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isChecking ? 'animate-spin' : ''}`} />
+                Refresh Payment Options
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

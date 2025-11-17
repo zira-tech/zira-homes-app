@@ -26,6 +26,7 @@ import {
   FileText,
   Building,
   Home,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -65,7 +66,7 @@ interface TenantPaymentsRpcResult {
 export default function TenantPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isChecking, checkAvailability, lastErrorType, lastErrorDetails, lastCheck } = useMpesaAvailability();
+  const { isChecking, checkAvailability, lastErrorType, lastErrorDetails, lastCheck, lastCheckTimestamp } = useMpesaAvailability();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -692,7 +693,29 @@ export default function TenantPayments() {
                   <Smartphone className="h-4 w-4 mr-2" />
                   {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
                 </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  disabled={isChecking}
+                  onClick={() => {
+                    if (pendingInvoices.length > 0) {
+                      checkAvailability(pendingInvoices[0].id);
+                      toast({
+                        title: "Refreshing payment options...",
+                        description: "Checking for updated M-Pesa configuration",
+                      });
+                    }
+                  }}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isChecking ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </div>
+              {lastCheckTimestamp && lastErrorType && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  Last checked: {new Date(lastCheckTimestamp).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -2,9 +2,9 @@ import { QueryClient, DefaultOptions } from "@tanstack/react-query";
 
 const queryConfig: DefaultOptions = {
   queries: {
-    // Background refetch options - optimized for performance
-    staleTime: 15 * 60 * 1000, // 15 minutes - increased for better performance
-    gcTime: 60 * 60 * 1000, // 60 minutes - extended cache duration
+    // Background refetch options - optimized for M-Pesa availability checks
+    staleTime: 30 * 1000, // 30 seconds - faster refresh
+    gcTime: 60 * 1000, // 60 seconds - shorter cache duration
     
     // Retry configuration
     retry: (failureCount, error: any) => {
@@ -12,15 +12,15 @@ const queryConfig: DefaultOptions = {
       if (error?.status >= 400 && error?.status < 500) {
         return false;
       }
-      // Retry up to 2 times for other errors - reduced for performance
+      // Retry up to 2 times for other errors
       return failureCount < 2;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     
-    // Background updates - optimized for performance
-    refetchOnWindowFocus: false, // Disabled to reduce unnecessary requests
+    // Background updates - optimized for real-time updates
+    refetchOnWindowFocus: true, // Enabled for fresh data on focus
     refetchOnReconnect: true,
-    refetchOnMount: true, // Smart refetch on mount
+    refetchOnMount: true,
     
     // Network mode
     networkMode: 'online',
