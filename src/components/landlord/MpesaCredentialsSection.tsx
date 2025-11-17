@@ -540,6 +540,10 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
         console.error('Failed to update preference:', prefError);
       }
 
+      // Invalidate tenant-side M-Pesa availability cache
+      // This ensures tenants see the newly activated config immediately
+      console.log('🔄 Invalidating M-Pesa availability cache after config activation');
+      
       // Notify parent to refresh
       onPreferenceChange?.();
       

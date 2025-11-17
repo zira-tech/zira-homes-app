@@ -61,22 +61,41 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
   const [lastErrorDetails, setLastErrorDetails] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<MpesaCheckDiagnostics | null>(null);
 
-  const handleError = (errorType: MpesaCheckError, details?: string) => {
+  const handleError = (errorType: MpesaCheckError, details?: string, diagnosticData?: MpesaCheckDiagnostics) => {
+    const timestamp = new Date().toISOString();
     const message = ERROR_MESSAGES[errorType];
+    
+    console.group('🔴 M-Pesa Availability Check Failed');
+    console.error('Error Type:', errorType);
+    console.error('Message:', message);
+    console.error('Details:', details);
+    console.error('Timestamp:', timestamp);
+    console.error('Diagnostic Data:', diagnosticData);
+    console.groupEnd();
+    
     setError(message);
     setLastErrorType(errorType);
     setLastErrorDetails(details || null);
     setIsAvailable(false);
-    toast.error(message, { duration: 5000 });
+    toast.error(`${message} (Last checked: ${new Date().toLocaleTimeString()})`, { duration: 5000 });
     
     logger.error(`M-Pesa availability check failed: ${errorType}`, new Error(message), {
       errorType,
-      details
+      details,
+      timestamp,
+      diagnosticData
     });
   };
 
   const checkAvailability = async (invoiceId: string): Promise<boolean> => {
-    console.log('🔍 [M-Pesa Availability] Starting check for invoice:', invoiceId);
+    const checkStartTime = Date.now();
+    const timestamp = new Date().toISOString();
+    
+    console.group('🔍 M-Pesa Availability Check Started');
+    console.log('Invoice ID:', invoiceId);
+    console.log('Timestamp:', timestamp);
+    console.groupEnd();
+    
     setIsChecking(true);
     setError(null);
     setLastErrorType(null);
@@ -102,13 +121,13 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (invoiceError.code === 'PGRST116') {
-          handleError('invoice_not_found', invoiceId);
+          handleError('invoice_not_found', invoiceId, diagnostics);
         } else if (invoiceError.message?.includes('network') || invoiceError.message?.includes('fetch')) {
-          handleError('network_error', invoiceError.message);
+          handleError('network_error', invoiceError.message, diagnostics);
         } else if (invoiceError.code === 'PGRST301' || invoiceError.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing invoice: ${invoiceError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing invoice: ${invoiceError.message}`, diagnostics);
         } else {
-          handleError('unknown_error', invoiceError.message);
+          handleError('unknown_error', invoiceError.message, diagnostics);
         }
         return debugBypass;
       }
@@ -117,7 +136,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         console.error('❌ [M-Pesa Availability] Invoice not found or missing lease_id');
         diagnostics.step = 'invoice_missing';
         setLastCheck(diagnostics);
-        handleError('invoice_not_found', invoiceId);
+        handleError('invoice_not_found', invoiceId, diagnostics);
         return debugBypass;
       }
       
@@ -138,9 +157,9 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (leaseError?.code === 'PGRST301' || leaseError?.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing lease: ${leaseError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing lease: ${leaseError.message}`, diagnostics);
         } else {
-          handleError('lease_not_found', leaseError?.message);
+          handleError('lease_not_found', leaseError?.message, diagnostics);
         }
         return debugBypass;
       }
@@ -162,9 +181,9 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (unitError?.code === 'PGRST301' || unitError?.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing unit: ${unitError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing unit: ${unitError.message}`, diagnostics);
         } else {
-          handleError('unit_not_found', unitError?.message);
+          handleError('unit_not_found', unitError?.message, diagnostics);
         }
         return debugBypass;
       }
@@ -186,9 +205,9 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (propertyError?.code === 'PGRST301' || propertyError?.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing property: ${propertyError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing property: ${propertyError.message}`, diagnostics);
         } else {
-          handleError('property_not_found', propertyError?.message);
+          handleError('property_not_found', propertyError?.message, diagnostics);
         }
         return debugBypass;
       }
@@ -199,7 +218,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         console.error('❌ [M-Pesa Availability] Property has no owner_id');
         diagnostics.step = 'landlord_missing';
         setLastCheck(diagnostics);
-        handleError('landlord_not_found', 'Property has no owner');
+        handleError('landlord_not_found', 'Property has no owner', diagnostics);
         return debugBypass;
       }
       
@@ -222,9 +241,9 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (allConfigsError.code === 'PGRST301' || allConfigsError.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing M-Pesa config: ${allConfigsError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing M-Pesa config: ${allConfigsError.message}`, diagnostics);
         } else {
-          handleError('config_check_failed', allConfigsError.message);
+          handleError('config_check_failed', allConfigsError.message, diagnostics);
         }
         return debugBypass;
       }
@@ -243,9 +262,9 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         
         if (configError.code === 'PGRST301' || configError.message?.includes('permission')) {
-          handleError('config_check_failed', `RLS/Permission error accessing M-Pesa config: ${configError.message}`);
+          handleError('config_check_failed', `RLS/Permission error accessing M-Pesa config: ${configError.message}`, diagnostics);
         } else {
-          handleError('config_check_failed', configError.message);
+          handleError('config_check_failed', configError.message, diagnostics);
         }
         return debugBypass;
       }
@@ -271,7 +290,8 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
           setLastCheck(diagnostics);
           handleError(
             'config_inactive',
-            `M-Pesa config exists and is verified but inactive (${verifiedInactive.shortcode_type} ${verifiedInactive.business_shortcode}). Please activate it in payment settings.`
+            `M-Pesa config exists and is verified but inactive (${verifiedInactive.shortcode_type} ${verifiedInactive.business_shortcode}). Please activate it in payment settings.`,
+            diagnostics
           );
           return debugBypass;
         }
@@ -282,7 +302,8 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
           setLastCheck(diagnostics);
           handleError(
             'config_inactive',
-            `M-Pesa config exists but is inactive and unverified. Please verify and activate in payment settings.`
+            `M-Pesa config exists but is inactive and unverified. Please verify and activate in payment settings.`,
+            diagnostics
           );
           return debugBypass;
         }
@@ -299,7 +320,8 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
         setLastCheck(diagnostics);
         handleError(
           'credentials_not_verified',
-          `M-Pesa config (${mpesaConfig.shortcode_type} ${mpesaConfig.business_shortcode}) is active but credentials have not been verified. Please test credentials in payment settings.`
+          `M-Pesa config (${mpesaConfig.shortcode_type} ${mpesaConfig.business_shortcode}) is active but credentials have not been verified. Please test credentials in payment settings.`,
+          diagnostics
         );
         return debugBypass;
       } else {
@@ -326,7 +348,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
           console.error('⚠️ [M-Pesa Availability] Error checking payment preferences:', prefsError);
           diagnostics.step = 'payment_prefs_error';
           setLastCheck(diagnostics);
-          handleError('payment_preference_check_failed', prefsError.message);
+          handleError('payment_preference_check_failed', prefsError.message, diagnostics);
           return debugBypass;
         } else if (paymentPrefs?.mpesa_config_preference === 'platform_default') {
           // Explicit platform default preference
@@ -343,7 +365,7 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
           console.error('❌ [M-Pesa Availability] Payment preference is custom but no valid config');
           diagnostics.step = 'no_config_custom_preference';
           setLastCheck(diagnostics);
-          handleError('no_mpesa_config', 'M-Pesa not configured. Please set up M-Pesa in payment settings.');
+          handleError('no_mpesa_config', 'M-Pesa not configured. Please set up M-Pesa in payment settings.', diagnostics);
           return debugBypass;
         }
       }
@@ -389,10 +411,17 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
       diagnostics.step = 'exception';
       setLastCheck(diagnostics);
       logger.error('Unexpected error checking M-Pesa availability', error);
-      handleError('unknown_error', error?.message);
+      handleError('unknown_error', error?.message, diagnostics);
       return debugBypass;
     } finally {
       setIsChecking(false);
+      const checkDuration = Date.now() - checkStartTime;
+      
+      console.group('✅ M-Pesa Availability Check Completed');
+      console.log('Duration:', `${checkDuration}ms`);
+      console.log('Result:', isAvailable ? 'Available' : 'Not Available');
+      console.log('Final Diagnostics:', diagnostics);
+      console.groupEnd();
     }
   };
 
