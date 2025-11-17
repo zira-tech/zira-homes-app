@@ -35,6 +35,7 @@ import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getIn
 import { fmtCurrency, fmtDate } from "@/lib/format";
 import { measureApiCall } from "@/utils/performanceMonitor";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
+import { isInvoicePayable, isInvoiceOutstanding } from "@/utils/invoiceStatusUtils";
 
 // Lazy load dialog components for better performance
 const MpesaPaymentDialog = lazy(() => import("@/components/tenant/MpesaPaymentDialog").then(module => ({ default: module.MpesaPaymentDialog })));
@@ -556,7 +557,7 @@ export default function TenantPayments() {
 
   // Memoized calculations for better performance
   const pendingInvoices = useMemo(() => {
-    return paymentData?.invoices.filter(invoice => invoice.status === "pending" || invoice.status === "overdue") || [];
+    return paymentData?.invoices.filter(invoice => isInvoiceOutstanding(invoice.status)) || [];
   }, [paymentData?.invoices]);
 
   const totalOutstanding = useMemo(() => {
@@ -724,7 +725,7 @@ export default function TenantPayments() {
                 <p className="text-sm text-white/90 font-medium">Pending Payments</p>
                 <p className="text-2xl font-bold text-white">
                   {fmtCurrency(invoices
-                    .filter(i => i.status === "pending")
+                    .filter(i => i.status === "pending" || i.status === "unpaid")
                     .reduce((total, i) => total + (i.amount || 0), 0))}
                 </p>
               </div>
@@ -921,7 +922,7 @@ export default function TenantPayments() {
                                   PDF
                                 </Button>
                               )}
-                              {(invoice.status === "pending" || invoice.status === "overdue") && (
+                              {isInvoicePayable(invoice.status) && (
                                 <Button
                                   size="sm"
                                   className="bg-green-600 hover:bg-green-700 text-white"
