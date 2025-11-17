@@ -3921,7 +3921,7 @@ export type Database = {
           {
             foreignKeyName: "user_roles_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "orphaned_users_monitor"
             referencedColumns: ["id"]
           },
@@ -4850,6 +4850,13 @@ export type Database = {
       }
       user_owns_property: {
         Args: { _property_id: string; _user_id: string }
+        Returns: boolean
+      }
+      validate_role_eligibility: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
         Returns: boolean
       }
       validate_strong_password: { Args: { password: string }; Returns: boolean }
