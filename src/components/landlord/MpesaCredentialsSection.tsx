@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePlatformConfig } from "@/hooks/usePlatformConfig";
 import { MpesaTestPaymentDialog } from "./MpesaTestPaymentDialog";
@@ -545,9 +546,14 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
       // Reload config
       await loadConfig();
 
+      const activatedConfig = allConfigs.find(cfg => cfg.id === configId);
+      const configType = activatedConfig?.shortcode_type === 'till_kopokopo' 
+        ? `Till ${activatedConfig?.till_number}` 
+        : `${activatedConfig?.shortcode_type === 'paybill' ? 'Paybill' : 'Till'} ${activatedConfig?.business_shortcode}`;
+      
       toast({
-        title: "Configuration Activated",
-        description: "The selected M-Pesa configuration is now active.",
+        title: "Configuration Activated Successfully",
+        description: `Tenants can now pay via M-Pesa using ${configType}. Test it with 'Test STK Push'.`,
       });
     } catch (error) {
       console.error('Error activating config:', error);
@@ -894,6 +900,18 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
   const handleTestConfiguration = () => {
     if (!user?.id) return;
+    
+    // Check if active config is verified (align with tenant validation)
+    const activeConfig = allConfigs.find(cfg => cfg.is_active);
+    if (activeConfig && !activeConfig.credentials_verified) {
+      toast({
+        title: "Verification Required",
+        description: "This config must be verified before testing payments. Tenants face the same check. Please run 'Test OAuth' first for Kopo Kopo configs.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setShowTestDialog(true);
   };
 
@@ -1118,6 +1136,48 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
             {/* Configured State - Summary View with All Configs */}
             {hasConfig && !showForm && (
               <div className="space-y-4">
+                {/* Tenants Currently See Indicator */}
+                {(() => {
+                  const activeVerifiedConfig = allConfigs.find(cfg => cfg.is_active && cfg.credentials_verified);
+                  const activeUnverifiedConfig = allConfigs.find(cfg => cfg.is_active && !cfg.credentials_verified);
+                  
+                  if (activeVerifiedConfig) {
+                    const configDisplay = activeVerifiedConfig.shortcode_type === 'till_kopokopo' 
+                      ? `Till ${activeVerifiedConfig.till_number}` 
+                      : `${activeVerifiedConfig.shortcode_type === 'paybill' ? 'Paybill' : 'Till'} ${activeVerifiedConfig.business_shortcode}`;
+                    
+                    return (
+                      <Alert className="bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertTitle>Tenant Payment Status: Active</AlertTitle>
+                        <AlertDescription>
+                          Tenants can pay using: <strong>{configDisplay}</strong>
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  } else if (activeUnverifiedConfig) {
+                    return (
+                      <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800">
+                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        <AlertTitle>Tenant Payment Status: Blocked</AlertTitle>
+                        <AlertDescription>
+                          Your active config is <strong>unverified</strong>. Tenants cannot make payments. Please verify credentials or activate a verified config.
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  } else {
+                    return (
+                      <Alert className="bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <AlertTitle>Tenant Payment Status: Unavailable</AlertTitle>
+                        <AlertDescription>
+                          No verified config is active. Tenants cannot make M-Pesa payments. Please activate a verified config.
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  }
+                })()}
+                
                 {/* Show all saved configurations */}
                 {allConfigs.map((cfg) => (
                   <Card key={cfg.id} className={cfg.is_active ? "border-primary" : ""}>
@@ -1186,15 +1246,40 @@ export const MpesaCredentialsSection: React.FC<MpesaCredentialsSectionProps> = (
 
                       <div className="flex flex-wrap gap-2">
                         {!cfg.is_active && (
-                          <Button 
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleActivateConfig(cfg.id!)}
-                            disabled={saving}
-                          >
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Activate
-                          </Button>
+                          cfg.credentials_verified ? (
+                            <Button 
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleActivateConfig(cfg.id!)}
+                              disabled={saving}
+                            >
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Activate
+                            </Button>
+                          ) : (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button 
+                                      variant="outline"
+                                      size="sm"
+                                      disabled
+                                      className="opacity-60"
+                                    >
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      Cannot Activate
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="font-medium">Verification Required</p>
+                                  <p className="text-xs mt-1">This config must be verified before activation. Tenants cannot pay with unverified configs.</p>
+                                  <p className="text-xs mt-1 text-yellow-600">💡 Tip: Activate this config first, then click "Test OAuth" to verify.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )
                         )}
                         {cfg.is_active && (
                           <>
