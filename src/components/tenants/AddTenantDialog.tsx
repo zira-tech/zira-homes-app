@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -10,11 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserActivity } from "@/hooks/useUserActivity";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { checkBackendReady } from "@/utils/backendHealth";
 
 const tenantFormSchemaBase = z.object({
   first_name: z.string().min(1, "First name is required").transform((s) => s.trim()),
@@ -76,6 +75,8 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
   const [properties, setProperties] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [existingTenant, setExistingTenant] = useState<any>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const { logActivity } = useUserActivity();
@@ -90,7 +91,7 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       profession: "",
       employment_status: "",
       employer_name: "",
-      monthly_income: 0,
+      monthly_income: undefined,
       emergency_contact_name: "",
       emergency_contact_phone: "",
       previous_address: "",
@@ -98,79 +99,74 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       unit_id: "",
       lease_start_date: "",
       lease_end_date: "",
-      monthly_rent: 0,
-      security_deposit: 0,
-    }
+      monthly_rent: undefined,
+      security_deposit: undefined,
+    },
   });
-  
-  const { watch, setValue, reset } = form;
-  const watchPropertyId = watch("property_id");
 
-  // Fetch properties when dialog opens
   React.useEffect(() => {
-    if (open) {
+    if (isOpen) {
       fetchProperties();
     }
-  }, [open]);
+  }, [isOpen]);
 
-  // Fetch units when property changes
   React.useEffect(() => {
-    if (watchPropertyId) {
-      fetchUnits(watchPropertyId);
-      setSelectedPropertyId(watchPropertyId);
+    if (selectedPropertyId) {
+      fetchUnits(selectedPropertyId);
+    } else {
+      setUnits([]);
     }
-  }, [watchPropertyId]);
+  }, [selectedPropertyId]);
 
   const fetchProperties = async () => {
     try {
       const { data, error } = await supabase
         .from('properties')
-        .select('id, name, address')
+        .select('id, name')
         .order('name');
       
       if (error) throw error;
       setProperties(data || []);
     } catch (error) {
       console.error('Error fetching properties:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load properties",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchUnits = async (propertyId: string) => {
     try {
-      // First, fetch units marked vacant for performance
-      const { data: rawUnits, error } = await supabase
+      const { data: unitsList, error } = await supabase
         .from('units')
-        .select('id, unit_number, rent_amount, status')
+        .select('id, unit_number, status')
         .eq('property_id', propertyId)
-        .eq('status', 'vacant')
         .order('unit_number');
+
       if (error) throw error;
 
-      const unitsList = rawUnits || [];
-
-      // Extra safety: filter out any unit that still has an active lease (in case of stale status)
-      if (unitsList.length > 0) {
-        const unitIds = unitsList.map(u => u.id);
-        const { data: activeLeaseUnits, error: leasesErr } = await supabase
+      if (unitsList && unitsList.length > 0) {
+        const { data: activeLeaseUnits } = await supabase
           .from('leases')
           .select('unit_id')
-          .in('unit_id', unitIds)
           .eq('status', 'active');
-        if (!leasesErr && Array.isArray(activeLeaseUnits)) {
+
+        if (activeLeaseUnits && activeLeaseUnits.length > 0) {
           const blocked = new Set(activeLeaseUnits.map((l: any) => l.unit_id));
-          setUnits(unitsList.filter(u => !blocked.has(u.id)));
+          setUnits(unitsList.filter((u: any) => !blocked.has(u.id)));
           return;
         }
       }
 
-      setUnits(unitsList);
+      setUnits(unitsList || []);
     } catch (error) {
       console.error('Error fetching units:', error);
       setUnits([]);
     }
   };
 
-  // Preflight check for existing tenant
   const checkForExistingTenant = async (email: string, phone: string) => {
     try {
       const { data: result, error } = await supabase
@@ -191,7 +187,6 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
     }
   };
 
-  // Handle new tenant creation
   const onSubmit = async (data: TenantFormData) => {
     if (!user) {
       toast({
@@ -202,751 +197,301 @@ export function AddTenantDialog({ onTenantAdded, open: controlledOpen, onOpenCha
       return;
     }
 
+    if (data.unit_id) {
+      const existing = await checkForExistingTenant(data.email, data.phone);
+      
+      if (existing) {
+        setExistingTenant(existing);
+        setShowConfirmDialog(true);
+        return;
+      }
+    }
+
+    await createTenant(data);
+  };
+
+  const handleAttachLease = async () => {
+    setShowConfirmDialog(false);
+    const data = form.getValues();
+    await createTenant(data, existingTenant.id);
+  };
+
+  const createTenant = async (data: TenantFormData, existingTenantId?: string) => {
     setLoading(true);
-    const startTime = performance.now();
-    console.log('⏱️ Tenant creation started');
-
-    // Hard timeout fallback (20 seconds)
-    const hardTimeout = setTimeout(() => {
-      setLoading(false);
-      toast({
-        title: "Request Timed Out",
-        description: "The request took too long. Please try again.",
-        variant: "destructive",
-      });
-    }, 20000);
-
-    // Watchdog timer for progress notification
-    const watchdog = setTimeout(() => {
-      toast({
-        title: "Taking longer than usual",
-        description: "Still working on creating the tenant. Please wait...",
-      });
-    }, 10000);
+    let hardTimeout: NodeJS.Timeout;
+    let watchdog: NodeJS.Timeout;
 
     try {
-      // Non-blocking activity log
+      hardTimeout = setTimeout(() => {
+        setLoading(false);
+        toast({
+          title: "Request Timed Out",
+          description: "The request took too long. Please try again.",
+          variant: "destructive",
+        });
+      }, 20000);
+
+      watchdog = setTimeout(() => {
+        toast({
+          title: existingTenantId ? "Adding lease..." : "Creating tenant...",
+          description: existingTenantId 
+            ? "Adding new lease to existing tenant. Please wait..."
+            : "Creating tenant and setting up their account. Please wait...",
+        });
+      }, 10000);
+
       logActivity('tenant_create_attempt', 'tenant', undefined, { 
         property_id: data.property_id, 
         unit_id: data.unit_id, 
-        has_lease: !!data.unit_id 
+        has_lease: !!data.unit_id,
+        is_attachment: !!existingTenantId
       }).catch(console.error);
 
-      // Preflight duplicate check for better UX
-      if (data.property_id) {
-        const { count } = await supabase
-          .from('tenants')
-          .select('id', { count: 'exact', head: true })
-          .eq('property_id', data.property_id)
-          .or(`email.eq.${data.email},phone.eq.${data.phone}`);
-
-        if (count && count > 0) {
-          // Check which field is duplicate
-          const { data: existingTenants } = await supabase
-            .from('tenants')
-            .select('email, phone')
-            .eq('property_id', data.property_id)
-            .or(`email.eq.${data.email},phone.eq.${data.phone}`);
-
-          const duplicateEmail = existingTenants?.some(t => t.email.toLowerCase() === data.email.toLowerCase());
-          const duplicatePhone = existingTenants?.some(t => t.phone === data.phone);
-
-          if (duplicateEmail) {
-            form.setError('email', {
-              type: 'manual',
-              message: 'This email is already used for one of your properties'
-            });
-            toast({
-              title: 'Duplicate Email',
-              description: 'This email is already used for one of your properties.',
-              variant: 'destructive',
-            });
-          }
-
-          if (duplicatePhone) {
-            form.setError('phone', {
-              type: 'manual',
-              message: 'This phone number is already used for one of your properties'
-            });
-            toast({
-              title: 'Duplicate Phone',
-              description: 'This phone number is already used for one of your properties.',
-              variant: 'destructive',
-            });
-          }
-
-          // Focus first error field
-          setTimeout(() => {
-            const firstError = document.querySelector('[data-error="true"]') as HTMLElement;
-            firstError?.focus();
-          }, 100);
-
-          return;
-        }
-      }
-
-      // Use secure RPC to create tenant (and optional lease) in a single transaction.
-      const { data: result, error: rpcError } = await supabase.rpc('create_tenant_and_optional_lease', {
+      const { data: result, error: rpcError } = await supabase.rpc('create_or_attach_tenant_lease', {
         p_first_name: data.first_name,
         p_last_name: data.last_name,
         p_email: data.email,
-        p_phone: data.phone || null,
-        p_date_of_birth: null,
-        p_id_number: data.national_id || null,
-        p_employer: data.employer_name || null,
+        p_phone: data.phone,
+        p_national_id: data.national_id,
+        p_employment_status: data.employment_status || null,
+        p_profession: data.profession || null,
+        p_employer_name: data.employer_name || null,
+        p_monthly_income: data.monthly_income || null,
         p_emergency_contact_name: data.emergency_contact_name || null,
         p_emergency_contact_phone: data.emergency_contact_phone || null,
-        p_notes: null,
+        p_previous_address: data.previous_address || null,
         p_property_id: data.property_id || null,
         p_unit_id: data.unit_id || null,
         p_lease_start_date: data.lease_start_date || null,
         p_lease_end_date: data.lease_end_date || null,
-        p_monthly_rent: data.monthly_rent != null ? Number(data.monthly_rent) : null,
-        p_security_deposit: data.security_deposit != null ? Number(data.security_deposit) : null,
-        p_lease_terms: null,
-      } as any);
+        p_monthly_rent: data.monthly_rent || null,
+        p_security_deposit: data.security_deposit || null,
+        p_existing_tenant_id: existingTenantId || null,
+        p_allow_attach: true,
+      });
 
-      if (rpcError) {
-        console.error('Tenant creation RPC error:', {
-          message: rpcError.message,
-          code: rpcError.code,
-          details: rpcError.details
-        });
-        
-        // Handle specific error messages with form field errors
-        if (rpcError.message.includes('email already exists')) {
-          form.setError('email', {
-            type: 'manual',
-            message: 'This email is already used for one of your properties'
-          });
-          toast({
-            title: 'Duplicate Email',
-            description: 'This email is already used for one of your properties.',
-            variant: 'destructive',
-          });
-          setTimeout(() => {
-            const emailField = document.querySelector('[name="email"]') as HTMLElement;
-            emailField?.focus();
-          }, 100);
-        } else if (rpcError.message.includes('phone number already exists')) {
-          form.setError('phone', {
-            type: 'manual',
-            message: 'This phone number is already used for one of your properties'
-          });
-          toast({
-            title: 'Duplicate Phone',
-            description: 'This phone number is already used for one of your properties.',
-            variant: 'destructive',
-          });
-          setTimeout(() => {
-            const phoneField = document.querySelector('[name="phone"]') as HTMLElement;
-            phoneField?.focus();
-          }, 100);
-        } else if (rpcError.message.includes('already occupied')) {
-          form.setError('unit_id', {
-            type: 'manual',
-            message: 'This unit is already occupied'
-          });
-          toast({
-            title: 'Unit Occupied',
-            description: 'This unit is already occupied by another tenant.',
-            variant: 'destructive',
-          });
-        } else if (rpcError.message.includes('phone') || rpcError.message.includes('Invalid phone')) {
-          form.setError('phone', {
-            type: 'manual',
-            message: 'Invalid phone format'
-          });
-          toast({
-            title: 'Invalid Phone Number',
-            description: 'Please enter a valid phone number in international format (e.g., +254712345678)',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Error Creating Tenant',
-            description: rpcError.message || 'An unexpected error occurred. Please try again.',
-            variant: 'destructive',
-          });
-        }
-        return;
-      }
+      clearTimeout(hardTimeout);
+      clearTimeout(watchdog);
 
-      const rpcRes = (result ?? {}) as { success?: boolean; tenant_id?: string; lease_id?: string };
+      if (rpcError) throw rpcError;
 
-      if (!rpcRes || rpcRes.success === false) {
-        toast({
-          title: 'Tenant Creation Failed',
-          description: 'Failed to create tenant. Please try again.',
-          variant: 'destructive',
-        });
-        logActivity('tenant_creation_failed', 'tenant', undefined, { error: 'RPC returned success=false' }).catch(console.error);
-        return;
-      }
-
-      const leaseCreated = !!rpcRes.lease_id;
-      const tenantId = rpcRes.tenant_id;
-
-      // Success activity log (non-blocking)
-      logActivity(
-        'tenant_created',
-        'tenant',
-        tenantId,
-        {
-          tenant_name: `${data.first_name} ${data.last_name}`,
-          tenant_email: data.email,
-          unit_id: data.unit_id,
-          property_id: data.property_id,
-          has_lease: !!data.unit_id
-        }
-      ).catch(console.error);
-
-      // Send welcome notifications (email + SMS) - non-blocking
-      if (tenantId) {
-        console.log('📧 Triggering welcome notifications for tenant:', tenantId);
-        supabase.functions.invoke('send-tenant-welcome-notifications', {
-          body: {
-            tenantId,
-            includeEmail: true,
-            includeSMS: true
-          }
-        }).then(({ data: notifData, error: notifError }) => {
-          if (notifError) {
-            console.error('⚠️ Welcome notification error:', notifError);
-          } else {
-            console.log('✅ Welcome notifications sent:', notifData);
-          }
-        }).catch(console.error);
-      }
-
-      const endTime = performance.now();
-      console.log(`✅ Tenant created in ${(endTime - startTime).toFixed(0)}ms`);
-
+      const resultData = result as any;
       toast({
-        title: 'Tenant Created',
-        description: leaseCreated ? 'Tenant and lease created successfully. Welcome notifications sent.' : 'Tenant created successfully. Welcome notifications sent.',
-        variant: 'default',
-        duration: 3000,
+        title: "Success",
+        description: resultData.tenant_created 
+          ? "Tenant created successfully"
+          : "Lease added to existing tenant successfully",
       });
 
       form.reset();
       handleOpenChange(false);
-      onTenantAdded();
-
+      setExistingTenant(null);
+      if (onTenantAdded) onTenantAdded();
     } catch (error: any) {
-      console.error('Error creating tenant:', error);
-      toast({
-        title: 'Tenant Creation Failed',
-        description: error?.message || 'An unexpected error occurred',
-        variant: 'destructive',
-      });
-      // Failure log (non-blocking)
-      logActivity('tenant_creation_failed', 'tenant', undefined, {
-        error: error?.message,
-        property_id: data.property_id,
-        unit_id: data.unit_id
-      }).catch(console.error);
+      clearTimeout(hardTimeout!);
+      clearTimeout(watchdog!);
+      
+      const errorMessage = error?.message || 'Unknown error';
+      
+      if (errorMessage.includes('already exists in your portfolio')) {
+        if (errorMessage.toLowerCase().includes('email')) {
+          form.setError("email", { type: "manual", message: "A tenant with this email already exists in your portfolio" });
+        } else if (errorMessage.toLowerCase().includes('phone')) {
+          form.setError("phone", { type: "manual", message: "A tenant with this phone number already exists in your portfolio" });
+        }
+        toast({ title: "Duplicate Entry", description: errorMessage, variant: "destructive" });
+      } else if (errorMessage.includes('already occupied')) {
+        form.setError("unit_id", { type: "manual", message: "This unit is already occupied" });
+        toast({ title: "Unit Occupied", description: "This unit is already occupied by another tenant", variant: "destructive" });
+      } else if (errorMessage.includes('Invalid phone number format')) {
+        form.setError("phone", { type: "manual", message: "Invalid phone format. Use international format (e.g., +254712345678)" });
+        toast({ title: "Invalid Phone", description: "Please use international format (e.g., +254712345678)", variant: "destructive" });
+      } else {
+        toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      }
+
+      setTimeout(() => {
+        const firstError = document.querySelector('[data-error="true"]') as HTMLElement;
+        firstError?.focus();
+      }, 100);
     } finally {
-      clearTimeout(hardTimeout);
-      clearTimeout(watchdog);
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      {showTrigger && (
-        <DialogTrigger asChild>
-          <Button className="bg-primary hover:bg-primary/90">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Tenant
-          </Button>
-        </DialogTrigger>
-      )}
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-tint-gray">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="text-xl font-semibold text-primary">Add New Tenant</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Personal Information */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Personal Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="first_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        First Name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="John"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="last_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Last Name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="Doe"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Contact Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Email <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="john@example.com"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Phone Number <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="+254 700 000 000"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Identification & Employment */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Identification & Employment
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="national_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        National ID / Passport <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="12345678"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="profession"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Profession <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="Software Engineer"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="employment_status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Employment Status <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <Select onValueChange={field.onChange} value={(field.value as any) ?? ""}>
-                        <FormControl>
-                          <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="Employed">Employed</SelectItem>
-                          <SelectItem value="Self-Employed">Self-Employed</SelectItem>
-                          <SelectItem value="Unemployed">Unemployed</SelectItem>
-                          <SelectItem value="Student">Student</SelectItem>
-                          <SelectItem value="Retired">Retired</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="employer_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Employer Name <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="ABC Company Ltd"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="monthly_income"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-medium text-primary">
-                      Monthly Income (KES) <span className="text-muted-foreground">(Optional)</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        className="bg-card border-border focus:border-accent focus:ring-accent"
-                        placeholder="50000"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+    <>
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tenant Already Exists</AlertDialogTitle>
+            <AlertDialogDescription>
+              A tenant with this email/phone already exists in your portfolio:
+              <div className="mt-3 p-4 bg-muted rounded-lg border border-border">
+                <p className="font-semibold text-foreground">
+                  {existingTenant?.first_name} {existingTenant?.last_name}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">{existingTenant?.email}</p>
+                {existingTenant?.phone && (
+                  <p className="text-sm text-muted-foreground">{existingTenant?.phone}</p>
                 )}
-              />
-            </div>
-
-            {/* Emergency Contact */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Emergency Contact
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="emergency_contact_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Emergency Contact Name <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="Jane Doe"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="emergency_contact_phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Emergency Contact Phone <span className="text-muted-foreground">(Optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          className="bg-card border-border focus:border-accent focus:ring-accent"
-                          placeholder="+254 700 000 001"
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <p className="text-sm text-muted-foreground mt-2">
+                  Currently renting: <span className="font-medium text-foreground">{existingTenant?.current_units || 0}</span> unit(s)
+                </p>
               </div>
-            </div>
+              <p className="mt-3 text-foreground">Would you like to add another lease for this tenant?</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAttachLease}>
+              Yes, Add Another Lease
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-            {/* Property & Unit Assignment */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Property & Unit Assignment
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="property_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Property <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          setValue("unit_id", ""); // Reset unit when property changes
-                        }}
-                        value={(field.value as any) ?? ""}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
-                            <SelectValue placeholder="Select property" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="bg-card border-border">
-                          {properties.map((property) => (
-                            <SelectItem key={property.id} value={property.id}>
-                              {property.name} - {property.address}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="unit_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-primary">
-                        Unit <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          // Auto-fill rent amount when unit is selected
-                          const selectedUnit = units.find(u => u.id === value);
-                          if (selectedUnit && selectedUnit.rent_amount) {
-                            setValue("monthly_rent", Number(selectedUnit.rent_amount));
-                          }
-                        }}
-                        value={(field.value as any) ?? ""}
-                        disabled={!watchPropertyId}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="bg-card border-border focus:border-accent focus:ring-accent">
-                            <SelectValue placeholder={watchPropertyId ? "Select unit" : "Select property first"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="bg-card border-border">
-                          {units.map((unit) => (
-                            <SelectItem key={unit.id} value={unit.id}>
-                              Unit {unit.unit_number} - KES {unit.rent_amount?.toLocaleString()}/month
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Lease Information (shown when unit is selected) */}
-            {watch("unit_id") && (
-              <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-                <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                  Lease Information
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="lease_start_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-primary">
-                          Lease Start Date <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="lease_end_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-primary">
-                          Lease End Date <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            className="bg-card border-border focus:border-accent focus:ring-accent"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="monthly_rent"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-primary">
-                          Monthly Rent (KES) <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                        type="number"
-                        className="bg-card border-border focus:border-accent focus:ring-accent"
-                        placeholder="50000"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="security_deposit"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-primary">
-                          Security Deposit (KES) <span className="text-muted-foreground">(Optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                        type="number"
-                        className="bg-card border-border focus:border-accent focus:ring-accent"
-                        placeholder="50000"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        {showTrigger && (
+          <DialogTrigger asChild>
+            <Button><Plus className="mr-2 h-4 w-4" />Add Tenant</Button>
+          </DialogTrigger>
+        )}
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Tenant</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Personal Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="first_name" render={({ field }) => (
+                    <FormItem><FormLabel>First Name *</FormLabel><FormControl><Input {...field} data-error={!!form.formState.errors.first_name} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="last_name" render={({ field }) => (
+                    <FormItem><FormLabel>Last Name *</FormLabel><FormControl><Input {...field} data-error={!!form.formState.errors.last_name} /></FormControl><FormMessage /></FormItem>
+                  )} />
                 </div>
               </div>
-            )}
 
-            {/* Additional Information */}
-            <div className="bg-card p-6 rounded-lg border border-border space-y-4">
-              <h3 className="text-base font-semibold text-primary border-b border-border pb-2">
-                Additional Information
-              </h3>
-              <FormField
-                control={form.control}
-                name="previous_address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-medium text-primary">
-                      Previous Address <span className="text-muted-foreground">(Optional)</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Textarea
-                        className="bg-card border-border focus:border-accent focus:ring-accent"
-                        placeholder="Previous residential address"
-                        rows={3}
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Contact Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="email" render={({ field }) => (
+                    <FormItem><FormLabel>Email *</FormLabel><FormControl><Input type="email" {...field} data-error={!!form.formState.errors.email} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="phone" render={({ field }) => (
+                    <FormItem><FormLabel>Phone *</FormLabel><FormControl><Input {...field} placeholder="+254712345678" data-error={!!form.formState.errors.phone} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+              </div>
 
-            <div className="flex justify-end gap-3 pt-6 border-t border-border">
-              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loading} className="bg-accent hover:bg-accent/90">
-                {loading ? "Adding..." : "Add Tenant"}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Identification</h3>
+                <FormField control={form.control} name="national_id" render={({ field }) => (
+                  <FormItem><FormLabel>National ID / Passport *</FormLabel><FormControl><Input {...field} data-error={!!form.formState.errors.national_id} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Employment Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="employment_status" render={({ field }) => (
+                    <FormItem><FormLabel>Employment Status</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="employed">Employed</SelectItem>
+                          <SelectItem value="self-employed">Self Employed</SelectItem>
+                          <SelectItem value="unemployed">Unemployed</SelectItem>
+                          <SelectItem value="student">Student</SelectItem>
+                          <SelectItem value="retired">Retired</SelectItem>
+                        </SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="profession" render={({ field }) => (
+                    <FormItem><FormLabel>Profession</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="employer_name" render={({ field }) => (
+                    <FormItem><FormLabel>Employer Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="monthly_income" render={({ field }) => (
+                    <FormItem><FormLabel>Monthly Income</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Emergency Contact</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="emergency_contact_name" render={({ field }) => (
+                    <FormItem><FormLabel>Emergency Contact Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="emergency_contact_phone" render={({ field }) => (
+                    <FormItem><FormLabel>Emergency Contact Phone</FormLabel><FormControl><Input {...field} placeholder="+254712345678" /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <FormField control={form.control} name="previous_address" render={({ field }) => (
+                  <FormItem><FormLabel>Previous Address</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Property & Unit Assignment</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="property_id" render={({ field }) => (
+                    <FormItem><FormLabel>Property *</FormLabel>
+                      <Select onValueChange={(value) => { field.onChange(value); setSelectedPropertyId(value); }} value={field.value}>
+                        <FormControl><SelectTrigger data-error={!!form.formState.errors.property_id}><SelectValue placeholder="Select property" /></SelectTrigger></FormControl>
+                        <SelectContent>{properties.map((property) => (<SelectItem key={property.id} value={property.id}>{property.name}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="unit_id" render={({ field }) => (
+                    <FormItem><FormLabel>Unit *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger data-error={!!form.formState.errors.unit_id}><SelectValue placeholder="Select unit" /></SelectTrigger></FormControl>
+                        <SelectContent>{units.map((unit: any) => (<SelectItem key={unit.id} value={unit.id}>{unit.unit_number}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Lease Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="lease_start_date" render={({ field }) => (
+                    <FormItem><FormLabel>Lease Start Date *</FormLabel><FormControl><Input type="date" {...field} data-error={!!form.formState.errors.lease_start_date} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="lease_end_date" render={({ field }) => (
+                    <FormItem><FormLabel>Lease End Date *</FormLabel><FormControl><Input type="date" {...field} data-error={!!form.formState.errors.lease_end_date} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="monthly_rent" render={({ field }) => (
+                    <FormItem><FormLabel>Monthly Rent *</FormLabel><FormControl><Input type="number" {...field} data-error={!!form.formState.errors.monthly_rent} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="security_deposit" render={({ field }) => (
+                    <FormItem><FormLabel>Security Deposit</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-4">
+                <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>Cancel</Button>
+                <Button type="submit" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {loading ? "Processing..." : "Add Tenant"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
