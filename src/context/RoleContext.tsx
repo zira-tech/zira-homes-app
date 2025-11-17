@@ -62,46 +62,57 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           return;
         }
 
-        // Fetch the single role assigned to the user
-        const { data: roleData, error: roleError } = await supabase
+        // Fetch ALL roles assigned to the user (not just single)
+        const { data: rolesData, error: rolesError } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", user.id)
-          .single();
+          .eq("user_id", user.id);
 
-        if (roleError) {
-          console.error("Error fetching role:", roleError);
+        if (rolesError) {
+          console.error("Error fetching roles:", rolesError);
           setUserRole(null);
           setAssignedRoles([]);
           setLoading(false);
           return;
         }
 
-        const role = roleData?.role?.toLowerCase() || null;
-        setUserRole(role);
-        setAssignedRoles(role ? [role] : []);
+        const allRoles = rolesData?.map(r => r.role.toLowerCase()) || [];
+        setAssignedRoles(allRoles);
 
-        // Special handling for specific roles
-        if (role === "landlord") {
-          // Check if landlord is on trial
-          const { data: subscriptionData } = await supabase
+        // Smart role resolution with priority order
+        // Priority: Admin > Landlord > SubUser > Manager/Agent > Tenant
+        let resolvedRole: string | null = null;
+
+        if (allRoles.includes('admin')) {
+          resolvedRole = 'admin';
+        } else if (allRoles.includes('landlord')) {
+          // Verify they have a subscription
+          const { data: sub } = await supabase
             .from('landlord_subscriptions')
-            .select('status, trial_end_date')
+            .select('id, status, trial_end_date')
             .eq('landlord_id', user.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
           
-          if (subscriptionData?.status === 'trial' && subscriptionData?.trial_end_date) {
-            const trialEndDate = new Date(subscriptionData.trial_end_date);
-            setIsOnLandlordTrial(trialEndDate > new Date());
+          if (sub) {
+            resolvedRole = 'landlord';
+            
+            // Check if on trial
+            if (sub.status === 'trial' && sub.trial_end_date) {
+              const trialEndDate = new Date(sub.trial_end_date);
+              setIsOnLandlordTrial(trialEndDate > new Date());
+            }
+          } else {
+            console.warn('User has Landlord role but no subscription found');
           }
-        } else if (role === "subuser") {
-          // Fetch sub-user permissions and landlord_id
+        } else if (allRoles.includes('subuser')) {
+          // Verify they're in sub_users table
           const { data: subUserData } = await supabase.rpc('get_my_sub_user_permissions');
           const subUserInfo = subUserData as { permissions?: Record<string, boolean>; landlord_id?: string; status?: string } | null;
           
           if (subUserInfo && (subUserInfo.permissions || subUserInfo.status)) {
+            resolvedRole = 'subuser';
             if (subUserInfo.permissions) setSubUserPermissions(subUserInfo.permissions);
             setLandlordId(subUserInfo.landlord_id || null);
             
@@ -113,15 +124,50 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
                 .eq('landlord_id', subUserInfo.landlord_id)
                 .order('created_at', { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
               
               if (landlordSubscription?.status === 'trial' && landlordSubscription?.trial_end_date) {
                 const trialEndDate = new Date(landlordSubscription.trial_end_date);
                 setIsOnLandlordTrial(trialEndDate > new Date());
               }
             }
+          } else {
+            console.warn('User has SubUser role but no sub_users record found');
+          }
+        } else if (allRoles.includes('manager')) {
+          resolvedRole = 'manager';
+        } else if (allRoles.includes('agent')) {
+          resolvedRole = 'agent';
+        } else if (allRoles.includes('tenant')) {
+          // Verify they're actually linked to a tenant record (not just email match)
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          
+          if (tenant) {
+            resolvedRole = 'tenant';
+          } else {
+            console.warn('User has Tenant role but no linked tenant record found');
           }
         }
+
+        // Fallback: check auth metadata if no valid role found
+        if (!resolvedRole && allRoles.length === 0) {
+          const metadataRole = user.user_metadata?.role?.toLowerCase();
+          if (metadataRole) {
+            resolvedRole = metadataRole;
+            console.warn('Using fallback role from auth metadata:', metadataRole);
+          }
+        }
+
+        // Log if role conflicts detected
+        if (allRoles.length > 1) {
+          console.log(`Multiple roles detected for user: ${allRoles.join(', ')}. Resolved to: ${resolvedRole}`);
+        }
+
+        setUserRole(resolvedRole);
       } catch (error) {
         console.error("Error in fetchUserRole:", error);
         setUserRole(null);
