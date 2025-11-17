@@ -30,6 +30,10 @@ type MpesaCheckError =
   | 'unit_not_found' 
   | 'property_not_found' 
   | 'landlord_not_found'
+  | 'no_mpesa_config'
+  | 'credentials_not_verified'
+  | 'config_inactive'
+  | 'payment_preference_check_failed'
   | 'config_check_failed'
   | 'network_error'
   | 'unknown_error';
@@ -40,6 +44,10 @@ const ERROR_MESSAGES: Record<MpesaCheckError, string> = {
   unit_not_found: 'Unit information not found. Please contact support.',
   property_not_found: 'Property information not found. Please contact support.',
   landlord_not_found: 'Landlord information not found. Please contact support.',
+  no_mpesa_config: 'M-Pesa payment not configured for this property',
+  credentials_not_verified: 'M-Pesa credentials require verification',
+  config_inactive: 'M-Pesa configuration is inactive',
+  payment_preference_check_failed: 'Unable to verify payment preferences',
   config_check_failed: 'Unable to verify M-Pesa configuration. Please try again.',
   network_error: 'Network error. Please check your connection and try again.',
   unknown_error: 'An unexpected error occurred. Please try again.',
@@ -200,15 +208,37 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
       diagnostics.step = 'checking_mpesa_config';
 
       // Check if landlord has M-Pesa configured
+      console.log('🔍 [M-Pesa Availability] Checking landlord M-Pesa config for landlord:', landlordId);
+      
+      // First check if ANY config exists (active or inactive) to provide better error messages
+      const { data: allConfigs, error: allConfigsError } = await supabase
+        .from('landlord_mpesa_configs')
+        .select('id, business_shortcode, is_active, credentials_verified, shortcode_type')
+        .eq('landlord_id', landlordId);
+
+      if (allConfigsError) {
+        console.error('❌ [M-Pesa Availability] Config query error:', allConfigsError);
+        diagnostics.step = 'config_query_error';
+        setLastCheck(diagnostics);
+        
+        if (allConfigsError.code === 'PGRST301' || allConfigsError.message?.includes('permission')) {
+          handleError('config_check_failed', `RLS/Permission error accessing M-Pesa config: ${allConfigsError.message}`);
+        } else {
+          handleError('config_check_failed', allConfigsError.message);
+        }
+        return debugBypass;
+      }
+
+      // Now check for active config
       const { data: mpesaConfig, error: configError } = await supabase
         .from('landlord_mpesa_configs')
-        .select('id')
+        .select('id, business_shortcode, is_active, credentials_verified, shortcode_type')
         .eq('landlord_id', landlordId)
         .eq('is_active', true)
         .maybeSingle();
 
       if (configError) {
-        console.error('❌ [M-Pesa Availability] Config query error:', configError);
+        console.error('❌ [M-Pesa Availability] Active config query error:', configError);
         diagnostics.step = 'config_query_error';
         setLastCheck(diagnostics);
         
@@ -222,6 +252,66 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
 
       let available = !!mpesaConfig;
       diagnostics.hasCustomConfig = available;
+      
+      // Enhanced error handling for no active config
+      if (!mpesaConfig) {
+        console.warn('⚠️ [M-Pesa Availability] No active M-Pesa config found');
+        
+        // Check if there are inactive configs
+        const inactiveConfigs = allConfigs?.filter(c => !c.is_active) || [];
+        const verifiedInactive = inactiveConfigs.find(c => c.credentials_verified);
+        
+        if (verifiedInactive) {
+          console.warn('⚠️ [M-Pesa Availability] Found verified but inactive config:', {
+            id: verifiedInactive.id,
+            type: verifiedInactive.shortcode_type,
+            shortcode: verifiedInactive.business_shortcode
+          });
+          diagnostics.step = 'config_inactive';
+          setLastCheck(diagnostics);
+          handleError(
+            'config_inactive',
+            `M-Pesa config exists and is verified but inactive (${verifiedInactive.shortcode_type} ${verifiedInactive.business_shortcode}). Please activate it in payment settings.`
+          );
+          return debugBypass;
+        }
+        
+        if (inactiveConfigs.length > 0) {
+          console.warn('⚠️ [M-Pesa Availability] Found inactive unverified configs:', inactiveConfigs.length);
+          diagnostics.step = 'config_inactive_unverified';
+          setLastCheck(diagnostics);
+          handleError(
+            'config_inactive',
+            `M-Pesa config exists but is inactive and unverified. Please verify and activate in payment settings.`
+          );
+          return debugBypass;
+        }
+        
+        // No configs at all - check for platform default preference
+        diagnostics.step = 'checking_platform_preference';
+      } else if (!mpesaConfig.credentials_verified) {
+        console.warn('⚠️ [M-Pesa Availability] M-Pesa config is active but credentials not verified:', {
+          id: mpesaConfig.id,
+          type: mpesaConfig.shortcode_type,
+          shortcode: mpesaConfig.business_shortcode
+        });
+        diagnostics.step = 'credentials_not_verified';
+        setLastCheck(diagnostics);
+        handleError(
+          'credentials_not_verified',
+          `M-Pesa config (${mpesaConfig.shortcode_type} ${mpesaConfig.business_shortcode}) is active but credentials have not been verified. Please test credentials in payment settings.`
+        );
+        return debugBypass;
+      } else {
+        console.log('✅ [M-Pesa Availability] Valid M-Pesa config found:', {
+          id: mpesaConfig.id,
+          type: mpesaConfig.shortcode_type,
+          shortcode: mpesaConfig.business_shortcode,
+          verified: mpesaConfig.credentials_verified
+        });
+        diagnostics.step = 'config_verified';
+      }
+
       diagnostics.step = 'checking_platform_preference';
 
       // If no custom config, check for platform default preference
@@ -234,6 +324,10 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
 
         if (prefsError) {
           console.error('⚠️ [M-Pesa Availability] Error checking payment preferences:', prefsError);
+          diagnostics.step = 'payment_prefs_error';
+          setLastCheck(diagnostics);
+          handleError('payment_preference_check_failed', prefsError.message);
+          return debugBypass;
         } else if (paymentPrefs?.mpesa_config_preference === 'platform_default') {
           // Explicit platform default preference
           console.log('✅ [M-Pesa Availability] Using platform default (explicit preference)');
@@ -244,6 +338,13 @@ export function useMpesaAvailability(): MpesaAvailabilityResult {
           console.log('✅ [M-Pesa Availability] No preference set, defaulting to platform availability');
           available = true;
           diagnostics.usesPlatformDefault = true;
+        } else {
+          // Preference set to custom but no config found
+          console.error('❌ [M-Pesa Availability] Payment preference is custom but no valid config');
+          diagnostics.step = 'no_config_custom_preference';
+          setLastCheck(diagnostics);
+          handleError('no_mpesa_config', 'M-Pesa not configured. Please set up M-Pesa in payment settings.');
+          return debugBypass;
         }
       }
 
