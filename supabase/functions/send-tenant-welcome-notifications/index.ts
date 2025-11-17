@@ -149,6 +149,7 @@ const handler = async (req: Request): Promise<Response> => {
         user_metadata: {
           first_name: tenant.first_name,
           last_name: tenant.last_name,
+          role: 'Tenant',  // Solution 1: Explicitly set Tenant role
         },
       });
 
