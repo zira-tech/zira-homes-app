@@ -4762,12 +4762,10 @@ export type Database = {
         }
         Returns: undefined
       }
-      lookup_tenant_in_portfolio:
-        | { Args: { p_email?: string; p_phone?: string }; Returns: Json }
-        | {
-            Args: { p_email?: string; p_national_id?: string; p_phone?: string }
-            Returns: Json
-          }
+      lookup_tenant_in_portfolio: {
+        Args: { p_email?: string; p_national_id?: string; p_phone?: string }
+        Returns: Json
+      }
       map_feature_to_permission: { Args: { _feature: string }; Returns: string }
       mask_sensitive_data: {
         Args: { data: string; visible_chars?: number }
