@@ -150,17 +150,24 @@ const PaymentConfiguration = () => {
               Manage payment methods and platform-wide payment settings
             </p>
           </div>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Payment Method
+          <div className="flex gap-2">
+            <Link to="/admin/jenga-payment-test">
+              <Button variant="outline">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Jenga PAY Test
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Payment Method</DialogTitle>
-              </DialogHeader>
+            </Link>
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Payment Method
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Payment Method</DialogTitle>
+                </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="provider_name">Provider Name</Label>

@@ -867,6 +867,111 @@ export type Database = {
           },
         ]
       }
+      jenga_ipn_callbacks: {
+        Row: {
+          additional_info: string | null
+          amount: number
+          bank_account: string | null
+          bank_reference: string | null
+          bill_number: string | null
+          callback_type: string
+          created_at: string | null
+          customer_mobile: string | null
+          customer_name: string | null
+          customer_reference: string | null
+          id: string
+          invoice_id: string | null
+          ip_address: unknown
+          landlord_id: string | null
+          order_amount: number | null
+          payment_mode: string | null
+          processed: boolean | null
+          processed_at: string | null
+          raw_data: Json
+          remarks: string | null
+          served_by: string | null
+          service_charge: number | null
+          status: string
+          transaction_date: string | null
+          transaction_reference: string
+          transaction_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          additional_info?: string | null
+          amount: number
+          bank_account?: string | null
+          bank_reference?: string | null
+          bill_number?: string | null
+          callback_type: string
+          created_at?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          raw_data: Json
+          remarks?: string | null
+          served_by?: string | null
+          service_charge?: number | null
+          status: string
+          transaction_date?: string | null
+          transaction_reference: string
+          transaction_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          additional_info?: string | null
+          amount?: number
+          bank_account?: string | null
+          bank_reference?: string | null
+          bill_number?: string | null
+          callback_type?: string
+          created_at?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          raw_data?: Json
+          remarks?: string | null
+          served_by?: string | null
+          service_charge?: number | null
+          status?: string
+          transaction_date?: string | null
+          transaction_reference?: string
+          transaction_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jenga_ipn_callbacks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jenga_ipn_callbacks_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_base_articles: {
         Row: {
           author_id: string | null
@@ -915,6 +1020,68 @@ export type Database = {
             foreignKeyName: "knowledge_base_articles_author_id_fkey"
             columns: ["author_id"]
             isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_jenga_configs: {
+        Row: {
+          api_key_encrypted: string | null
+          consumer_secret_encrypted: string | null
+          created_at: string | null
+          credentials_verified: boolean | null
+          environment: string
+          id: string
+          ipn_password_encrypted: string | null
+          ipn_url: string | null
+          ipn_username: string | null
+          is_active: boolean | null
+          landlord_id: string
+          last_verified_at: string | null
+          merchant_code: string
+          paybill_number: string
+          updated_at: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id: string
+          last_verified_at?: string | null
+          merchant_code: string
+          paybill_number?: string
+          updated_at?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id?: string
+          last_verified_at?: string | null
+          merchant_code?: string
+          paybill_number?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_jenga_configs_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: true
             referencedRelation: "orphaned_users_monitor"
             referencedColumns: ["id"]
           },

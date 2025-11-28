@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, CreditCard, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, CreditCard, AlertCircle, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -348,6 +348,22 @@ export const PaymentSettingsForm: React.FC<PaymentSettingsFormProps> = ({
           />
           <p className="text-xs text-gray-600 dark:text-gray-400">
             Enter your M-Pesa registered phone number (format: +254XXXXXXXXX)
+          </p>
+        </div>
+      )}
+
+      {/* Jenga PAY Configuration */}
+      {preferences.preferred_payment_method === 'bank_transfer' && (
+        <div className="space-y-3 border border-green-200 dark:border-green-800 rounded-lg p-4 bg-green-50 dark:bg-green-950">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-green-600" />
+            <h4 className="font-medium text-green-900 dark:text-green-100">
+              Equity Bank - Jenga PAY
+            </h4>
+          </div>
+          <p className="text-sm text-green-700 dark:text-green-300">
+            Accept payments via Equity Bank paybill 247247. Configure your Jenga PAY credentials
+            in the M-Pesa Integration Setup section above to enable instant payment notifications.
           </p>
         </div>
       )}

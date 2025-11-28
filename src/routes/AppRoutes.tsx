@@ -82,6 +82,7 @@ import BillingPlanManager from "@/pages/admin/BillingPlanManager";
 import SMSLogs from "@/pages/admin/SMSLogs";
 import PlanFeaturesManagement from "@/pages/admin/PlanFeaturesManagement";
 import { MpesaTest } from "@/pages/MpesaTest";
+import JengaPaymentTest from "@/pages/admin/JengaPaymentTest";
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -310,6 +311,7 @@ export const AppRoutes = () => {
                 <Route path="/plan-features" element={<PlanFeaturesManagement />} />
                 <Route path="/sms-logs" element={<SMSLogs />} />
                 <Route path="/mpesa-test" element={<MpesaTest />} />
+                <Route path="/jenga-payment-test" element={<JengaPaymentTest />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </AdminOnlyRoute>
