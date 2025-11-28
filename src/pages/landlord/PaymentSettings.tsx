@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { PaymentSettingsForm } from "@/components/landlord/PaymentSettingsForm";
 import { MpesaCredentialsSection } from "@/components/landlord/MpesaCredentialsSection";
 import { BankVerificationSection } from "@/components/landlord/BankVerificationSection";
+import { JengaPayConfig } from "@/components/landlord/JengaPayConfig";
 import { CreditCard, Check, Shield, Settings, Smartphone, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -232,6 +233,11 @@ const PaymentSettings = () => {
           {/* Bank Integration Verification */}
           <div className="lg:col-span-2">
             <BankVerificationSection onVerificationChange={loadData} />
+          </div>
+
+          {/* Jenga PAY Configuration (Equity Bank) */}
+          <div className="lg:col-span-2">
+            <JengaPayConfig />
           </div>
 
           {/* Approved Payment Methods */}
