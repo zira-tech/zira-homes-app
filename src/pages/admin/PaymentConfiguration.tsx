@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { toast } from "sonner";
-import { CreditCard, Plus, Settings, Trash2, ExternalLink } from "lucide-react";
+import { CreditCard, Plus, Settings, Trash2, ExternalLink, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 
@@ -236,55 +236,76 @@ const PaymentConfiguration = () => {
           </div>
         </div>
 
-        {/* Platform M-Pesa Configuration Summary */}
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-primary" />
-                <CardTitle>Platform M-Pesa Configuration</CardTitle>
+        {/* Platform Payment Configurations */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Platform M-Pesa Configuration */}
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                  <CardTitle>Platform M-Pesa</CardTitle>
+                </div>
+                <Badge variant="default">Active</Badge>
               </div>
-              <Badge variant="default">Active</Badge>
-            </div>
-            <CardDescription>
-              Default M-Pesa credentials for tenant payments
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <CardDescription>
+                Default M-Pesa credentials for tenant payments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
                 <div className="p-3 bg-background rounded-lg border">
-                  <p className="text-xs text-muted-foreground">Platform Shortcode</p>
+                  <p className="text-xs text-muted-foreground">Shortcode</p>
                   <p className="text-lg font-mono font-bold">4155923</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Paybill Number</p>
                 </div>
                 <div className="p-3 bg-background rounded-lg border">
                   <p className="text-xs text-muted-foreground">Environment</p>
-                  <p className="text-lg font-bold">Production</p>
-                  <Badge variant="outline" className="mt-1">Live Payments</Badge>
+                  <Badge variant="outline">Production</Badge>
                 </div>
-                <div className="p-3 bg-background rounded-lg border">
-                  <p className="text-xs text-muted-foreground">Security</p>
-                  <p className="text-lg font-bold">AES-256-GCM</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Encrypted Storage</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-sm text-muted-foreground">
-                  Landlords without custom M-Pesa configs automatically use these platform defaults
-                </p>
-                <Button asChild variant="outline" size="sm">
+                <Button asChild variant="outline" size="sm" className="w-full">
                   <Link to="/admin/platform-payment-config" className="flex items-center gap-2">
                     <Settings className="h-4 w-4" />
-                    Manage Platform Config
-                    <ExternalLink className="h-3 w-3" />
+                    Manage Config
                   </Link>
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Jenga PAY Configuration */}
+          <Card className="border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/20">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <CardTitle>Jenga PAY (Equity Bank)</CardTitle>
+                </div>
+                <Badge variant="default" className="bg-blue-600">Active</Badge>
+              </div>
+              <CardDescription>
+                Equity Bank payments via Paybill 247247
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="p-3 bg-background rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Paybill Number</p>
+                  <p className="text-lg font-mono font-bold">247247</p>
+                </div>
+                <div className="p-3 bg-background rounded-lg border">
+                  <p className="text-xs text-muted-foreground">Integration</p>
+                  <Badge variant="outline">IPN Callbacks</Badge>
+                </div>
+                <Button asChild variant="outline" size="sm" className="w-full">
+                  <Link to="/admin/jenga-payment-test" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Test & Monitor
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Payment Methods Table */}
         <Card>

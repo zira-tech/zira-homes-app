@@ -16,6 +16,8 @@ export const JengaPayConfig: React.FC = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [testingPayment, setTestingPayment] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] = useState(true);
   const [config, setConfig] = useState({
     merchant_code: '',
     api_key: '',
@@ -29,6 +31,7 @@ export const JengaPayConfig: React.FC = () => {
   const [ipnUrl, setIpnUrl] = useState('');
 
   useEffect(() => {
+    checkAvailability();
     loadConfig();
     // Generate IPN URL from runtime config
     const projectUrl = window.location.origin.includes('localhost') 
@@ -37,6 +40,25 @@ export const JengaPayConfig: React.FC = () => {
     const callbackUrl = `${projectUrl}/functions/v1/jenga-ipn-callback`;
     setIpnUrl(callbackUrl);
   }, []);
+
+  const checkAvailability = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('approved_payment_methods')
+        .select('is_active')
+        .eq('payment_method_type', 'jenga_pay')
+        .eq('country_code', 'KE')
+        .maybeSingle();
+
+      if (error) throw error;
+      setIsEnabled(data?.is_active || false);
+    } catch (error) {
+      console.error('Error checking Jenga PAY availability:', error);
+      setIsEnabled(false);
+    } finally {
+      setCheckingAvailability(false);
+    }
+  };
 
   const loadConfig = async () => {
     if (!user) return;
@@ -153,6 +175,16 @@ export const JengaPayConfig: React.FC = () => {
       description: "URL copied to clipboard"
     });
   };
+
+  // Don't render if checking availability
+  if (checkingAvailability) {
+    return null;
+  }
+
+  // Don't render if Jenga PAY is not enabled by admin
+  if (!isEnabled) {
+    return null;
+  }
 
   return (
     <Card>
