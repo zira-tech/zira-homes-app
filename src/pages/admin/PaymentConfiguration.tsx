@@ -233,6 +233,7 @@ const PaymentConfiguration = () => {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Platform M-Pesa Configuration Summary */}
