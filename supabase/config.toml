@@ -113,3 +113,6 @@ verify_jwt = true
 
 [functions.send-overdue-reminders]
 verify_jwt = false
+
+[functions.jenga-ipn-callback]
+verify_jwt = false

@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, CheckCircle, XCircle, Loader2, Shield, Info, Copy } from "lucide-react";
+import { Building2, CheckCircle, XCircle, Loader2, Shield, Info, Copy, AlertTriangle, ExternalLink, Key } from "lucide-react";
 
 export const JengaPayConfig: React.FC = () => {
   const { user } = useAuth();
@@ -33,11 +34,8 @@ export const JengaPayConfig: React.FC = () => {
   useEffect(() => {
     checkAvailability();
     loadConfig();
-    // Generate IPN URL from runtime config
-    const projectUrl = window.location.origin.includes('localhost') 
-      ? 'https://kdpqimetajnhcqseajok.supabase.co'
-      : window.location.origin.replace('lovable.app', 'supabase.co');
-    const callbackUrl = `${projectUrl}/functions/v1/jenga-ipn-callback`;
+    // Generate IPN URL - always use the Supabase project URL
+    const callbackUrl = `https://kdpqimetajnhcqseajok.supabase.co/functions/v1/jenga-ipn-callback`;
     setIpnUrl(callbackUrl);
   }, []);
 
@@ -103,10 +101,19 @@ export const JengaPayConfig: React.FC = () => {
     if (!user || !config.merchant_code || !config.api_key || !config.consumer_secret) {
       toast({
         title: "Missing Fields",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (Merchant Code, API Key, Consumer Secret)",
         variant: "destructive"
       });
       return;
+    }
+
+    // Warn if going to production without IPN auth
+    if (config.environment === 'production' && (!config.ipn_username || !config.ipn_password)) {
+      toast({
+        title: "Security Warning",
+        description: "It's recommended to set IPN Username and Password for production environment",
+        variant: "destructive"
+      });
     }
 
     setLoading(true);
@@ -116,12 +123,13 @@ export const JengaPayConfig: React.FC = () => {
         .upsert({
           landlord_id: user.id,
           merchant_code: config.merchant_code,
-          api_key_encrypted: config.api_key, // In production, encrypt on server
-          consumer_secret_encrypted: config.consumer_secret, // In production, encrypt on server
+          api_key_encrypted: config.api_key,
+          consumer_secret_encrypted: config.consumer_secret,
           paybill_number: config.paybill_number,
           environment: config.environment,
-          ipn_username: config.ipn_username,
-          ipn_password_encrypted: config.ipn_password, // In production, encrypt on server
+          ipn_username: config.ipn_username || null,
+          ipn_password_encrypted: config.ipn_password || null,
+          ipn_url: ipnUrl,
           is_active: true,
           credentials_verified: false
         });
@@ -153,8 +161,8 @@ export const JengaPayConfig: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       toast({
-        title: "Test Successful",
-        description: "Jenga PAY test payment initiated successfully"
+        title: "Test Initiated",
+        description: "Test IPN will be processed. Check the IPN Callbacks section in admin panel."
       });
     } catch (error) {
       console.error('Error testing payment:', error);
@@ -168,11 +176,11 @@ export const JengaPayConfig: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, label: string = "URL") => {
     navigator.clipboard.writeText(text);
     toast({
       title: "Copied",
-      description: "URL copied to clipboard"
+      description: `${label} copied to clipboard`
     });
   };
 
@@ -214,9 +222,15 @@ export const JengaPayConfig: React.FC = () => {
                 </>
               )}
             </Badge>
-            <span className="text-sm text-muted-foreground">
-              Environment: {config.environment}
-            </span>
+            <Badge variant="outline">
+              {config.environment === 'production' ? 'Production' : 'Sandbox'}
+            </Badge>
+            {existingConfig.ipn_username && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Key className="h-3 w-3 mr-1" />
+                IPN Auth Enabled
+              </Badge>
+            )}
           </div>
         )}
 
@@ -230,30 +244,59 @@ export const JengaPayConfig: React.FC = () => {
           </AlertDescription>
         </Alert>
 
-        {/* IPN URL Display */}
-        <div className="space-y-2">
-          <Label>IPN Callback URL</Label>
-          <div className="flex gap-2">
-            <Input 
-              value={ipnUrl} 
-              readOnly 
-              className="font-mono text-sm bg-muted"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => copyToClipboard(ipnUrl)}
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
+        {/* IPN Setup Section */}
+        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+          <h3 className="font-medium flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            IPN Setup Instructions
+          </h3>
+          
+          <div className="space-y-3 text-sm">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Step 1: Copy IPN Callback URL</Label>
+              <div className="flex gap-2">
+                <Input 
+                  value={ipnUrl} 
+                  readOnly 
+                  className="font-mono text-xs bg-background"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(ipnUrl, "IPN URL")}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Step 2: Register IPN in Jenga Dashboard</Label>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Log in to your <a href="https://v3.jengahq.io/dashboard/settings/create-ipn" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">Jenga Dashboard <ExternalLink className="h-3 w-3" /></a></li>
+                <li>Go to Settings → IPN Configuration</li>
+                <li>Paste the IPN Callback URL above</li>
+                <li>Set username and password (use the same values below)</li>
+                <li>Enable the IPN</li>
+              </ol>
+            </div>
+
+            <Alert variant="default" className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                <strong>Important:</strong> When your tenants pay, they should use their <strong>Invoice Number</strong> as the Account/Bill Number. 
+                This ensures payments are automatically matched to the correct invoice.
+              </AlertDescription>
+            </Alert>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Register this URL in your Jenga PAY dashboard for instant payment notifications
-          </p>
         </div>
+
+        <Separator />
 
         {/* Configuration Form */}
         <div className="space-y-4">
+          <h3 className="font-medium">API Credentials</h3>
+          
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="merchant-code">Merchant Code *</Label>
@@ -284,7 +327,7 @@ export const JengaPayConfig: React.FC = () => {
               type="password"
               value={config.api_key}
               onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
-              placeholder="Your Jenga API key"
+              placeholder={existingConfig ? "••••••••••• (leave blank to keep existing)" : "Your Jenga API key"}
               disabled={loading}
             />
           </div>
@@ -296,7 +339,7 @@ export const JengaPayConfig: React.FC = () => {
               type="password"
               value={config.consumer_secret}
               onChange={(e) => setConfig({ ...config, consumer_secret: e.target.value })}
-              placeholder="Your Jenga consumer secret"
+              placeholder={existingConfig ? "••••••••••• (leave blank to keep existing)" : "Your Jenga consumer secret"}
               disabled={loading}
             />
           </div>
@@ -318,32 +361,49 @@ export const JengaPayConfig: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+        </div>
 
-          {/* IPN Authentication (Optional) */}
-          <div className="border-t pt-4 mt-4">
-            <h4 className="text-sm font-medium mb-3">IPN Authentication (Optional)</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="ipn-username">IPN Username</Label>
-                <Input
-                  id="ipn-username"
-                  value={config.ipn_username}
-                  onChange={(e) => setConfig({ ...config, ipn_username: e.target.value })}
-                  placeholder="Optional"
-                  disabled={loading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ipn-password">IPN Password</Label>
-                <Input
-                  id="ipn-password"
-                  type="password"
-                  value={config.ipn_password}
-                  onChange={(e) => setConfig({ ...config, ipn_password: e.target.value })}
-                  placeholder="Optional"
-                  disabled={loading}
-                />
-              </div>
+        <Separator />
+
+        {/* IPN Authentication Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium flex items-center gap-2">
+              <Key className="h-4 w-4" />
+              IPN Authentication
+            </h3>
+            {config.environment === 'production' && !config.ipn_username && (
+              <Badge variant="destructive" className="text-xs">
+                Recommended for Production
+              </Badge>
+            )}
+          </div>
+          
+          <p className="text-sm text-muted-foreground">
+            These credentials authenticate IPN callbacks from Jenga. Use the same username/password you configured in the Jenga dashboard.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ipn-username">IPN Username</Label>
+              <Input
+                id="ipn-username"
+                value={config.ipn_username}
+                onChange={(e) => setConfig({ ...config, ipn_username: e.target.value })}
+                placeholder="e.g., rentflow_ipn"
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ipn-password">IPN Password</Label>
+              <Input
+                id="ipn-password"
+                type="password"
+                value={config.ipn_password}
+                onChange={(e) => setConfig({ ...config, ipn_password: e.target.value })}
+                placeholder={existingConfig?.ipn_username ? "••••••••••• (leave blank to keep)" : "Secure password"}
+                disabled={loading}
+              />
             </div>
           </div>
         </div>
@@ -390,16 +450,24 @@ export const JengaPayConfig: React.FC = () => {
         <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
           <Info className="h-4 w-4" />
           <AlertDescription className="text-sm">
-            Need help? Visit{' '}
+            Need help? Visit the{' '}
             <a
               href="https://developer.jengahq.io/guides/jenga-pgw/instant-payment-notifications"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
+              className="text-blue-600 hover:underline inline-flex items-center gap-1"
             >
-              Jenga PAY Documentation
+              Jenga PAY IPN Documentation <ExternalLink className="h-3 w-3" />
             </a>
-            {' '}for more information on setting up your integration.
+            {' '}or{' '}
+            <a
+              href="https://v3.jengahq.io/dashboard/settings/create-ipn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline inline-flex items-center gap-1"
+            >
+              Jenga IPN Setup Dashboard <ExternalLink className="h-3 w-3" />
+            </a>
           </AlertDescription>
         </Alert>
       </CardContent>
