@@ -876,6 +876,7 @@ export type Database = {
           bill_number: string | null
           callback_type: string
           created_at: string | null
+          currency: string | null
           customer_mobile: string | null
           customer_name: string | null
           customer_reference: string | null
@@ -884,6 +885,7 @@ export type Database = {
           ip_address: unknown
           landlord_id: string | null
           order_amount: number | null
+          order_currency: string | null
           payment_mode: string | null
           processed: boolean | null
           processed_at: string | null
@@ -905,6 +907,7 @@ export type Database = {
           bill_number?: string | null
           callback_type: string
           created_at?: string | null
+          currency?: string | null
           customer_mobile?: string | null
           customer_name?: string | null
           customer_reference?: string | null
@@ -913,6 +916,7 @@ export type Database = {
           ip_address?: unknown
           landlord_id?: string | null
           order_amount?: number | null
+          order_currency?: string | null
           payment_mode?: string | null
           processed?: boolean | null
           processed_at?: string | null
@@ -934,6 +938,7 @@ export type Database = {
           bill_number?: string | null
           callback_type?: string
           created_at?: string | null
+          currency?: string | null
           customer_mobile?: string | null
           customer_name?: string | null
           customer_reference?: string | null
@@ -942,6 +947,7 @@ export type Database = {
           ip_address?: unknown
           landlord_id?: string | null
           order_amount?: number | null
+          order_currency?: string | null
           payment_mode?: string | null
           processed?: boolean | null
           processed_at?: string | null

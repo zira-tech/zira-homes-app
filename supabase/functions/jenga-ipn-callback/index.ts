@@ -6,6 +6,198 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper to decode Base64 Basic Auth credentials
+function decodeBasicAuth(authHeader: string): { username: string; password: string } | null {
+  try {
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+      return null;
+    }
+    const base64Credentials = authHeader.substring(6);
+    const credentials = atob(base64Credentials);
+    const [username, password] = credentials.split(':');
+    return { username, password };
+  } catch (error) {
+    console.error('Error decoding Basic Auth:', error);
+    return null;
+  }
+}
+
+// Helper to validate IPN authentication against landlord config
+async function validateIpnAuth(
+  supabase: any, 
+  credentials: { username: string; password: string },
+  landlordId: string
+): Promise<boolean> {
+  try {
+    const { data: config, error } = await supabase
+      .from('landlord_jenga_configs')
+      .select('ipn_username, ipn_password_encrypted')
+      .eq('landlord_id', landlordId)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !config) {
+      console.log('No landlord config found for IPN validation');
+      return false;
+    }
+
+    // If no IPN auth configured, allow (backwards compatibility)
+    if (!config.ipn_username && !config.ipn_password_encrypted) {
+      console.log('No IPN auth configured for landlord, allowing request');
+      return true;
+    }
+
+    // Validate credentials
+    const usernameMatch = config.ipn_username === credentials.username;
+    // Note: In production, decrypt ipn_password_encrypted before comparison
+    const passwordMatch = config.ipn_password_encrypted === credentials.password;
+
+    return usernameMatch && passwordMatch;
+  } catch (error) {
+    console.error('Error validating IPN auth:', error);
+    return false;
+  }
+}
+
+// Helper to resolve landlord and invoice from bill number
+async function resolveFromBillNumber(
+  supabase: any,
+  billNumber: string
+): Promise<{ landlordId: string | null; invoiceId: string | null; invoice: any }> {
+  let landlordId: string | null = null;
+  let invoiceId: string | null = null;
+  let invoice: any = null;
+
+  if (!billNumber) {
+    return { landlordId, invoiceId, invoice };
+  }
+
+  console.log('Resolving bill number:', billNumber);
+
+  // Try to find invoice by invoice_number (bill number format should match invoice numbers)
+  const { data: invoiceData, error: invoiceError } = await supabase
+    .from('invoices')
+    .select(`
+      id, 
+      tenant_id, 
+      lease_id, 
+      invoice_number,
+      amount,
+      status,
+      leases!inner(
+        id,
+        units!inner(
+          id,
+          properties!inner(
+            id,
+            owner_id
+          )
+        )
+      )
+    `)
+    .eq('invoice_number', billNumber)
+    .single();
+
+  if (!invoiceError && invoiceData) {
+    invoiceId = invoiceData.id;
+    landlordId = invoiceData.leases?.units?.properties?.owner_id || null;
+    invoice = invoiceData;
+    console.log('Found invoice by exact match:', { invoiceId, landlordId });
+    return { landlordId, invoiceId, invoice };
+  }
+
+  // Try partial match - bill number might contain invoice number
+  // Format: Could be "INV-XXXX" or just "XXXX"
+  const { data: invoices, error: searchError } = await supabase
+    .from('invoices')
+    .select(`
+      id, 
+      tenant_id, 
+      lease_id, 
+      invoice_number,
+      amount,
+      status,
+      leases!inner(
+        id,
+        units!inner(
+          id,
+          properties!inner(
+            id,
+            owner_id
+          )
+        )
+      )
+    `)
+    .ilike('invoice_number', `%${billNumber}%`)
+    .eq('status', 'pending')
+    .limit(1);
+
+  if (!searchError && invoices && invoices.length > 0) {
+    const foundInvoice = invoices[0];
+    invoiceId = foundInvoice.id;
+    landlordId = foundInvoice.leases?.units?.properties?.owner_id || null;
+    invoice = foundInvoice;
+    console.log('Found invoice by partial match:', { invoiceId, landlordId });
+    return { landlordId, invoiceId, invoice };
+  }
+
+  // Try to find landlord by merchant code in bill number
+  // Format might be: MERCHANTCODE-REFERENCE
+  if (billNumber.includes('-')) {
+    const parts = billNumber.split('-');
+    const possibleMerchantCode = parts[0];
+    
+    const { data: landlordConfig, error: configError } = await supabase
+      .from('landlord_jenga_configs')
+      .select('landlord_id')
+      .eq('merchant_code', possibleMerchantCode)
+      .eq('is_active', true)
+      .single();
+
+    if (!configError && landlordConfig) {
+      landlordId = landlordConfig.landlord_id;
+      console.log('Found landlord by merchant code:', landlordId);
+      
+      // Now try to find invoice with the remaining part
+      const invoiceRef = parts.slice(1).join('-');
+      if (invoiceRef) {
+        const { data: inv } = await supabase
+          .from('invoices')
+          .select(`
+            id, 
+            tenant_id, 
+            lease_id, 
+            invoice_number,
+            amount,
+            status,
+            leases!inner(
+              id,
+              units!inner(
+                id,
+                properties!inner(
+                  id,
+                  owner_id
+                )
+              )
+            )
+          `)
+          .ilike('invoice_number', `%${invoiceRef}%`)
+          .eq('status', 'pending')
+          .limit(1);
+
+        if (inv && inv.length > 0) {
+          invoiceId = inv[0].id;
+          invoice = inv[0];
+          console.log('Found invoice from merchant code format:', invoiceId);
+        }
+      }
+    }
+  }
+
+  console.log('Final resolution:', { landlordId, invoiceId });
+  return { landlordId, invoiceId, invoice };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -18,17 +210,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const ipnData = await req.json()
-    console.log('=== JENGA IPN CALLBACK RECEIVED ===');
-    console.log('Raw IPN Data:', JSON.stringify(ipnData, null, 2));
-    
     // Get client IP for security logging
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
                      req.headers.get('x-real-ip')?.trim() || 
                      req.headers.get('cf-connecting-ip')?.trim() ||
                      'unknown';
     
+    console.log('=== JENGA IPN CALLBACK RECEIVED ===');
     console.log('Jenga IPN from IP:', clientIP);
+
+    // Parse request body
+    const ipnData = await req.json()
+    console.log('Raw IPN Data:', JSON.stringify(ipnData, null, 2));
 
     // Validate IPN structure
     if (!ipnData.callbackType || !ipnData.transaction) {
@@ -45,18 +238,77 @@ serve(async (req) => {
     // Extract IPN data
     const { callbackType, customer, transaction, bank } = ipnData;
     
-    // Parse transaction reference to find landlord and invoice
-    // Format expected: LANDLORD_ID-INVOICE_ID or similar
-    let landlordId: string | null = null;
-    let invoiceId: string | null = null;
-    
-    // Try to extract from bill number or customer reference
-    const billNumber = transaction.billNumber;
-    const customerRef = customer?.reference;
+    // First, resolve landlord and invoice from bill number
+    const billNumber = transaction.billNumber || '';
+    const customerRef = customer?.reference || '';
     
     console.log('Parsing references:', { billNumber, customerRef });
+    
+    // Try bill number first, then customer reference
+    let { landlordId, invoiceId, invoice } = await resolveFromBillNumber(supabase, billNumber);
+    
+    if (!landlordId && customerRef) {
+      const resolved = await resolveFromBillNumber(supabase, customerRef);
+      landlordId = resolved.landlordId;
+      invoiceId = resolved.invoiceId;
+      invoice = resolved.invoice;
+    }
 
-    // Store the IPN callback
+    // Validate Basic Auth if landlord is identified
+    const authHeader = req.headers.get('Authorization');
+    const credentials = decodeBasicAuth(authHeader || '');
+    
+    if (landlordId && credentials) {
+      const isValidAuth = await validateIpnAuth(supabase, credentials, landlordId);
+      if (!isValidAuth) {
+        console.error('IPN authentication failed for landlord:', landlordId);
+        // Log failed auth attempt
+        await supabase.rpc('log_security_event', {
+          _event_type: 'unauthorized_access',
+          _details: {
+            source: 'jenga_ipn_callback',
+            action: 'auth_failed',
+            landlord_id: landlordId,
+            ip: clientIP,
+            timestamp: new Date().toISOString()
+          },
+          _ip_address: clientIP
+        });
+        
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Unauthorized' 
+        }), { 
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      console.log('IPN authentication validated successfully');
+    } else if (!credentials) {
+      // Check if landlord requires auth
+      if (landlordId) {
+        const { data: config } = await supabase
+          .from('landlord_jenga_configs')
+          .select('ipn_username')
+          .eq('landlord_id', landlordId)
+          .eq('is_active', true)
+          .single();
+        
+        if (config?.ipn_username) {
+          console.error('IPN authentication required but not provided');
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Authentication required' 
+          }), { 
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      console.log('No auth header provided, proceeding without validation');
+    }
+
+    // Store the IPN callback with full data
     const { data: callback, error: insertError } = await supabase
       .from('jenga_ipn_callbacks')
       .insert({
@@ -120,13 +372,7 @@ serve(async (req) => {
         } else {
           console.log('Invoice marked as paid:', invoiceId);
           
-          // Create payment record
-          const { data: invoice } = await supabase
-            .from('invoices')
-            .select('*, leases!inner(*)')
-            .eq('id', invoiceId)
-            .single();
-
+          // Create payment record using the resolved invoice data
           if (invoice) {
             await supabase
               .from('payments')
@@ -138,10 +384,10 @@ serve(async (req) => {
                 payment_date: new Date().toISOString().split('T')[0],
                 payment_method: 'Jenga PAY',
                 payment_reference: transaction.reference,
-                transaction_id: bank?.reference,
+                transaction_id: bank?.reference || transaction.reference,
                 status: 'completed',
                 payment_type: 'rent',
-                notes: `Jenga PAY payment via ${transaction.paymentMode}. Receipt: ${transaction.reference}`
+                notes: `Jenga PAY payment via ${transaction.paymentMode || 'bank'}. Receipt: ${transaction.reference}`
               });
             
             console.log('Payment record created for invoice:', invoiceId);
@@ -152,9 +398,7 @@ serve(async (req) => {
             .from('jenga_ipn_callbacks')
             .update({
               processed: true,
-              processed_at: new Date().toISOString(),
-              landlord_id: landlordId,
-              invoice_id: invoiceId
+              processed_at: new Date().toISOString()
             })
             .eq('id', callback.id);
         }
@@ -165,12 +409,13 @@ serve(async (req) => {
             .from('notifications')
             .insert({
               user_id: landlordId,
-              title: 'Payment Received',
-              message: `Payment of KES ${transaction.amount} received via Jenga PAY. Receipt: ${transaction.reference}`,
+              title: 'Payment Received via Jenga PAY',
+              message: `Payment of KES ${transaction.amount.toLocaleString()} received. Customer: ${customer?.name || 'Unknown'}. Receipt: ${transaction.reference}`,
               type: 'payment',
               related_id: invoiceId,
               related_type: 'invoice'
             });
+          console.log('Notification sent to landlord:', landlordId);
         }
       } catch (processingError) {
         console.error('Error processing payment:', processingError);
@@ -187,6 +432,35 @@ serve(async (req) => {
           processed_at: new Date().toISOString()
         })
         .eq('id', callback.id);
+
+      // Notify landlord of failed payment
+      if (landlordId) {
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: landlordId,
+            title: 'Payment Failed - Jenga PAY',
+            message: `Payment of KES ${transaction.amount.toLocaleString()} failed. Status: ${transaction.status}. Reason: ${transaction.remarks || 'Unknown'}`,
+            type: 'payment',
+            related_id: invoiceId,
+            related_type: 'invoice'
+          });
+      }
+    } else {
+      console.log('Payment successful but no invoice matched. Bill number:', billNumber);
+      
+      // Notify landlord of unmatched payment if we found them
+      if (landlordId) {
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: landlordId,
+            title: 'Unmatched Payment Received',
+            message: `Payment of KES ${transaction.amount.toLocaleString()} received via Jenga PAY but no matching invoice found. Bill Number: ${billNumber}. Please verify and allocate manually.`,
+            type: 'payment',
+            related_type: 'jenga_callback'
+          });
+      }
     }
 
     // Log security event
@@ -198,13 +472,16 @@ serve(async (req) => {
         transaction_reference: transaction.reference,
         status: transaction.status,
         amount: transaction.amount,
+        landlord_id: landlordId,
+        invoice_id: invoiceId,
+        bill_number: billNumber,
         ip: clientIP,
         timestamp: new Date().toISOString()
       },
       _ip_address: clientIP
     });
 
-    // Return success response
+    // Return success response per Jenga IPN spec
     return new Response(JSON.stringify({ 
       success: true,
       message: 'IPN processed successfully',
