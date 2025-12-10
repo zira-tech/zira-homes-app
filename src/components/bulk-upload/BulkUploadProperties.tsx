@@ -240,6 +240,14 @@ export function BulkUploadProperties() {
     }
   };
 
+  // Convert fieldGuide to fieldMetadata format for template generation
+  const fieldMetadata = fieldGuide.map(f => ({
+    name: f.name,
+    required: f.required,
+    format: f.format,
+    validValues: f.validValues
+  }));
+
   return (
     <div className="space-y-6">
       <BulkUploadFieldGuide fields={fieldGuide} tips={tips} />
@@ -249,6 +257,7 @@ export function BulkUploadProperties() {
         templateData={templateData}
         templateFileName="RentFlow_Properties_Import_Template.xlsx"
         requiredFields={requiredFields}
+        fieldMetadata={fieldMetadata}
         onValidateData={validateData}
         onImportData={importData}
         maxRecords={500}
