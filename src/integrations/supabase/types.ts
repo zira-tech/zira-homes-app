@@ -74,6 +74,178 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_callbacks: {
+        Row: {
+          amount: number
+          bank_code: string
+          bank_reference: string | null
+          callback_type: string
+          created_at: string | null
+          currency: string | null
+          customer_mobile: string | null
+          customer_name: string | null
+          customer_reference: string | null
+          headers: Json | null
+          id: string
+          invoice_id: string | null
+          ip_address: unknown
+          landlord_id: string | null
+          order_amount: number | null
+          order_currency: string | null
+          payment_id: string | null
+          payment_mode: string | null
+          processed: boolean | null
+          processed_at: string | null
+          processing_notes: string | null
+          raw_payload: Json
+          retry_count: number | null
+          service_charge: number | null
+          status: string
+          transaction_date: string | null
+          transaction_reference: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          bank_code: string
+          bank_reference?: string | null
+          callback_type: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          headers?: Json | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_id?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          processing_notes?: string | null
+          raw_payload: Json
+          retry_count?: number | null
+          service_charge?: number | null
+          status: string
+          transaction_date?: string | null
+          transaction_reference: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_code?: string
+          bank_reference?: string | null
+          callback_type?: string
+          created_at?: string | null
+          currency?: string | null
+          customer_mobile?: string | null
+          customer_name?: string | null
+          customer_reference?: string | null
+          headers?: Json | null
+          id?: string
+          invoice_id?: string | null
+          ip_address?: unknown
+          landlord_id?: string | null
+          order_amount?: number | null
+          order_currency?: string | null
+          payment_id?: string | null
+          payment_mode?: string | null
+          processed?: boolean | null
+          processed_at?: string | null
+          processing_notes?: string | null
+          raw_payload?: Json
+          retry_count?: number | null
+          service_charge?: number | null
+          status?: string
+          transaction_date?: string | null
+          transaction_reference?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_callbacks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_callbacks_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_callbacks_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_providers: {
+        Row: {
+          api_base_url_production: string | null
+          api_base_url_sandbox: string | null
+          api_gateway_name: string | null
+          bank_code: string
+          bank_name: string
+          country_code: string | null
+          created_at: string | null
+          display_order: number | null
+          documentation_url: string | null
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          paybill_number: string | null
+          required_credentials: Json | null
+          supported_features: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          api_base_url_production?: string | null
+          api_base_url_sandbox?: string | null
+          api_gateway_name?: string | null
+          bank_code: string
+          bank_name: string
+          country_code?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          documentation_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          paybill_number?: string | null
+          required_credentials?: Json | null
+          supported_features?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          api_base_url_production?: string | null
+          api_base_url_sandbox?: string | null
+          api_gateway_name?: string | null
+          bank_code?: string
+          bank_name?: string
+          country_code?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          documentation_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          paybill_number?: string | null
+          required_credentials?: Json | null
+          supported_features?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       billing_plan_audit: {
         Row: {
           action: string
@@ -1025,6 +1197,86 @@ export type Database = {
           {
             foreignKeyName: "knowledge_base_articles_author_id_fkey"
             columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_bank_configs: {
+        Row: {
+          access_token_encrypted: string | null
+          account_number: string | null
+          api_key_encrypted: string | null
+          bank_code: string
+          consumer_secret_encrypted: string | null
+          created_at: string | null
+          credentials_verified: boolean | null
+          environment: string | null
+          extended_config: Json | null
+          id: string
+          ipn_password_encrypted: string | null
+          ipn_url: string | null
+          ipn_username: string | null
+          is_active: boolean | null
+          landlord_id: string
+          last_verified_at: string | null
+          merchant_code: string | null
+          paybill_number: string | null
+          updated_at: string | null
+          verification_method: string | null
+          webhook_secret_encrypted: string | null
+        }
+        Insert: {
+          access_token_encrypted?: string | null
+          account_number?: string | null
+          api_key_encrypted?: string | null
+          bank_code: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string | null
+          extended_config?: Json | null
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id: string
+          last_verified_at?: string | null
+          merchant_code?: string | null
+          paybill_number?: string | null
+          updated_at?: string | null
+          verification_method?: string | null
+          webhook_secret_encrypted?: string | null
+        }
+        Update: {
+          access_token_encrypted?: string | null
+          account_number?: string | null
+          api_key_encrypted?: string | null
+          bank_code?: string
+          consumer_secret_encrypted?: string | null
+          created_at?: string | null
+          credentials_verified?: boolean | null
+          environment?: string | null
+          extended_config?: Json | null
+          id?: string
+          ipn_password_encrypted?: string | null
+          ipn_url?: string | null
+          ipn_username?: string | null
+          is_active?: boolean | null
+          landlord_id?: string
+          last_verified_at?: string | null
+          merchant_code?: string | null
+          paybill_number?: string | null
+          updated_at?: string | null
+          verification_method?: string | null
+          webhook_secret_encrypted?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_bank_configs_landlord_id_fkey"
+            columns: ["landlord_id"]
             isOneToOne: false
             referencedRelation: "orphaned_users_monitor"
             referencedColumns: ["id"]
