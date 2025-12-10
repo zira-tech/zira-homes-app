@@ -29,6 +29,7 @@ interface UnitFormData {
   security_deposit?: number;
   water_deposit?: number;
   electricity_deposit?: number;
+  garbage_deposit?: number;
   description?: string;
   amenities?: string[];
 }
@@ -291,6 +292,19 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
                 type="number"
                 step="0.01"
                 {...register('electricity_deposit')}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="garbage_deposit">Garbage Deposit</Label>
+              <Input
+                id="garbage_deposit"
+                type="number"
+                step="0.01"
+                {...register('garbage_deposit')}
                 placeholder="0.00"
               />
             </div>
