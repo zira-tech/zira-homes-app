@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Download, Send, FileText, Calendar, User, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { UnifiedPDFRenderer } from "@/utils/unifiedPDFRenderer";
+import { getInvoiceBillingData } from "@/utils/invoiceBillingHelper";
 
 interface Invoice {
   id: string;
@@ -23,6 +24,7 @@ interface Invoice {
       unit_number: string;
       properties?: {
         name: string;
+        owner_id?: string;
       };
     };
   };
@@ -69,6 +71,9 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
 
   const handleDownloadInvoice = async () => {
     try {
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
+      
       // Get branding data using global branding system
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
       const brandingData = await BrandingFetcher.fetchBranding();
@@ -90,7 +95,7 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData);
+      await renderer.generateDocument(documentData, brandingData, billingData);
       toast.success(`Invoice ${invoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -100,12 +105,8 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
 
   const handleDownloadReceipt = async () => {
     try {
-      // Create receipt version of the invoice with paid status
-      const receiptInvoice = {
-        ...invoice,
-        status: 'paid',
-        payment_date: new Date().toISOString(),
-      };
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
       
       const { BrandingFetcher } = await import('@/utils/brandingFetcher');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
@@ -115,37 +116,27 @@ export function InvoiceDetailsDialog({ invoice, mode, trigger }: InvoiceDetailsD
       
       const documentData = {
         type: 'invoice' as const,
-        title: `Receipt ${receiptInvoice.invoice_number}`,
+        title: `Receipt ${invoice.invoice_number}`,
         content: {
-          invoice: receiptInvoice,
-          recipient: {
-            name: receiptInvoice.tenants?.first_name && receiptInvoice.tenants?.last_name 
-              ? `${receiptInvoice.tenants.first_name} ${receiptInvoice.tenants.last_name}`
-              : 'Tenant',
-            email: receiptInvoice.tenants?.email || 'No email',
-            phone: 'No phone',
-            address: receiptInvoice.leases?.units?.unit_number 
-              ? `Unit ${receiptInvoice.leases.units.unit_number}, ${receiptInvoice.leases.units.properties?.name || 'Property'}`
-              : 'No address'
-          },
+          invoiceNumber: invoice.invoice_number,
+          dueDate: invoice.due_date,
           items: [
             {
-              description: receiptInvoice.description || 'Rent Payment',
+              description: invoice.description || 'Rent Payment',
               quantity: 1,
-              rate: receiptInvoice.amount,
-              amount: receiptInvoice.amount
+              amount: invoice.amount
             }
           ],
-          totals: {
-            subtotal: receiptInvoice.amount,
-            tax: 0,
-            total: receiptInvoice.amount
+          total: invoice.amount,
+          recipient: {
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           }
         }
       };
 
-      await renderer.generateDocument(documentData, brandingData);
-      toast.success(`Receipt ${receiptInvoice.invoice_number} downloaded successfully`);
+      await renderer.generateDocument(documentData, brandingData, billingData);
+      toast.success(`Receipt ${invoice.invoice_number} downloaded successfully`);
     } catch (error) {
       console.error('Error generating receipt PDF:', error);
       toast.error('Failed to generate receipt PDF');
