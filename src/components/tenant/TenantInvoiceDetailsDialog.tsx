@@ -69,14 +69,17 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
       console.log('Starting invoice download...');
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
-      // Get template and branding from the unified service - use Admin invoice template
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
+      
+      // Get template and branding from the unified service
       console.log('Fetching Admin invoice template and branding...');
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'invoice',
-        'Admin' // Use Admin template for consistency across platform
+        'Admin'
       );
-      console.log('Admin template branding data received:', brandingData);
       
       const renderer = new UnifiedPDFRenderer();
       
@@ -95,16 +98,14 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
           ],
           total: invoice.amount,
           recipient: {
-            name: `${invoice.tenants?.first_name || ''} ${invoice.tenants?.last_name || ''}`.trim() || 'Tenant',
-            address: `${invoice.leases?.units?.properties?.name || invoice.sourcePayment?.property_name || 'Property'}\nUnit: ${invoice.leases?.units?.unit_number || invoice.sourcePayment?.unit_number || 'N/A'}`
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: 'Thank you for your prompt payment.'
         }
       };
 
-      console.log('Generating PDF document using Admin template...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
-      console.log('PDF generated successfully with Admin template and branding');
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast.success(`Invoice ${formatInvoiceNumber(invoice.invoice_number)} downloaded successfully`);
     } catch (error) {
       console.error('Error generating PDF:', error);

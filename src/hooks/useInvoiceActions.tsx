@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { UnifiedPDFRenderer } from "@/utils/unifiedPDFRenderer";
 import { PDFTemplateService } from "@/utils/pdfTemplateService";
-// import { DocumentDataService } from "@/utils/documentDataService";
+import { getInvoiceBillingData } from "@/utils/invoiceBillingHelper";
 
 interface Invoice {
   id: string;
@@ -11,6 +11,7 @@ interface Invoice {
   invoice_date: string;
   status: string;
   description: string | null;
+  lease_id?: string;
   tenants?: {
     first_name: string;
     last_name: string;
@@ -21,6 +22,7 @@ interface Invoice {
       unit_number: string;
       properties?: {
         name: string;
+        owner_id?: string;
       };
     };
   };
@@ -29,15 +31,8 @@ interface Invoice {
 export const useInvoiceActions = () => {
   const downloadInvoice = async (invoice: Invoice) => {
     try {
-      // Simplified - DocumentDataService temporarily unavailable  
-      const enhancedInvoice = {
-        billingData: {
-          billTo: {
-            name: `${invoice.tenants?.first_name || ''} ${invoice.tenants?.last_name || ''}`.trim() || 'Tenant',
-            address: `${invoice.leases?.units?.properties?.name || 'Property'}\nUnit: ${invoice.leases?.units?.unit_number || 'N/A'}`
-          }
-        }
-      };
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
 
       // Get template and branding using the template service
       const { template, branding } = await PDFTemplateService.getTemplateAndBranding(
@@ -62,14 +57,14 @@ export const useInvoiceActions = () => {
           ],
           total: invoice.amount,
           recipient: {
-            name: enhancedInvoice.billingData.billTo.name,
-            address: enhancedInvoice.billingData.billTo.address
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: 'Thank you for your prompt payment.'
         }
       };
       
-      await renderer.generateDocument(documentData, branding, enhancedInvoice.billingData, null, template);
+      await renderer.generateDocument(documentData, branding, billingData, null, template);
       toast.success(`Invoice ${invoice.invoice_number} downloaded successfully!`);
     } catch (error) {
       console.error('Error downloading invoice:', error);

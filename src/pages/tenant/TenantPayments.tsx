@@ -252,65 +252,16 @@ export default function TenantPayments() {
       
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
-      // Enhanced invoice data with tenant details from available sources
-      let tenantName = 'Tenant';
-      let propertyInfo = 'Property';
-      let unitInfo = 'N/A';
-      
-      // Get tenant info from invoice data or session
-      if (invoice.tenants?.first_name || invoice.tenants?.last_name) {
-        tenantName = `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim();
-      } else if (paymentData?.tenant) {
-        tenantName = `${paymentData.tenant.first_name || ''} ${paymentData.tenant.last_name || ''}`.trim();
-      } else if (user?.user_metadata?.full_name) {
-        tenantName = user.user_metadata.full_name;
-      } else if (user?.email) {
-        tenantName = user.email.split('@')[0];
-      }
-      
-      // Get property info from invoice or inferred sources
-      if (invoice.leases?.units?.properties?.name) {
-        propertyInfo = invoice.leases.units.properties.name;
-      } else if (invoice.sourcePayment?.property_name) {
-        propertyInfo = invoice.sourcePayment.property_name;
-      }
-      
-      if (invoice.leases?.units?.unit_number) {
-        unitInfo = invoice.leases.units.unit_number;
-      } else if (invoice.sourcePayment?.unit_number) {
-        unitInfo = invoice.sourcePayment.unit_number;
-      }
-      
-      const enhancedInvoice = {
-        id: invoice.id,
-        invoice_number: invoice.invoice_number,
-        amount: invoice.amount,
-        tenant_name: tenantName,
-        billingData: {
-          billTo: {
-            name: tenantName,
-            address: `${propertyInfo}\nUnit: ${unitInfo}`
-          }
-        }
-      };
-      
-      if (!enhancedInvoice) {
-        toast({
-          title: "Error",
-          description: "Failed to load invoice data with billing information.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoice);
 
-      // Get template and branding from the unified service - use Admin template
-      console.log('Fetching Admin template and branding...');
+      // Get template and branding from the unified service
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'invoice',
-        'Admin' // Use Admin template for consistency across platform
+        'Admin'
       );
-      console.log('Admin template branding data received:', brandingData);
       
       const renderer = new UnifiedPDFRenderer();
       
@@ -329,16 +280,14 @@ export default function TenantPayments() {
           ],
           total: invoice.amount,
           recipient: {
-            name: enhancedInvoice.billingData.billTo.name,
-            address: enhancedInvoice.billingData.billTo.address
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: 'Thank you for your prompt payment.'
         }
       };
 
-      console.log('Generating PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
-      console.log('PDF generated successfully with Admin template and branding');
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast({
         title: "Download Ready",
         description: `Invoice ${invoice.invoice_number} downloaded successfully!`,
@@ -363,46 +312,26 @@ export default function TenantPayments() {
       
       const { PDFTemplateService } = await import('@/utils/pdfTemplateService');
       const { UnifiedPDFRenderer } = await import('@/utils/unifiedPDFRenderer');
+      const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
-      // Enhanced payment data with tenant details from available sources
-      let tenantName = 'Tenant';
-      let propertyInfo = 'Property Address';
-      
-      // Get tenant info from session
-      if (paymentData?.tenant) {
-        tenantName = `${paymentData.tenant.first_name || ''} ${paymentData.tenant.last_name || ''}`.trim();
-      } else if (user?.user_metadata?.full_name) {
-        tenantName = user.user_metadata.full_name;
-      } else if (user?.email) {
-        tenantName = user.email.split('@')[0];
-      }
-      
-      const paymentWithBilling = {
-        payment: payment,
-        billingData: {
-          billTo: { 
-            name: tenantName, 
-            address: propertyInfo 
-          }
-        }
+      // Build invoice-like object from payment for billing lookup
+      const invoiceLike = {
+        lease_id: payment.lease_id,
+        tenants: paymentData?.tenant ? {
+          first_name: paymentData.tenant.first_name,
+          last_name: paymentData.tenant.last_name
+        } : null,
+        leases: payment.linkedInvoice?.leases
       };
       
-      if (!paymentWithBilling) {
-        toast({
-          title: "Error",
-          description: "Failed to load payment data with billing information.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Fetch actual landlord billing data
+      const billingData = await getInvoiceBillingData(invoiceLike);
 
-      // Get template and branding from the unified service - use Admin template for receipts
-      console.log('Fetching Admin template and branding for receipt...');
+      // Get template and branding from the unified service
       const { template, branding: brandingData } = await PDFTemplateService.getTemplateAndBranding(
         'receipt',
-        'Admin' // Use Admin template for consistency across platform
+        'Admin'
       );
-      console.log('Admin template branding data received for receipt:', brandingData);
       
       const renderer = new UnifiedPDFRenderer();
       
@@ -421,16 +350,14 @@ export default function TenantPayments() {
           ],
           total: payment.amount,
           recipient: {
-            name: paymentWithBilling.billingData.billTo.name,
-            address: paymentWithBilling.billingData.billTo.address
+            name: billingData.billTo.name,
+            address: billingData.billTo.address
           },
           notes: `Full Transaction Reference: ${payment.payment_reference || payment.transaction_id || 'N/A'}`
         }
       };
 
-      console.log('Generating receipt PDF with template and branding...');
-      await renderer.generateDocument(documentData, brandingData, null, null, template);
-      console.log('Receipt PDF generated successfully with Admin template and branding');
+      await renderer.generateDocument(documentData, brandingData, billingData, null, template);
       toast({
         title: "Receipt Ready",
         description: `Receipt for payment of ${fmtCurrency(payment.amount)} downloaded successfully!`,
