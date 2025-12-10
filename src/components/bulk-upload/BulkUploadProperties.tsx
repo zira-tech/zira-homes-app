@@ -1,7 +1,10 @@
 import React from "react";
 import { BulkUploadBase, ValidationError } from "./BulkUploadBase";
+import { BulkUploadFieldGuide, FieldInfo } from "./BulkUploadFieldGuide";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+
+const VALID_PROPERTY_TYPES = ["Apartment", "House", "Villa", "Townhouse", "Condo", "Studio", "Office", "Retail"];
 
 export function BulkUploadProperties() {
   const { user } = useAuth();
@@ -36,6 +39,27 @@ export function BulkUploadProperties() {
   ];
 
   const requiredFields = ["Property Name", "Address", "City", "State", "Property Type"];
+
+  const fieldGuide: FieldInfo[] = [
+    { name: "Property Name", required: true, description: "Unique name for the property", format: "Text, max 100 characters" },
+    { name: "Address", required: true, description: "Street address of the property", format: "Text" },
+    { name: "City", required: true, description: "City where property is located", format: "Text" },
+    { name: "State", required: true, description: "County/State where property is located", format: "e.g., Nairobi County" },
+    { name: "Zip Code", required: false, description: "Postal code", format: "3-10 characters" },
+    { name: "Country", required: false, description: "Country (defaults to Kenya)", format: "Text" },
+    { name: "Property Type", required: true, description: "Type of property", validValues: VALID_PROPERTY_TYPES },
+    { name: "Total Units", required: false, description: "Expected number of units", format: "Positive number" },
+    { name: "Manager Email", required: false, description: "Email of manager (must be existing user with Manager/Agent role)", format: "email@example.com" },
+    { name: "Amenities", required: false, description: "Property amenities", format: "Comma-separated list" },
+    { name: "Description", required: false, description: "Property description", format: "Text" }
+  ];
+
+  const tips = [
+    "Property Names must be unique - duplicates will be rejected",
+    "Manager Email must belong to an existing user with Landlord, Manager, or Agent role",
+    "Use commas to separate multiple amenities (e.g., 'Pool,Gym,Parking')",
+    "Property Type must match exactly one of the valid values shown above"
+  ];
 
   const validateData = async (data: Array<Record<string, any>>): Promise<ValidationError[]> => {
     const errors: ValidationError[] = [];
@@ -86,7 +110,6 @@ export function BulkUploadProperties() {
       if (row["Property Name"]) {
         const propertyName = String(row["Property Name"]).toLowerCase().trim();
         
-        // Check for duplicates in current upload
         if (propertyNames.has(propertyName)) {
           errors.push({
             row: index,
@@ -97,12 +120,11 @@ export function BulkUploadProperties() {
           propertyNames.add(propertyName);
         }
 
-        // Check against existing database property names
         if (existingPropertyNames.has(propertyName)) {
           errors.push({
             row: index,
             field: "Property Name",
-            message: "Property name already exists"
+            message: "Property name already exists in database"
           });
         }
       }
@@ -111,7 +133,6 @@ export function BulkUploadProperties() {
       if (row["Manager Email"] && String(row["Manager Email"]).trim() !== '') {
         const managerEmail = String(row["Manager Email"]).toLowerCase().trim();
         
-        // Email format validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(managerEmail)) {
           errors.push({
@@ -123,7 +144,7 @@ export function BulkUploadProperties() {
           errors.push({
             row: index,
             field: "Manager Email",
-            message: "Manager email not found or not authorized"
+            message: "Manager email not found or user doesn't have Manager/Agent/Landlord role"
           });
         }
       }
@@ -140,27 +161,26 @@ export function BulkUploadProperties() {
         }
       }
 
-      // Validate zip code format (basic)
+      // Validate zip code format
       if (row["Zip Code"]) {
         const zipCode = String(row["Zip Code"]).trim();
         if (zipCode.length < 3 || zipCode.length > 10) {
           errors.push({
             row: index,
             field: "Zip Code",
-            message: "Zip code must be between 3-10 characters"
+            message: "Zip code must be 3-10 characters"
           });
         }
       }
 
       // Validate property type
       if (row["Property Type"]) {
-        const validTypes = ["Apartment", "House", "Villa", "Townhouse", "Condo", "Studio", "Office", "Retail"];
         const propertyType = String(row["Property Type"]).trim();
-        if (!validTypes.includes(propertyType)) {
+        if (!VALID_PROPERTY_TYPES.includes(propertyType)) {
           errors.push({
             row: index,
             field: "Property Type",
-            message: `Property type must be one of: ${validTypes.join(', ')}`
+            message: `Property Type must be one of: ${VALID_PROPERTY_TYPES.join(', ')}`
           });
         }
       }
@@ -171,7 +191,6 @@ export function BulkUploadProperties() {
 
   const importData = async (data: Array<Record<string, any>>): Promise<void> => {
     try {
-      // Get manager IDs from emails
       const managerEmails = data
         .filter(row => row["Manager Email"] && String(row["Manager Email"]).trim() !== '')
         .map(row => String(row["Manager Email"]).toLowerCase().trim());
@@ -192,7 +211,6 @@ export function BulkUploadProperties() {
         );
       }
 
-      // Create properties
       const properties = data.map(row => ({
         name: String(row["Property Name"]).trim(),
         address: String(row["Address"]).trim(),
@@ -223,15 +241,18 @@ export function BulkUploadProperties() {
   };
 
   return (
-    <BulkUploadBase
-      title="Bulk Upload Properties"
-      description="Upload multiple property records at once. Properties will be assigned to you as the owner, with optional managers."
-      templateData={templateData}
-      templateFileName="property_upload_template.xlsx"
-      requiredFields={requiredFields}
-      onValidateData={validateData}
-      onImportData={importData}
-      maxRecords={500}
-    />
+    <div className="space-y-6">
+      <BulkUploadFieldGuide fields={fieldGuide} tips={tips} />
+      <BulkUploadBase
+        title="Bulk Upload Properties"
+        description="Upload multiple property records at once. Properties will be assigned to you as the owner."
+        templateData={templateData}
+        templateFileName="RentFlow_Properties_Import_Template.xlsx"
+        requiredFields={requiredFields}
+        onValidateData={validateData}
+        onImportData={importData}
+        maxRecords={500}
+      />
+    </div>
   );
 }
