@@ -149,14 +149,16 @@ export default function TenantPayments() {
           payments: typedResult.payments?.length || 0
         });
 
-        // Transform invoices to match expected structure
+        // Transform invoices to match expected structure with owner_id for PDF generation
         const invoices = (typedResult.invoices || []).map(invoice => ({
           ...invoice,
+          lease_id: invoice.lease_id, // Preserve for landlord lookup
           leases: {
             units: {
               unit_number: invoice.unit_number,
               properties: {
-                name: invoice.property_name
+                name: invoice.property_name,
+                owner_id: invoice.owner_id // Include for PDF landlord billing data
               }
             }
           }
