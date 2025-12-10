@@ -3837,6 +3837,7 @@ export type Database = {
           block_id: string | null
           created_at: string
           description: string | null
+          garbage_deposit: number | null
           id: string
           property_id: string
           rent_amount: number
@@ -3854,6 +3855,7 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           description?: string | null
+          garbage_deposit?: number | null
           id?: string
           property_id: string
           rent_amount: number
@@ -3871,6 +3873,7 @@ export type Database = {
           block_id?: string | null
           created_at?: string
           description?: string | null
+          garbage_deposit?: number | null
           id?: string
           property_id?: string
           rent_amount?: number
@@ -4571,15 +4574,15 @@ export type Database = {
       }
       get_financial_summary_report:
         | {
+            Args: { p_end_date?: string; p_start_date?: string }
+            Returns: Json
+          }
+        | {
             Args: {
               p_end_date?: string
               p_property_id?: string
               p_start_date?: string
             }
-            Returns: Json
-          }
-        | {
-            Args: { p_end_date?: string; p_start_date?: string }
             Returns: Json
           }
       get_invoice_overview: {
@@ -4665,11 +4668,11 @@ export type Database = {
         }[]
       }
       get_market_rent_report:
+        | { Args: never; Returns: Json }
         | {
             Args: { p_end_date?: string; p_start_date?: string }
             Returns: Json
           }
-        | { Args: never; Returns: Json }
       get_mpesa_credentials_safe: {
         Args: { _landlord_id?: string }
         Returns: {
@@ -4873,13 +4876,12 @@ export type Database = {
       log_security_event:
         | {
             Args: {
-              p_details?: Json
-              p_event_type: string
-              p_ip_address?: unknown
-              p_severity?: string
-              p_user_id?: string
+              _details?: Json
+              _event_type: string
+              _ip_address?: unknown
+              _user_id?: string
             }
-            Returns: string
+            Returns: undefined
           }
         | {
             Args: {
@@ -4893,12 +4895,13 @@ export type Database = {
           }
         | {
             Args: {
-              _details?: Json
-              _event_type: string
-              _ip_address?: unknown
-              _user_id?: string
+              p_details?: Json
+              p_event_type: string
+              p_ip_address?: unknown
+              p_severity?: string
+              p_user_id?: string
             }
-            Returns: undefined
+            Returns: string
           }
       log_sensitive_data_access: {
         Args: { _operation: string; _record_id?: string; _table_name: string }

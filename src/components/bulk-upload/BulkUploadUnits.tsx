@@ -13,6 +13,7 @@ export function BulkUploadUnits() {
       "Unit Type": "1BR",
       "Monthly Rent": "25000",
       "Security Deposit": "50000", 
+      "Garbage Deposit": "1000",
       "Floor": "1",
       "Square Feet": "650",
       "Bedrooms": "1",
@@ -26,6 +27,7 @@ export function BulkUploadUnits() {
       "Unit Type": "2BR", 
       "Monthly Rent": "35000",
       "Security Deposit": "70000",
+      "Garbage Deposit": "1500",
       "Floor": "2",
       "Square Feet": "850",
       "Bedrooms": "2",
@@ -159,6 +161,18 @@ export function BulkUploadUnits() {
         }
       }
 
+      // Validate garbage deposit is a non-negative number
+      if (row["Garbage Deposit"]) {
+        const deposit = Number(row["Garbage Deposit"]);
+        if (isNaN(deposit) || deposit < 0) {
+          errors.push({
+            row: index,
+            field: "Garbage Deposit",
+            message: "Garbage deposit must be a non-negative number"
+          });
+        }
+      }
+
       // Validate numeric fields
       const numericFields = ["Floor", "Square Feet", "Bedrooms", "Bathrooms"];
       numericFields.forEach(field => {
@@ -202,6 +216,7 @@ export function BulkUploadUnits() {
         unit_type: String(row["Unit Type"]).trim(),
         rent_amount: Number(row["Monthly Rent"]),
         security_deposit: row["Security Deposit"] ? Number(row["Security Deposit"]) : null,
+        garbage_deposit: row["Garbage Deposit"] ? Number(row["Garbage Deposit"]) : null,
         floor_number: row["Floor"] ? Number(row["Floor"]) : null,
         square_feet: row["Square Feet"] ? Number(row["Square Feet"]) : null,
         bedrooms: row["Bedrooms"] ? Number(row["Bedrooms"]) : null,
