@@ -22,13 +22,24 @@ export interface BillingData {
  */
 export async function getLandlordBillingData(invoice: any): Promise<BillFromData> {
   try {
+    // Debug logging to trace data availability
+    console.log('🔍 getLandlordBillingData called with:', {
+      invoiceId: invoice?.id,
+      hasOwnerIdInLeases: !!invoice?.leases?.units?.properties?.owner_id,
+      ownerIdValue: invoice?.leases?.units?.properties?.owner_id,
+      hasLeaseId: !!invoice?.lease_id,
+      leaseIdValue: invoice?.lease_id
+    });
+    
     // Try to get owner_id from invoice's lease -> unit -> property relationship
     let ownerId: string | null = null;
     
     // Check if owner info is already in the invoice data
     if (invoice?.leases?.units?.properties?.owner_id) {
       ownerId = invoice.leases.units.properties.owner_id;
+      console.log('✅ Found owner_id in invoice data:', ownerId);
     } else if (invoice?.lease_id) {
+      console.log('🔄 No owner_id in invoice, fetching via lease_id:', invoice.lease_id);
       // Step 1: Get unit_id from lease
       const { data: leaseData, error: leaseError } = await supabase
         .from('leases')
@@ -66,9 +77,12 @@ export async function getLandlordBillingData(invoice: any): Promise<BillFromData
     }
 
     if (!ownerId) {
-      console.warn('Could not determine property owner for invoice:', invoice.id);
+      console.warn('⚠️ Could not determine property owner for invoice:', invoice?.id);
+      console.warn('Invoice structure:', JSON.stringify(invoice, null, 2).slice(0, 500));
       return getDefaultBillFrom();
     }
+
+    console.log('📋 Fetching landlord profile for owner_id:', ownerId);
 
     // Fetch landlord profile
     const { data: profile, error: profileError } = await supabase
@@ -78,7 +92,7 @@ export async function getLandlordBillingData(invoice: any): Promise<BillFromData
       .single();
 
     if (profileError || !profile) {
-      console.warn('Could not fetch landlord profile:', profileError?.message);
+      console.warn('⚠️ Could not fetch landlord profile:', profileError?.message);
       return getDefaultBillFrom();
     }
 
@@ -87,6 +101,12 @@ export async function getLandlordBillingData(invoice: any): Promise<BillFromData
       .filter(Boolean)
       .join(' ')
       .trim() || 'Property Manager';
+
+    console.log('✅ Successfully fetched landlord billing data:', {
+      name: landlordName,
+      email: profile.email,
+      phone: profile.phone
+    });
 
     return {
       name: landlordName,
