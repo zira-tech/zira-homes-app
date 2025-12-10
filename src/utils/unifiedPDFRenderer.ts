@@ -1240,7 +1240,8 @@ export class UnifiedPDFRenderer {
       this.addDocumentTitle(document.title, branding, template);
       
       // Step 3: Add landlord section if provided (from billing data)
-      if (billingData?.billFrom) {
+      // Skip for invoices since addInvoiceContent has its own Bill From section
+      if (billingData?.billFrom && document.type !== 'invoice') {
         this.updateProgress(25, 'Adding landlord information...');
         await this.addLandlordSection(billingData.billFrom, branding);
       }
