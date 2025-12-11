@@ -41,7 +41,7 @@ export function TenantInvoiceActions({ invoice, onPaymentSuccess }: TenantInvoic
     }
   };
 
-  const canPay = invoice.status === 'pending' || invoice.status === 'overdue';
+  const canPay = ['pending', 'overdue', 'partially_paid'].includes(invoice.status);
 
   return (
     <>
