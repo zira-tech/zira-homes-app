@@ -37,7 +37,8 @@ import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getIn
 import { fmtCurrency, fmtDate } from "@/lib/format";
 import { measureApiCall } from "@/utils/performanceMonitor";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
-import { isInvoicePayable, isInvoiceOutstanding } from "@/utils/invoiceStatusUtils";
+import { isInvoicePayable, isInvoiceOutstanding, getInvoiceStatusLabel } from "@/utils/invoiceStatusUtils";
+import { TenantCreditBalance } from "@/components/tenant/TenantCreditBalance";
 
 // Lazy load dialog components for better performance
 const MpesaPaymentDialog = lazy(() => import("@/components/tenant/MpesaPaymentDialog").then(module => ({ default: module.MpesaPaymentDialog })));
@@ -48,6 +49,8 @@ interface PaymentData {
   payments: any[];
   tenant: any;
   inferredInvoices: any[];
+  credits: any[];
+  totalCreditBalance: number;
 }
 
 interface FilterState {
@@ -61,6 +64,8 @@ interface TenantPaymentsRpcResult {
   tenant: any;
   invoices: any[];
   payments: any[];
+  credits: any[];
+  total_credit_balance: number;
   error?: string;
 }
 
@@ -140,6 +145,8 @@ export default function TenantPayments() {
             payments: [],
             tenant: null,
             inferredInvoices: [],
+            credits: [],
+            totalCreditBalance: 0,
           });
           return;
         }
@@ -154,6 +161,9 @@ export default function TenantPayments() {
         const invoices = (typedResult.invoices || []).map(invoice => ({
           ...invoice,
           lease_id: invoice.lease_id, // Preserve for landlord lookup
+          // Include outstanding_amount and amount_paid from RPC
+          outstanding_amount: Number(invoice.outstanding_amount) || 0,
+          amount_paid: Number(invoice.amount_paid) || 0,
           leases: {
             units: {
               unit_number: invoice.unit_number,
@@ -182,13 +192,15 @@ export default function TenantPayments() {
         return { 
           tenant: typedResult.tenant, 
           invoices, 
-          payments: typedResult.payments || [] 
+          payments: typedResult.payments || [],
+          credits: typedResult.credits || [],
+          totalCreditBalance: Number(typedResult.total_credit_balance) || 0
         };
       });
 
       if (!result) return;
 
-      const { tenant, invoices, payments } = result;
+      const { tenant, invoices, payments, credits, totalCreditBalance } = result;
 
       // Link payments to invoices and create enhanced payment data
       const enhancedPayments = payments.map(payment => {
@@ -246,6 +258,8 @@ export default function TenantPayments() {
         payments: enhancedPayments,
         tenant,
         inferredInvoices,
+        credits: credits || [],
+        totalCreditBalance: totalCreditBalance || 0,
       });
     } catch (error) {
       console.error("❌ Error fetching payment data:", error);
@@ -478,6 +492,8 @@ export default function TenantPayments() {
     switch (status) {
       case "paid":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case "partially_paid":
+        return <Clock className="h-4 w-4 text-blue-600" />;
       case "pending":
         return <Clock className="h-4 w-4 text-yellow-600" />;
       case "overdue":
@@ -491,6 +507,8 @@ export default function TenantPayments() {
     switch (status) {
       case "paid":
         return "bg-green-100 text-green-800 border-green-200";
+      case "partially_paid":
+        return "bg-blue-100 text-blue-800 border-blue-200";
       case "pending":
         return "bg-yellow-100 text-yellow-800 border-yellow-200";
       case "overdue":
@@ -506,7 +524,9 @@ export default function TenantPayments() {
   }, [paymentData?.invoices]);
 
   const totalOutstanding = useMemo(() => {
-    return pendingInvoices.reduce((total, invoice) => total + (invoice.amount || 0), 0);
+    // Use outstanding_amount if available, otherwise fall back to full amount
+    return pendingInvoices.reduce((total, invoice) => 
+      total + (invoice.outstanding_amount ?? invoice.amount ?? 0), 0);
   }, [pendingInvoices]);
 
   const filteredInvoices = useMemo(() => {
@@ -592,7 +612,7 @@ export default function TenantPayments() {
   }
 
   // Use memoized values
-  const { invoices = [], payments = [], tenant, inferredInvoices = [] } = paymentData || {};
+  const { invoices = [], payments = [], tenant, inferredInvoices = [], credits = [], totalCreditBalance = 0 } = paymentData || {};
   const allInvoices = [...invoices, ...inferredInvoices];
 
   return (
@@ -668,6 +688,17 @@ export default function TenantPayments() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Credit Balance Display */}
+      {totalCreditBalance > 0 && (
+        <div className="mb-6">
+          <TenantCreditBalance 
+            credits={credits} 
+            totalBalance={totalCreditBalance} 
+            variant="inline" 
+          />
+        </div>
       )}
 
       {/* Payment Summary Cards */}

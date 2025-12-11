@@ -17,6 +17,8 @@ interface MpesaPaymentDialogProps {
     id: string;
     invoice_number: string;
     amount: number;
+    outstanding_amount?: number;
+    amount_paid?: number;
     tenant_id: string;
   } | null;
   onPaymentInitiated?: () => void;
@@ -32,7 +34,10 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState<number>(invoice?.amount || 0);
+  // Default to outstanding_amount if partially paid, otherwise full amount
+  const [paymentAmount, setPaymentAmount] = useState<number>(
+    invoice?.outstanding_amount ?? invoice?.amount ?? 0
+  );
   const [loading, setLoading] = useState(false);
   const [landlordShortcode, setLandlordShortcode] = useState<string | null>(null);
   const [landlordTransactionType, setLandlordTransactionType] = useState<string | null>(null);
@@ -40,10 +45,10 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   
-  // Reset payment amount when invoice changes
+  // Reset payment amount when invoice changes - use outstanding_amount if available
   useEffect(() => {
-    setPaymentAmount(invoice?.amount || 0);
-  }, [invoice?.amount]);
+    setPaymentAmount(invoice?.outstanding_amount ?? invoice?.amount ?? 0);
+  }, [invoice?.amount, invoice?.outstanding_amount]);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get landlord M-Pesa config info when dialog opens
@@ -473,6 +478,18 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
                 <span className="text-sm text-muted-foreground">Invoice Amount:</span>
                 <span className="text-sm">KES {invoice.amount.toLocaleString()}</span>
               </div>
+              {invoice.amount_paid !== undefined && invoice.amount_paid > 0 && (
+                <div className="flex justify-between text-blue-600">
+                  <span className="text-sm">Amount Paid:</span>
+                  <span className="text-sm font-medium">KES {invoice.amount_paid.toLocaleString()}</span>
+                </div>
+              )}
+              {invoice.outstanding_amount !== undefined && invoice.outstanding_amount !== invoice.amount && (
+                <div className="flex justify-between text-orange-600 font-medium">
+                  <span className="text-sm">Outstanding Balance:</span>
+                  <span className="text-sm">KES {invoice.outstanding_amount.toLocaleString()}</span>
+                </div>
+              )}
               {status === 'idle' && (
                 <div className="flex justify-between items-center">
                   <Label htmlFor="dialogPaymentAmount" className="text-sm text-muted-foreground">Pay Amount:</Label>

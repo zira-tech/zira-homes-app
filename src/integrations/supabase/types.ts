@@ -5135,7 +5135,7 @@ export type Database = {
         Returns: Json
       }
       get_tenant_payments_data: {
-        Args: { p_limit?: number; p_user_id: string }
+        Args: { p_limit?: number; p_user_id?: string }
         Returns: Json
       }
       get_tenant_profile_data: { Args: { p_user_id?: string }; Returns: Json }
