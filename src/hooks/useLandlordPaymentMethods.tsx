@@ -109,7 +109,7 @@ export function useLandlordPaymentMethods() {
 
       const paymentMethods: PaymentMethod[] = [];
 
-      // Check for Jenga PAY config
+      // Check for Jenga PAY config (Equity Bank)
       const { data: jengaConfig } = await supabase
         .from("landlord_jenga_configs")
         .select("merchant_code, paybill_number, is_active")
@@ -127,6 +127,29 @@ export function useLandlordPaymentMethods() {
             paybillNumber: jengaConfig.paybill_number || "247247",
             accountFormat: `${jengaConfig.merchant_code}-${unitNumber}`,
             instructions: `Pay to Paybill 247247, Account: ${jengaConfig.merchant_code}-${unitNumber}`,
+          },
+        });
+      }
+
+      // Check for KCB Buni config
+      const { data: kcbConfig } = await supabase
+        .from("landlord_bank_configs")
+        .select("merchant_code, is_active")
+        .eq("landlord_id", landlordId)
+        .eq("bank_code", "kcb")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (kcbConfig?.is_active) {
+        paymentMethods.push({
+          type: "bank",
+          name: "KCB Bank (522522)",
+          isEnabled: true,
+          config: {
+            merchantCode: kcbConfig.merchant_code,
+            paybillNumber: "522522",
+            accountFormat: `${kcbConfig.merchant_code}-${unitNumber}`,
+            instructions: `Pay to Paybill 522522, Account: ${kcbConfig.merchant_code}-${unitNumber}`,
           },
         });
       }

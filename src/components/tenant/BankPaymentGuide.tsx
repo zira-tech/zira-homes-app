@@ -76,7 +76,7 @@ export function BankPaymentGuide({
           className="p-4 rounded-lg border bg-card"
         >
           <div className="flex items-center gap-2 mb-3">
-            {method.type === "jenga" ? (
+            {method.type === "jenga" || method.type === "bank" ? (
               <Building2 className="h-5 w-5 text-primary" />
             ) : (
               <Smartphone className="h-5 w-5 text-green-600" />
@@ -86,17 +86,17 @@ export function BankPaymentGuide({
           </div>
 
           <div className="space-y-3 text-sm">
-            {method.type === "jenga" && method.config && (
+            {(method.type === "jenga" || method.type === "bank") && method.config && (
               <>
                 <div className="flex items-center justify-between p-2 bg-muted rounded">
                   <div>
                     <p className="text-muted-foreground text-xs">Paybill Number</p>
-                    <p className="font-mono font-bold text-lg">247247</p>
+                    <p className="font-mono font-bold text-lg">{method.config.paybillNumber}</p>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => copyToClipboard("247247", "Paybill")}
+                    onClick={() => copyToClipboard(method.config!.paybillNumber!, "Paybill")}
                   >
                     {copiedField === "Paybill" ? (
                       <Check className="h-4 w-4 text-green-600" />
@@ -131,7 +131,7 @@ export function BankPaymentGuide({
                 <Alert className="border-blue-200 bg-blue-50">
                   <Info className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-xs text-blue-800">
-                    Use this exact Account Number format when paying via M-Pesa to Paybill 247247. 
+                    Use this exact Account Number format when paying via M-Pesa to Paybill {method.config.paybillNumber}. 
                     Your payment will be automatically matched to your invoice.
                   </AlertDescription>
                 </Alert>
