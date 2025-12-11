@@ -553,16 +553,38 @@ export default function TenantPayments() {
     const allInvoices = [...paymentData.invoices, ...(paymentData.inferredInvoices || [])];
     const { search, status } = filters;
     
-    return allInvoices.filter(invoice => {
-      const matchesSearch = !search || 
-        formatInvoiceNumber(invoice.invoice_number).toLowerCase().includes(search.toLowerCase()) ||
-        getInvoiceDescription(invoice).toLowerCase().includes(search.toLowerCase()) ||
-        (invoice.leases?.units?.properties?.name || '').toLowerCase().includes(search.toLowerCase());
-      
-      const matchesStatus = status === 'all' || invoice.status === status;
-      
-      return matchesSearch && matchesStatus;
-    });
+    return allInvoices
+      .filter(invoice => {
+        const matchesSearch = !search || 
+          formatInvoiceNumber(invoice.invoice_number).toLowerCase().includes(search.toLowerCase()) ||
+          getInvoiceDescription(invoice).toLowerCase().includes(search.toLowerCase()) ||
+          (invoice.leases?.units?.properties?.name || '').toLowerCase().includes(search.toLowerCase());
+        
+        const matchesStatus = status === 'all' || invoice.status === status;
+        
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        // Status priority: overdue first, then partially_paid, pending, paid last
+        const statusPriority: Record<string, number> = {
+          'overdue': 1,
+          'partially_paid': 2,
+          'pending': 3,
+          'paid': 4
+        };
+        
+        const priorityA = statusPriority[a.status] || 5;
+        const priorityB = statusPriority[b.status] || 5;
+        
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+        
+        // Within same status, sort by due_date ascending (oldest due first = most urgent)
+        const dateA = new Date(a.due_date || a.invoice_date).getTime();
+        const dateB = new Date(b.due_date || b.invoice_date).getTime();
+        return dateA - dateB;
+      });
   }, [paymentData, filters]);
 
   const paginatedInvoices = useMemo(() => {
@@ -574,13 +596,20 @@ export default function TenantPayments() {
     if (!paymentData?.payments) return [];
     
     const { search } = filters;
-    return paymentData.payments.filter(payment => {
-      const matchesSearch = !search || 
-        payment.formattedReference?.toLowerCase().includes(search.toLowerCase()) ||
-        (payment.linkedInvoice?.invoice_number || '').toLowerCase().includes(search.toLowerCase());
-      
-      return matchesSearch;
-    });
+    return paymentData.payments
+      .filter(payment => {
+        const matchesSearch = !search || 
+          payment.formattedReference?.toLowerCase().includes(search.toLowerCase()) ||
+          (payment.linkedInvoice?.invoice_number || '').toLowerCase().includes(search.toLowerCase());
+        
+        return matchesSearch;
+      })
+      .sort((a, b) => {
+        // Sort by payment_date descending (most recent first)
+        const dateA = new Date(a.payment_date).getTime();
+        const dateB = new Date(b.payment_date).getTime();
+        return dateB - dateA;
+      });
   }, [paymentData?.payments, filters]);
 
   const paginatedPayments = useMemo(() => {
