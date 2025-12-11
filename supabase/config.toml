@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.jenga-ipn-callback]
 verify_jwt = false
+
+[functions.jenga-stk-push]
+verify_jwt = true
