@@ -27,6 +27,7 @@ import {
   Building,
   Home,
   RefreshCw,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +40,7 @@ import { measureApiCall } from "@/utils/performanceMonitor";
 import { useMpesaAvailability } from "@/hooks/useMpesaAvailability";
 import { isInvoicePayable, isInvoiceOutstanding, getInvoiceStatusLabel } from "@/utils/invoiceStatusUtils";
 import { TenantCreditBalance } from "@/components/tenant/TenantCreditBalance";
+import { ApplyCreditDialog } from "@/components/tenant/ApplyCreditDialog";
 
 // Lazy load dialog components for better performance
 const MpesaPaymentDialog = lazy(() => import("@/components/tenant/MpesaPaymentDialog").then(module => ({ default: module.MpesaPaymentDialog })));
@@ -678,6 +680,20 @@ export default function TenantPayments() {
                   <Smartphone className="h-4 w-4 mr-2" />
                   {isChecking ? 'Checking...' : 'Pay with M-Pesa'}
                 </Button>
+                {totalCreditBalance > 0 && (
+                  <ApplyCreditDialog
+                    availableCredit={totalCreditBalance}
+                    credits={credits}
+                    pendingInvoices={pendingInvoices}
+                    onSuccess={fetchPaymentData}
+                    trigger={
+                      <Button size="lg" variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950">
+                        <Wallet className="h-4 w-4 mr-2" />
+                        Apply Credit
+                      </Button>
+                    }
+                  />
+                )}
                 <Button
                   size="lg"
                   variant="outline"
@@ -942,15 +958,32 @@ export default function TenantPayments() {
                                 </Button>
                               )}
                               {isInvoicePayable(invoice.status) && (
-                                <Button
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                  disabled={isChecking}
-                                  onClick={() => handleMpesaPayment(invoice)}
-                                >
-                                  <Smartphone className="h-3 w-3 mr-1" />
-                                  {isChecking ? 'Checking...' : 'Pay'}
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    disabled={isChecking}
+                                    onClick={() => handleMpesaPayment(invoice)}
+                                  >
+                                    <Smartphone className="h-3 w-3 mr-1" />
+                                    {isChecking ? 'Checking...' : 'Pay'}
+                                  </Button>
+                                  {totalCreditBalance > 0 && (
+                                    <ApplyCreditDialog
+                                      availableCredit={totalCreditBalance}
+                                      credits={credits}
+                                      pendingInvoices={pendingInvoices}
+                                      preSelectedInvoice={invoice}
+                                      onSuccess={fetchPaymentData}
+                                      trigger={
+                                        <Button size="sm" variant="outline" className="border-green-600 text-green-600">
+                                          <Wallet className="h-3 w-3 mr-1" />
+                                          Credit
+                                        </Button>
+                                      }
+                                    />
+                                  )}
+                                </>
                               )}
                               {invoice.isInferred && (
                                 <Button
