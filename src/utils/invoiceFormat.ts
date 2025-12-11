@@ -1,34 +1,41 @@
 import { format } from "date-fns";
 
 /**
- * Formats an invoice number to be more user-friendly
- * Converts various formats to: INV-YYYYMM-XXXXXX
+ * Formats an invoice number for display
+ * Recognizes database format INV-YYYY-NNNNNN and returns as-is
+ * Only transforms truly malformed or legacy formats
  */
 export function formatInvoiceNumber(invoiceNumber: string | null | undefined): string {
   if (!invoiceNumber) return "—";
   
-  // If it's already properly formatted, return as is
-  if (invoiceNumber.match(/^INV-\d{6}-[A-Z0-9]{6}$/)) {
+  // Recognize actual database format: INV-YYYY-NNNNNN (e.g., INV-2025-937523)
+  if (invoiceNumber.match(/^INV-\d{4}-\d{4,7}$/)) {
     return invoiceNumber;
   }
+  
+  // Also accept format: INV-YYYYMM-XXXXXX (e.g., INV-202512-ABC123)
+  if (invoiceNumber.match(/^INV-\d{6}-[A-Z0-9]{4,8}$/i)) {
+    return invoiceNumber.toUpperCase();
+  }
+  
+  // If it starts with INV- and looks reasonable, return as-is
+  if (invoiceNumber.match(/^INV-[A-Z0-9-]+$/i) && invoiceNumber.length >= 10) {
+    return invoiceNumber.toUpperCase();
+  }
 
-  // Generate date component (current or extracted from invoice)
+  // Only transform truly unformatted values (UUIDs, raw numbers, etc.)
   const now = new Date();
   const yearMonth = format(now, "yyyyMM");
   
-  // Clean and extract identifier
   let identifier = invoiceNumber;
   
-  // If it's a UUID, use the first 6 characters for better readability
+  // If it's a UUID, use first 6 chars
   if (invoiceNumber.match(/^[a-f0-9-]{8,36}$/i)) {
     identifier = invoiceNumber.replace(/-/g, "").substring(0, 6).toUpperCase();
-  } else if (invoiceNumber.length > 10) {
-    // For other long strings, use first 6 alphanumeric characters
+  } else {
+    // For other strings, extract alphanumeric portion
     const alphanumeric = invoiceNumber.replace(/[^A-Za-z0-9]/g, "");
     identifier = alphanumeric.substring(0, 6).toUpperCase();
-  } else {
-    // For short strings, clean and pad
-    identifier = invoiceNumber.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   }
   
   // Ensure identifier is exactly 6 characters
@@ -42,56 +49,82 @@ export function formatInvoiceNumber(invoiceNumber: string | null | undefined): s
 }
 
 /**
- * Formats a payment reference to be more user-friendly
+ * Formats a payment reference for display
+ * Uses transaction_id for uniqueness when available
  */
-export function formatPaymentReference(reference: string | null | undefined): string {
+export function formatPaymentReference(
+  reference: string | null | undefined, 
+  transactionId?: string | null
+): string {
+  // Prefer transaction_id if available (e.g., TLBLU0MEG0) - always unique
+  if (transactionId && transactionId.length >= 6) {
+    // Already formatted
+    if (transactionId.match(/^PAY-/i)) {
+      return transactionId.toUpperCase();
+    }
+    return `PAY-${transactionId.toUpperCase()}`;
+  }
+  
   if (!reference) return "—";
   
-  // If it's already formatted nicely, return as is
+  // If already formatted, return as-is
   if (reference.match(/^PAY-/i)) {
     return reference.toUpperCase();
   }
   
-  // For M-Pesa or other transaction IDs, format nicely
-  if (reference.length > 8) {
-    return `PAY-${reference.slice(-8).toUpperCase()}`;
+  // For M-Pesa checkout request IDs (ws_CO_...), extract the unique middle portion
+  // Format: ws_CO_DDMMYYYYHHMMSS_SHORTCODE_PHONE_RANDOM
+  if (reference.startsWith("ws_CO_")) {
+    const parts = reference.split("_");
+    // Use the timestamp portion (DDMMYYYYHHMMSS) which is unique per request
+    if (parts.length >= 3 && parts[2].length >= 10) {
+      return `PAY-${parts[2].substring(0, 10)}`;
+    }
   }
   
-  return `PAY-${reference.toUpperCase()}`;
+  // For other references, use full value if short, otherwise extract unique portion
+  if (reference.length <= 12) {
+    return `PAY-${reference.toUpperCase()}`;
+  }
+  
+  // For longer references, use first 10 chars (more unique than last 8)
+  return `PAY-${reference.substring(0, 10).toUpperCase()}`;
 }
 
 /**
- * Formats a receipt number to be more user-friendly
- * Converts long transaction IDs to: RCT-YYYYMM-XXXXXX
+ * Formats a receipt number for display
+ * Uses transaction_id for uniqueness
  */
-export function formatReceiptNumber(transactionId: string | null | undefined): string {
+export function formatReceiptNumber(
+  transactionId: string | null | undefined,
+  paymentDate?: string | Date | null
+): string {
   if (!transactionId) return "—";
   
-  // If it's already properly formatted, return as is
-  if (transactionId.match(/^RCT-\d{6}-[A-Z0-9]{6}$/)) {
-    return transactionId;
+  // If already properly formatted, return as-is
+  if (transactionId.match(/^RCT-\d{6}-[A-Z0-9]{4,10}$/i)) {
+    return transactionId.toUpperCase();
+  }
+  
+  // If it looks like an M-Pesa receipt (e.g., TLBLU0MEG0), format it nicely
+  if (transactionId.match(/^[A-Z0-9]{10,12}$/)) {
+    const date = paymentDate ? new Date(paymentDate) : new Date();
+    const yearMonth = format(date, "yyyyMM");
+    return `RCT-${yearMonth}-${transactionId}`;
   }
 
-  // Generate date component (current date)
-  const now = new Date();
-  const yearMonth = format(now, "yyyyMM");
+  // Use payment date if available, otherwise current date
+  const date = paymentDate ? new Date(paymentDate) : new Date();
+  const yearMonth = format(date, "yyyyMM");
   
-  // Clean and extract identifier from the transaction ID
-  let identifier = transactionId;
+  // Extract unique identifier
+  let identifier = transactionId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   
-  // For M-Pesa or other long transaction IDs, use the last 6 characters
-  if (transactionId.length > 10) {
-    identifier = transactionId.slice(-6).toUpperCase();
-  } else {
-    // For shorter IDs, clean and use as is
-    identifier = transactionId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-  }
-  
-  // Ensure identifier is exactly 6 characters
-  if (identifier.length < 6) {
+  // For long IDs, use first 8 chars (more unique than last chars which may be phone)
+  if (identifier.length > 8) {
+    identifier = identifier.substring(0, 8);
+  } else if (identifier.length < 6) {
     identifier = identifier.padStart(6, "0");
-  } else if (identifier.length > 6) {
-    identifier = identifier.substring(0, 6);
   }
   
   return `RCT-${yearMonth}-${identifier}`;
