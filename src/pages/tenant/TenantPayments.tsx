@@ -296,6 +296,12 @@ export default function TenantPayments() {
       
       const renderer = new UnifiedPDFRenderer();
       
+      // Calculate payment breakdown for partially paid invoices
+      const amountPaid = invoice.amount_paid || (invoice.outstanding_amount !== undefined 
+        ? invoice.amount - invoice.outstanding_amount 
+        : 0);
+      const outstandingAmount = invoice.outstanding_amount ?? invoice.amount;
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice ${invoice.invoice_number}`,
@@ -310,6 +316,9 @@ export default function TenantPayments() {
             }
           ],
           total: invoice.amount,
+          // Payment breakdown for partially paid invoices
+          amountPaid: amountPaid,
+          outstandingAmount: outstandingAmount,
           recipient: {
             name: billingData.billTo.name,
             address: billingData.billTo.address
@@ -346,13 +355,20 @@ export default function TenantPayments() {
       const { getInvoiceBillingData } = await import('@/utils/invoiceBillingHelper');
       
       // Build invoice-like object from payment for billing lookup
+      // Include landlordInfo from linked invoice or find from matching invoice
+      const matchingInvoice = payment.invoice_id 
+        ? paymentData?.invoices?.find((inv: any) => inv.id === payment.invoice_id)
+        : payment.linkedInvoice;
+      
       const invoiceLike = {
         lease_id: payment.lease_id,
         tenants: paymentData?.tenant ? {
           first_name: paymentData.tenant.first_name,
           last_name: paymentData.tenant.last_name
         } : null,
-        leases: payment.linkedInvoice?.leases
+        leases: payment.linkedInvoice?.leases || matchingInvoice?.leases,
+        // Include landlord info for PDF Bill From section
+        landlordInfo: payment.linkedInvoice?.landlordInfo || matchingInvoice?.landlordInfo
       };
       
       // Fetch actual landlord billing data
