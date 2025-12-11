@@ -155,20 +155,35 @@ export const JengaPayConfig: React.FC = () => {
   };
 
   const testPayment = async () => {
+    if (!user) return;
+    
     setTestingPayment(true);
     try {
-      // Simulate test payment
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      toast({
-        title: "Test Initiated",
-        description: "Test IPN will be processed. Check the IPN Callbacks section in admin panel."
+      const { data, error } = await supabase.functions.invoke('jenga-stk-push', {
+        body: {
+          phone: user.phone || '254722000000', // Use user's phone or test number
+          amount: 1, // Test with 1 KES
+          accountReference: 'TEST-PAYMENT',
+          transactionDesc: 'Jenga PAY Configuration Test',
+          landlordId: user.id
+        }
       });
-    } catch (error) {
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast({
+          title: "STK Push Sent",
+          description: `Check your phone (${data.checkoutRequestId}). You should receive an M-Pesa prompt.`
+        });
+      } else {
+        throw new Error(data?.error || 'STK Push failed');
+      }
+    } catch (error: any) {
       console.error('Error testing payment:', error);
       toast({
         title: "Test Failed",
-        description: "Failed to test payment. Please check your credentials.",
+        description: error.message || "Failed to test payment. Please check your credentials.",
         variant: "destructive"
       });
     } finally {

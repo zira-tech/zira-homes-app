@@ -14,6 +14,9 @@ interface CheckAvailabilityResponse {
   source?: 'custom' | 'platform';
   error?: string;
   details?: string;
+  // Jenga PAY support
+  jengaAvailable?: boolean;
+  jengaPaybill?: string;
 }
 
 Deno.serve(async (req) => {
@@ -272,13 +275,41 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 4d: No M-Pesa configuration found
-    console.log('⚠️ No M-Pesa configuration found for landlord');
+    // Step 4d: Check for Jenga PAY configuration before returning no config
+    console.log('🔎 Step 4d: Checking Jenga PAY config...');
+    const { data: jengaConfig, error: jengaError } = await supabase
+      .from('landlord_jenga_configs')
+      .select('*')
+      .eq('landlord_id', property.owner_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!jengaError && jengaConfig) {
+      console.log(`✅ Jenga PAY config found for landlord`);
+      return new Response(
+        JSON.stringify({ 
+          available: true, 
+          provider: 'jenga',
+          configType: 'paybill',
+          paybillNumber: jengaConfig.paybill_number || '247247',
+          source: 'custom',
+          jengaAvailable: true,
+          jengaPaybill: jengaConfig.paybill_number || '247247'
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Step 4e: No M-Pesa or Jenga configuration found
+    console.log('⚠️ No payment configuration found for landlord');
     return new Response(
       JSON.stringify({ 
         available: false, 
         error: 'M-Pesa not configured',
-        details: 'The landlord has not set up M-Pesa payments yet' 
+        details: 'The landlord has not set up M-Pesa or Jenga PAY payments yet' 
       }),
       { 
         status: 200, 
