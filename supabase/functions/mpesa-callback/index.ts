@@ -454,13 +454,18 @@ serve(async (req) => {
           }
         } else if (transaction.invoice_id) {
           // Handle regular rent invoice payment with proper allocation-based handling
-          const { data: invoice } = await supabase
+          console.log('Processing rent invoice payment for invoice_id:', transaction.invoice_id);
+          
+          // Use LEFT JOINs to avoid query failures when nested relationships are missing
+          const { data: invoice, error: invoiceError } = await supabase
             .from('invoices')
             .select(`
               *,
-              leases!inner(
-                unit:units!inner(
-                  property:properties!inner(
+              leases(
+                unit_id,
+                units(
+                  property_id,
+                  properties(
                     owner_id,
                     manager_id
                   )
@@ -469,6 +474,22 @@ serve(async (req) => {
             `)
             .eq('id', transaction.invoice_id)
             .single()
+
+          if (invoiceError) {
+            console.error('Error fetching invoice:', {
+              invoice_id: transaction.invoice_id,
+              error: invoiceError.message,
+              details: invoiceError.details
+            });
+          }
+          
+          console.log('Invoice query result:', {
+            found: !!invoice,
+            invoice_id: invoice?.id,
+            invoice_amount: invoice?.amount,
+            tenant_id: invoice?.tenant_id,
+            has_lease: !!invoice?.leases
+          });
 
           if (invoice) {
             // Check if payment already exists to prevent duplicates
@@ -556,9 +577,13 @@ serve(async (req) => {
                 }
               }
 
-              // Handle overpayment - create tenant credit
-              const landlordId = invoice.leases?.unit?.property?.owner_id || 
+              // Extract landlordId - handle both old and new query structures
+              const landlordId = invoice.leases?.units?.properties?.owner_id || 
+                                invoice.leases?.units?.properties?.manager_id ||
+                                invoice.leases?.unit?.property?.owner_id || 
                                 invoice.leases?.unit?.property?.manager_id;
+              
+              console.log('Extracted landlordId for overpayment credit:', landlordId);
 
               if (overpaymentAmount > 0 && landlordId) {
                 const { error: creditError } = await supabase
@@ -585,8 +610,13 @@ serve(async (req) => {
               const isFullyPaid = totalPaid >= invoiceAmount;
               const outstandingBalance = Math.max(0, invoiceAmount - totalPaid);
 
-              // ✅ AUTO-GENERATE SERVICE CHARGE INVOICE FOR LANDLORD
-              if (landlordId) {
+              // Extract landlordId for service charge invoice - handle both query structures
+              const landlordIdForService = invoice.leases?.units?.properties?.owner_id || 
+                                          invoice.leases?.units?.properties?.manager_id ||
+                                          invoice.leases?.unit?.property?.owner_id || 
+                                          invoice.leases?.unit?.property?.manager_id;
+              
+              if (landlordIdForService) {
                 try {
                   console.log('Starting automatic service charge invoice generation for rent payment...');
                   
