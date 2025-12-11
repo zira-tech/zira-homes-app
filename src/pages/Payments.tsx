@@ -52,13 +52,13 @@ const Payments = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [tenants, setTenants] = useState<any[]>([]);
   const [leases, setLeases] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("last_12_months");
   const { toast } = useToast();
   const { page, pageSize, offset, setPage, setPageSize } = useUrlPageParam({ pageSize: 10 });
-
 
   const fetchPayments = async () => {
     try {
@@ -207,9 +207,48 @@ const Payments = () => {
     }
   };
 
+  const fetchInvoices = async () => {
+    try {
+      // Fetch invoices with pending, overdue, or partially_paid status
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from("invoices")
+        .select(`
+          id, invoice_number, tenant_id, lease_id, amount, status, due_date,
+          leases:lease_id(units:unit_id(unit_number, properties:property_id(name)))
+        `)
+        .in('status', ['pending', 'overdue', 'partially_paid']);
+      
+      if (invoicesError) throw invoicesError;
+
+      // Fetch all allocations for these invoices
+      const invoiceIds = invoicesData?.map(inv => inv.id) || [];
+      const { data: allocationsData } = await supabase
+        .from('payment_allocations')
+        .select('invoice_id, amount')
+        .in('invoice_id', invoiceIds);
+
+      // Calculate outstanding amount for each invoice
+      const allocationMap = new Map<string, number>();
+      allocationsData?.forEach(alloc => {
+        const current = allocationMap.get(alloc.invoice_id) || 0;
+        allocationMap.set(alloc.invoice_id, current + Number(alloc.amount));
+      });
+
+      const invoicesWithOutstanding = invoicesData?.map(inv => ({
+        ...inv,
+        outstanding_amount: Number(inv.amount) - (allocationMap.get(inv.id) || 0)
+      })).filter(inv => inv.outstanding_amount > 0) || [];
+
+      setInvoices(invoicesWithOutstanding);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+    }
+  };
+
   useEffect(() => {
     fetchPayments();
     fetchTenantsAndLeases();
+    fetchInvoices();
   }, [page, pageSize, searchTerm, statusFilter, periodFilter]);
 
 
@@ -304,7 +343,8 @@ const Payments = () => {
                 <RecordPaymentDialog
                   tenants={tenants}
                   leases={leases}
-                  onPaymentRecorded={fetchPayments}
+                  invoices={invoices}
+                  onPaymentRecorded={() => { fetchPayments(); fetchInvoices(); }}
                 />
               </DisabledActionWrapper>
               <TestPaymentButton tenantNameQuery="David" onPaymentRecorded={fetchPayments} />

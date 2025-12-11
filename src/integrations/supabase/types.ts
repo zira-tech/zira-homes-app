@@ -601,6 +601,51 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_applications: {
+        Row: {
+          amount: number
+          applied_at: string | null
+          applied_by: string | null
+          credit_id: string
+          id: string
+          invoice_id: string
+          notes: string | null
+        }
+        Insert: {
+          amount: number
+          applied_at?: string | null
+          applied_by?: string | null
+          credit_id: string
+          id?: string
+          invoice_id: string
+          notes?: string | null
+        }
+        Update: {
+          amount?: number
+          applied_at?: string | null
+          applied_by?: string | null
+          credit_id?: string
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_applications_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_credits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_applications_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_access_logs: {
         Row: {
           access_type: string
@@ -3838,6 +3883,67 @@ export type Database = {
           },
         ]
       }
+      tenant_credits: {
+        Row: {
+          amount: number
+          balance: number
+          created_at: string | null
+          description: string | null
+          id: string
+          landlord_id: string
+          source_payment_id: string | null
+          source_type: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          balance: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          landlord_id: string
+          source_payment_id?: string | null
+          source_type?: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          balance?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          landlord_id?: string
+          source_payment_id?: string | null
+          source_type?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credits_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_credits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
@@ -4571,6 +4677,15 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number }
         Returns: Json
       }
+      apply_credit_to_invoice: {
+        Args: {
+          p_amount: number
+          p_applied_by?: string
+          p_credit_id: string
+          p_invoice_id: string
+        }
+        Returns: Json
+      }
       attach_lease_and_occupy_unit: {
         Args: {
           p_lease_end_date: string
@@ -5010,6 +5125,10 @@ export type Database = {
         Returns: boolean
       }
       get_tenant_contacts: { Args: { p_user_id?: string }; Returns: Json }
+      get_tenant_credit_balance: {
+        Args: { p_tenant_id: string }
+        Returns: number
+      }
       get_tenant_leases: { Args: { p_user_id?: string }; Returns: Json }
       get_tenant_maintenance_data: {
         Args: { p_limit?: number; p_user_id?: string }
