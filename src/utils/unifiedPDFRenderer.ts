@@ -971,22 +971,32 @@ export class UnifiedPDFRenderer {
     // Use real tenant data from billing relationships
     const billTo = billingData?.billTo;
     const tenantName = billTo?.name || content.recipient.name;
-    this.pdf.text(tenantName, this.pageWidth - 100, this.currentY + 8);
+    let nextLineOffset = 8;
+    
+    // Tenant name
+    this.pdf.text(tenantName, this.pageWidth - 100, this.currentY + nextLineOffset);
+    nextLineOffset += 8;
+    
+    // Add tenant phone if available
+    if (billTo?.phone) {
+      this.pdf.text(billTo.phone, this.pageWidth - 100, this.currentY + nextLineOffset);
+      nextLineOffset += 8;
+    }
     
     // Add tenant email if available
     if (billTo?.email) {
-      this.pdf.text(billTo.email, this.pageWidth - 100, this.currentY + 16);
+      this.pdf.text(billTo.email, this.pageWidth - 100, this.currentY + nextLineOffset);
+      nextLineOffset += 8;
     }
     
     // Property and unit information
     const address = billTo?.address || content.recipient.address;
     const addressLines = address.split('\n');
-    const startLine = billTo?.email ? 24 : 16;
     addressLines.forEach((line, index) => {
-      this.pdf.text(line, this.pageWidth - 100, this.currentY + startLine + (index * 4));
+      this.pdf.text(line, this.pageWidth - 100, this.currentY + nextLineOffset + (index * 4));
     });
     
-    this.currentY += 55;
+    this.currentY += 60;
     
     // Invoice details
     this.pdf.setTextColor(0, 0, 0);

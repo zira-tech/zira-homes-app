@@ -8,12 +8,16 @@ export interface BillFromData {
   email: string;
 }
 
+export interface BillToData {
+  name: string;
+  address: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface BillingData {
   billFrom: BillFromData;
-  billTo: {
-    name: string;
-    address: string;
-  };
+  billTo: BillToData;
 }
 
 /**
@@ -146,10 +150,20 @@ export async function getLandlordBillingData(invoice: any): Promise<BillFromData
 export async function getInvoiceBillingData(invoice: any): Promise<BillingData> {
   const billFrom = await getLandlordBillingData(invoice);
   
-  // Extract tenant/property info for billTo
-  const tenantName = invoice.tenants 
-    ? `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim() 
-    : 'Tenant';
+  // Extract tenant info - check both tenants object and tenantInfo (from RPC)
+  let tenantName = 'Tenant';
+  let tenantPhone: string | undefined;
+  let tenantEmail: string | undefined;
+  
+  if (invoice.tenants) {
+    tenantName = `${invoice.tenants.first_name || ''} ${invoice.tenants.last_name || ''}`.trim() || 'Tenant';
+    tenantPhone = invoice.tenants.phone;
+    tenantEmail = invoice.tenants.email;
+  } else if (invoice.tenantInfo) {
+    tenantName = `${invoice.tenantInfo.firstName || ''} ${invoice.tenantInfo.lastName || ''}`.trim() || 'Tenant';
+    tenantPhone = invoice.tenantInfo.phone;
+    tenantEmail = invoice.tenantInfo.email;
+  }
   
   const propertyName = invoice.leases?.units?.properties?.name || 'Property';
   const unitNumber = invoice.leases?.units?.unit_number || 'N/A';
@@ -157,8 +171,10 @@ export async function getInvoiceBillingData(invoice: any): Promise<BillingData> 
   return {
     billFrom,
     billTo: {
-      name: tenantName || 'Tenant',
-      address: `${propertyName}\nUnit: ${unitNumber}`
+      name: tenantName,
+      address: `${propertyName}\nUnit: ${unitNumber}`,
+      phone: tenantPhone,
+      email: tenantEmail
     }
   };
 }
