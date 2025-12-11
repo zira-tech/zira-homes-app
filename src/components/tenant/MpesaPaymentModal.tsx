@@ -35,12 +35,18 @@ export function MpesaPaymentModal({
   onPaymentInitiated 
 }: MpesaPaymentModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState<number>(invoice.amount);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [paymentProvider, setPaymentProvider] = useState<string>('');
   const [tillNumber, setTillNumber] = useState<string>('');
+  
+  // Reset payment amount when invoice changes
+  useEffect(() => {
+    setPaymentAmount(invoice.amount);
+  }, [invoice.amount]);
   
   // React Query client for cache invalidation
   const queryClient = useQueryClient();
@@ -452,10 +458,18 @@ export function MpesaPaymentModal({
         return;
       }
 
+      // Validate payment amount
+      if (paymentAmount < 1) {
+        toast.error("Minimum payment amount is KES 1");
+        setStatus('idle');
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
         body: {
           phone: formattedPhone,
-          amount: invoice.amount,
+          amount: paymentAmount,
           invoiceId: invoice.id,
           accountReference: invoice.invoice_number,
           transactionDesc: invoice.description || `Payment for ${invoice.invoice_number}`,
@@ -667,12 +681,43 @@ export function MpesaPaymentModal({
                   <span className="font-medium">{invoice.invoice_number}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Amount:</span>
-                  <span className="font-medium text-lg flex items-center gap-1">
+                  <span className="text-sm text-muted-foreground">Invoice Amount:</span>
+                  <span className="font-medium flex items-center gap-1">
                     <DollarSign className="h-4 w-4" />
                     {formatAmount(invoice.amount)} {getGlobalCurrencySync()}
                   </span>
                 </div>
+                {status === 'idle' && (
+                  <div className="flex justify-between items-center pt-1">
+                    <Label htmlFor="paymentAmount" className="text-sm text-muted-foreground">Pay Amount:</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">{getGlobalCurrencySync()}</span>
+                      <Input
+                        id="paymentAmount"
+                        type="number"
+                        min="1"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(Math.max(1, Number(e.target.value)))}
+                        className="w-28 text-right font-medium"
+                      />
+                    </div>
+                  </div>
+                )}
+                {status === 'idle' && paymentAmount !== invoice.amount && (
+                  <Alert variant="default" className={cn(
+                    "mt-2 py-2",
+                    paymentAmount < invoice.amount && "border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30",
+                    paymentAmount > invoice.amount && "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30"
+                  )}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      {paymentAmount < invoice.amount 
+                        ? `Partial payment: ${formatAmount(invoice.amount - paymentAmount)} ${getGlobalCurrencySync()} will remain outstanding`
+                        : `Overpayment: ${formatAmount(paymentAmount - invoice.amount)} ${getGlobalCurrencySync()} will be credited to your account`
+                      }
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Description:</span>
                   <span className="text-sm">{invoice.description}</span>
