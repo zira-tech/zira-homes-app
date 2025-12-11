@@ -22,9 +22,9 @@ interface BankDetails {
   apiType: string;
 }
 
+// Note: Equity Bank is excluded as it has dedicated Jenga PAY configuration
 const SUPPORTED_BANKS: BankDetails[] = [
   { name: "KCB Bank (Buni)", code: "kcb", apiType: "Buni API" },
-  { name: "Equity Bank (Jenga)", code: "equity", apiType: "Jenga API" },
   { name: "Co-operative Bank", code: "cooperative", apiType: "Direct Integration" },
   { name: "I&M Bank", code: "im", apiType: "API Gateway" },
   { name: "NCBA Bank", code: "ncba", apiType: "NCBA API" },
