@@ -59,8 +59,174 @@ async function validateIpnAuth(
   }
 }
 
-// Helper to resolve landlord and invoice from bill number
-async function resolveFromBillNumber(
+// Helper to normalize unit number for matching (case-insensitive, trim whitespace)
+function normalizeUnitNumber(unitNumber: string): string {
+  return unitNumber.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+// NEW: Resolve by unit number (MERCHANTCODE-UNITNUMBER format)
+async function resolveByUnitNumber(
+  supabase: any,
+  billNumber: string,
+  amount: number
+): Promise<{ 
+  landlordId: string | null; 
+  invoiceId: string | null; 
+  invoice: any; 
+  matchType: string;
+  lease: any;
+}> {
+  let landlordId: string | null = null;
+  let invoiceId: string | null = null;
+  let invoice: any = null;
+  let matchType = 'none';
+  let lease: any = null;
+
+  if (!billNumber) {
+    return { landlordId, invoiceId, invoice, matchType, lease };
+  }
+
+  console.log('Resolving by unit number from bill number:', billNumber);
+
+  // Parse MERCHANTCODE-UNITNUMBER format
+  let merchantCode: string | null = null;
+  let unitNumber: string = billNumber;
+
+  if (billNumber.includes('-')) {
+    const parts = billNumber.split('-');
+    merchantCode = parts[0];
+    unitNumber = parts.slice(1).join('-'); // Handle unit numbers with dashes
+  }
+
+  console.log('Parsed:', { merchantCode, unitNumber });
+
+  // Step 1: Find landlord by merchant code
+  if (merchantCode) {
+    const { data: landlordConfig, error: configError } = await supabase
+      .from('landlord_jenga_configs')
+      .select('landlord_id')
+      .eq('merchant_code', merchantCode)
+      .eq('is_active', true)
+      .single();
+
+    if (!configError && landlordConfig) {
+      landlordId = landlordConfig.landlord_id;
+      console.log('Found landlord by merchant code:', landlordId);
+    } else {
+      console.log('No landlord found for merchant code:', merchantCode);
+      return { landlordId, invoiceId, invoice, matchType: 'no_merchant', lease };
+    }
+  }
+
+  // Step 2: Find unit by unit number (within landlord's properties)
+  const normalizedUnitNumber = normalizeUnitNumber(unitNumber);
+  
+  let unitQuery = supabase
+    .from('units')
+    .select(`
+      id,
+      unit_number,
+      properties!inner(
+        id,
+        owner_id,
+        name
+      )
+    `)
+    .ilike('unit_number', unitNumber);
+
+  // If we have a landlord, filter by their properties
+  if (landlordId) {
+    unitQuery = unitQuery.eq('properties.owner_id', landlordId);
+  }
+
+  const { data: units, error: unitError } = await unitQuery;
+
+  if (unitError || !units || units.length === 0) {
+    console.log('No unit found for unit number:', unitNumber);
+    return { landlordId, invoiceId, invoice, matchType: 'no_unit', lease };
+  }
+
+  // Handle multiple units with same number (shouldn't happen if landlord is specified)
+  const unit = units[0];
+  if (!landlordId) {
+    landlordId = unit.properties?.owner_id || null;
+  }
+
+  console.log('Found unit:', unit.id, 'for property:', unit.properties?.name);
+
+  // Step 3: Find active lease for this unit
+  const { data: leases, error: leaseError } = await supabase
+    .from('leases')
+    .select(`
+      id,
+      tenant_id,
+      monthly_rent,
+      status
+    `)
+    .eq('unit_id', unit.id)
+    .eq('status', 'active')
+    .limit(1);
+
+  if (leaseError || !leases || leases.length === 0) {
+    console.log('No active lease found for unit:', unit.id);
+    return { landlordId, invoiceId, invoice, matchType: 'no_lease', lease };
+  }
+
+  lease = leases[0];
+  console.log('Found active lease:', lease.id, 'for tenant:', lease.tenant_id);
+
+  // Step 4: Find pending invoices for this tenant/lease
+  const { data: invoices, error: invoicesError } = await supabase
+    .from('invoices')
+    .select(`
+      id,
+      tenant_id,
+      lease_id,
+      invoice_number,
+      amount,
+      status,
+      due_date
+    `)
+    .eq('lease_id', lease.id)
+    .eq('status', 'pending')
+    .order('due_date', { ascending: true });
+
+  if (invoicesError || !invoices || invoices.length === 0) {
+    console.log('No pending invoices found for lease:', lease.id);
+    return { landlordId, invoiceId, invoice, matchType: 'no_pending_invoices', lease };
+  }
+
+  console.log('Found', invoices.length, 'pending invoices');
+
+  // Step 5: Match by amount or take oldest pending invoice
+  if (invoices.length === 1) {
+    invoice = invoices[0];
+    invoiceId = invoice.id;
+    matchType = 'unit_single_invoice';
+    console.log('Single pending invoice matched:', invoiceId);
+  } else {
+    // Multiple invoices - try to match by exact amount
+    const exactMatch = invoices.find((inv: any) => parseFloat(inv.amount) === parseFloat(amount.toString()));
+    
+    if (exactMatch) {
+      invoice = exactMatch;
+      invoiceId = exactMatch.id;
+      matchType = 'unit_amount_match';
+      console.log('Invoice matched by exact amount:', invoiceId);
+    } else {
+      // Take oldest pending invoice (first due)
+      invoice = invoices[0];
+      invoiceId = invoice.id;
+      matchType = 'unit_oldest_invoice';
+      console.log('Using oldest pending invoice:', invoiceId);
+    }
+  }
+
+  return { landlordId, invoiceId, invoice, matchType, lease };
+}
+
+// Legacy: Resolve landlord and invoice from invoice number (bill number)
+async function resolveFromInvoiceNumber(
   supabase: any,
   billNumber: string
 ): Promise<{ landlordId: string | null; invoiceId: string | null; invoice: any }> {
@@ -72,9 +238,9 @@ async function resolveFromBillNumber(
     return { landlordId, invoiceId, invoice };
   }
 
-  console.log('Resolving bill number:', billNumber);
+  console.log('Resolving by invoice number:', billNumber);
 
-  // Try to find invoice by invoice_number (bill number format should match invoice numbers)
+  // Try to find invoice by invoice_number (exact match)
   const { data: invoiceData, error: invoiceError } = await supabase
     .from('invoices')
     .select(`
@@ -107,7 +273,6 @@ async function resolveFromBillNumber(
   }
 
   // Try partial match - bill number might contain invoice number
-  // Format: Could be "INV-XXXX" or just "XXXX"
   const { data: invoices, error: searchError } = await supabase
     .from('invoices')
     .select(`
@@ -141,60 +306,6 @@ async function resolveFromBillNumber(
     return { landlordId, invoiceId, invoice };
   }
 
-  // Try to find landlord by merchant code in bill number
-  // Format might be: MERCHANTCODE-REFERENCE
-  if (billNumber.includes('-')) {
-    const parts = billNumber.split('-');
-    const possibleMerchantCode = parts[0];
-    
-    const { data: landlordConfig, error: configError } = await supabase
-      .from('landlord_jenga_configs')
-      .select('landlord_id')
-      .eq('merchant_code', possibleMerchantCode)
-      .eq('is_active', true)
-      .single();
-
-    if (!configError && landlordConfig) {
-      landlordId = landlordConfig.landlord_id;
-      console.log('Found landlord by merchant code:', landlordId);
-      
-      // Now try to find invoice with the remaining part
-      const invoiceRef = parts.slice(1).join('-');
-      if (invoiceRef) {
-        const { data: inv } = await supabase
-          .from('invoices')
-          .select(`
-            id, 
-            tenant_id, 
-            lease_id, 
-            invoice_number,
-            amount,
-            status,
-            leases!inner(
-              id,
-              units!inner(
-                id,
-                properties!inner(
-                  id,
-                  owner_id
-                )
-              )
-            )
-          `)
-          .ilike('invoice_number', `%${invoiceRef}%`)
-          .eq('status', 'pending')
-          .limit(1);
-
-        if (inv && inv.length > 0) {
-          invoiceId = inv[0].id;
-          invoice = inv[0];
-          console.log('Found invoice from merchant code format:', invoiceId);
-        }
-      }
-    }
-  }
-
-  console.log('Final resolution:', { landlordId, invoiceId });
   return { landlordId, invoiceId, invoice };
 }
 
@@ -238,20 +349,58 @@ serve(async (req) => {
     // Extract IPN data
     const { callbackType, customer, transaction, bank } = ipnData;
     
-    // First, resolve landlord and invoice from bill number
     const billNumber = transaction.billNumber || '';
     const customerRef = customer?.reference || '';
+    const transactionAmount = parseFloat(transaction.amount) || 0;
     
-    console.log('Parsing references:', { billNumber, customerRef });
+    console.log('Parsing references:', { billNumber, customerRef, transactionAmount });
     
-    // Try bill number first, then customer reference
-    let { landlordId, invoiceId, invoice } = await resolveFromBillNumber(supabase, billNumber);
+    // NEW MATCHING PRIORITY:
+    // 1. Try unit-based matching (MERCHANTCODE-UNITNUMBER)
+    // 2. Fall back to invoice number matching (legacy)
     
-    if (!landlordId && customerRef) {
-      const resolved = await resolveFromBillNumber(supabase, customerRef);
-      landlordId = resolved.landlordId;
-      invoiceId = resolved.invoiceId;
-      invoice = resolved.invoice;
+    let landlordId: string | null = null;
+    let invoiceId: string | null = null;
+    let invoice: any = null;
+    let matchType = 'none';
+    let lease: any = null;
+
+    // Try unit-based matching first
+    const unitResult = await resolveByUnitNumber(supabase, billNumber, transactionAmount);
+    
+    if (unitResult.invoiceId) {
+      landlordId = unitResult.landlordId;
+      invoiceId = unitResult.invoiceId;
+      invoice = unitResult.invoice;
+      matchType = unitResult.matchType;
+      lease = unitResult.lease;
+      console.log('Matched by unit:', { matchType, invoiceId, landlordId });
+    } else if (unitResult.landlordId && !unitResult.invoiceId) {
+      // We found landlord/unit but no invoice - store for manual allocation
+      landlordId = unitResult.landlordId;
+      matchType = unitResult.matchType;
+      lease = unitResult.lease;
+      console.log('Partial match by unit (no invoice):', { matchType, landlordId });
+    } else {
+      // Fall back to invoice number matching
+      const invoiceResult = await resolveFromInvoiceNumber(supabase, billNumber);
+      
+      if (invoiceResult.invoiceId) {
+        landlordId = invoiceResult.landlordId;
+        invoiceId = invoiceResult.invoiceId;
+        invoice = invoiceResult.invoice;
+        matchType = 'invoice_number';
+        console.log('Matched by invoice number:', { invoiceId, landlordId });
+      } else if (customerRef) {
+        // Try customer reference as invoice number
+        const refResult = await resolveFromInvoiceNumber(supabase, customerRef);
+        landlordId = refResult.landlordId;
+        invoiceId = refResult.invoiceId;
+        invoice = refResult.invoice;
+        if (refResult.invoiceId) {
+          matchType = 'customer_reference';
+        }
+      }
     }
 
     // Validate Basic Auth if landlord is identified
@@ -262,7 +411,6 @@ serve(async (req) => {
       const isValidAuth = await validateIpnAuth(supabase, credentials, landlordId);
       if (!isValidAuth) {
         console.error('IPN authentication failed for landlord:', landlordId);
-        // Log failed auth attempt
         await supabase.rpc('log_security_event', {
           _event_type: 'unauthorized_access',
           _details: {
@@ -284,28 +432,24 @@ serve(async (req) => {
         });
       }
       console.log('IPN authentication validated successfully');
-    } else if (!credentials) {
-      // Check if landlord requires auth
-      if (landlordId) {
-        const { data: config } = await supabase
-          .from('landlord_jenga_configs')
-          .select('ipn_username')
-          .eq('landlord_id', landlordId)
-          .eq('is_active', true)
-          .single();
-        
-        if (config?.ipn_username) {
-          console.error('IPN authentication required but not provided');
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: 'Authentication required' 
-          }), { 
-            status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
+    } else if (!credentials && landlordId) {
+      const { data: config } = await supabase
+        .from('landlord_jenga_configs')
+        .select('ipn_username')
+        .eq('landlord_id', landlordId)
+        .eq('is_active', true)
+        .single();
+      
+      if (config?.ipn_username) {
+        console.error('IPN authentication required but not provided');
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Authentication required' 
+        }), { 
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
-      console.log('No auth header provided, proceeding without validation');
     }
 
     // Store the IPN callback with full data
@@ -319,7 +463,7 @@ serve(async (req) => {
         transaction_date: transaction.date,
         transaction_reference: transaction.reference,
         payment_mode: transaction.paymentMode,
-        amount: transaction.amount,
+        amount: transactionAmount,
         bill_number: billNumber,
         served_by: transaction.servedBy,
         additional_info: transaction.additionalInfo,
@@ -350,7 +494,7 @@ serve(async (req) => {
       });
     }
 
-    console.log('IPN callback stored successfully:', callback.id);
+    console.log('IPN callback stored successfully:', callback.id, 'matchType:', matchType);
 
     // Process successful payments
     if (transaction.status === 'SUCCESS' && invoiceId) {
@@ -365,14 +509,14 @@ serve(async (req) => {
             updated_at: new Date().toISOString()
           })
           .eq('id', invoiceId)
-          .eq('status', 'pending'); // Only update if still pending
+          .eq('status', 'pending');
 
         if (updateError) {
           console.error('Error updating invoice:', updateError);
         } else {
           console.log('Invoice marked as paid:', invoiceId);
           
-          // Create payment record using the resolved invoice data
+          // Create payment record
           if (invoice) {
             await supabase
               .from('payments')
@@ -380,14 +524,14 @@ serve(async (req) => {
                 tenant_id: invoice.tenant_id,
                 lease_id: invoice.lease_id,
                 invoice_id: invoiceId,
-                amount: transaction.amount,
+                amount: transactionAmount,
                 payment_date: new Date().toISOString().split('T')[0],
                 payment_method: 'Jenga PAY',
                 payment_reference: transaction.reference,
                 transaction_id: bank?.reference || transaction.reference,
                 status: 'completed',
                 payment_type: 'rent',
-                notes: `Jenga PAY payment via ${transaction.paymentMode || 'bank'}. Receipt: ${transaction.reference}`
+                notes: `Jenga PAY via ${transaction.paymentMode || 'bank'}. Match: ${matchType}. Receipt: ${transaction.reference}`
               });
             
             console.log('Payment record created for invoice:', invoiceId);
@@ -410,7 +554,7 @@ serve(async (req) => {
             .insert({
               user_id: landlordId,
               title: 'Payment Received via Jenga PAY',
-              message: `Payment of KES ${transaction.amount.toLocaleString()} received. Customer: ${customer?.name || 'Unknown'}. Receipt: ${transaction.reference}`,
+              message: `Payment of KES ${transactionAmount.toLocaleString()} received. Customer: ${customer?.name || 'Unknown'}. Invoice: ${invoice?.invoice_number || 'N/A'}. Receipt: ${transaction.reference}`,
               type: 'payment',
               related_id: invoiceId,
               related_type: 'invoice'
@@ -419,12 +563,10 @@ serve(async (req) => {
         }
       } catch (processingError) {
         console.error('Error processing payment:', processingError);
-        // Don't return error - callback is stored, can be reprocessed
       }
     } else if (transaction.status !== 'SUCCESS') {
       console.log('Transaction not successful:', transaction.status, transaction.remarks);
       
-      // Mark callback as processed (failed)
       await supabase
         .from('jenga_ipn_callbacks')
         .update({
@@ -433,31 +575,31 @@ serve(async (req) => {
         })
         .eq('id', callback.id);
 
-      // Notify landlord of failed payment
       if (landlordId) {
         await supabase
           .from('notifications')
           .insert({
             user_id: landlordId,
             title: 'Payment Failed - Jenga PAY',
-            message: `Payment of KES ${transaction.amount.toLocaleString()} failed. Status: ${transaction.status}. Reason: ${transaction.remarks || 'Unknown'}`,
+            message: `Payment of KES ${transactionAmount.toLocaleString()} failed. Status: ${transaction.status}. Reason: ${transaction.remarks || 'Unknown'}`,
             type: 'payment',
             related_id: invoiceId,
             related_type: 'invoice'
           });
       }
     } else {
-      console.log('Payment successful but no invoice matched. Bill number:', billNumber);
+      // Payment successful but no invoice matched - notify landlord for manual allocation
+      console.log('Payment successful but no invoice matched. Bill number:', billNumber, 'Match type:', matchType);
       
-      // Notify landlord of unmatched payment if we found them
       if (landlordId) {
         await supabase
           .from('notifications')
           .insert({
             user_id: landlordId,
-            title: 'Unmatched Payment Received',
-            message: `Payment of KES ${transaction.amount.toLocaleString()} received via Jenga PAY but no matching invoice found. Bill Number: ${billNumber}. Please verify and allocate manually.`,
+            title: 'Unmatched Payment - Manual Allocation Required',
+            message: `Payment of KES ${transactionAmount.toLocaleString()} received via Jenga PAY but needs manual allocation. Bill Number: ${billNumber}. Customer: ${customer?.name || 'Unknown'}. Please allocate in Unmatched Payments.`,
             type: 'payment',
+            related_id: callback.id,
             related_type: 'jenga_callback'
           });
       }
@@ -471,21 +613,22 @@ serve(async (req) => {
         action: 'payment_notification_received',
         transaction_reference: transaction.reference,
         status: transaction.status,
-        amount: transaction.amount,
+        amount: transactionAmount,
         landlord_id: landlordId,
         invoice_id: invoiceId,
         bill_number: billNumber,
+        match_type: matchType,
         ip: clientIP,
         timestamp: new Date().toISOString()
       },
       _ip_address: clientIP
     });
 
-    // Return success response per Jenga IPN spec
     return new Response(JSON.stringify({ 
       success: true,
       message: 'IPN processed successfully',
-      callback_id: callback.id 
+      callback_id: callback.id,
+      match_type: matchType
     }), { 
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

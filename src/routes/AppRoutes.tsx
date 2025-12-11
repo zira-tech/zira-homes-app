@@ -53,6 +53,7 @@ import MessageTemplates from "@/pages/landlord/MessageTemplates";
 import PaymentSettings from "@/pages/landlord/PaymentSettings";
 import LandlordBulkMessaging from "@/pages/landlord/BulkMessaging";
 import SmsUsage from "@/pages/landlord/SmsUsage";
+import UnmatchedPayments from "@/pages/landlord/UnmatchedPayments";
 import { Navigate } from "react-router-dom";
 
 // Existing settings pages
@@ -211,6 +212,13 @@ export const AppRoutes = () => {
                 <Route path="/payment-settings" element={
                   <SubUserBlockedRoute>
                     <PaymentSettings />
+                  </SubUserBlockedRoute>
+                } />
+                
+                {/* Unmatched Payments Route */}
+                <Route path="/unmatched-payments" element={
+                  <SubUserBlockedRoute>
+                    <UnmatchedPayments />
                   </SubUserBlockedRoute>
                 } />
                 
