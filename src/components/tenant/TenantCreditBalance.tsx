@@ -99,7 +99,7 @@ export function TenantCreditBalance({ credits, totalBalance, variant = 'card' }:
         )}
 
         <p className="text-xs text-muted-foreground">
-          Credits will be automatically applied to your next invoice payment.
+          Use your credit balance to pay outstanding invoices by clicking "Apply Credit" on any unpaid invoice.
         </p>
       </CardContent>
     </Card>
