@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
-import { Plus } from "lucide-react";
+import { Plus, AlertCircle, CreditCard, Wallet } from "lucide-react";
 
 interface PaymentFormData {
   tenant_id: string;
@@ -32,6 +34,7 @@ interface RecordPaymentDialogProps {
 
 export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentRecorded }: RecordPaymentDialogProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [tenantCreditBalance, setTenantCreditBalance] = useState<number>(0);
   const { toast } = useToast();
   const { register, handleSubmit, reset, setValue, watch, formState: { errors }, trigger } = useForm<PaymentFormData>();
 
@@ -41,10 +44,49 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
     register("payment_method", { required: "Payment method is required" });
     register("payment_type", { required: "Payment type is required" });
   }, [register]);
+
   const selectedTenantId = watch("tenant_id");
   const selectedInvoiceId = watch("invoice_id");
+  const enteredAmount = watch("amount");
   const filteredLeases = leases.filter(lease => lease.tenant_id === selectedTenantId);
   const filteredInvoices = invoices.filter(invoice => invoice.tenant_id === selectedTenantId && (invoice.outstanding_amount || 0) > 0);
+
+  // Fetch tenant credit balance when tenant is selected
+  useEffect(() => {
+    const fetchCreditBalance = async () => {
+      if (!selectedTenantId) {
+        setTenantCreditBalance(0);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .rpc('get_tenant_credit_balance', { p_tenant_id: selectedTenantId });
+        if (!error && data !== null) {
+          setTenantCreditBalance(Number(data));
+        }
+      } catch (e) {
+        console.warn("Could not fetch tenant credit balance:", e);
+      }
+    };
+    fetchCreditBalance();
+  }, [selectedTenantId]);
+
+  // Get selected invoice details
+  const selectedInvoice = filteredInvoices.find(inv => inv.id === selectedInvoiceId);
+  const outstandingAmount = selectedInvoice?.outstanding_amount || 0;
+
+  // Calculate payment difference
+  const paymentAmount = Number(enteredAmount) || 0;
+  const paymentDifference = selectedInvoice ? paymentAmount - outstandingAmount : 0;
+  const isOverpayment = paymentDifference > 0;
+  const isUnderpayment = paymentDifference < 0 && paymentAmount > 0;
+
+  // Auto-populate amount when invoice is selected
+  useEffect(() => {
+    if (selectedInvoice && outstandingAmount > 0) {
+      setValue("amount", outstandingAmount);
+    }
+  }, [selectedInvoiceId, outstandingAmount, setValue]);
 
   const getErrorMessage = (e: any): string => {
     try {
@@ -63,8 +105,12 @@ export function RecordPaymentDialog({ tenants, leases, invoices = [], onPaymentR
       return String(e);
     }
   };
-const onSubmit = async (data: PaymentFormData) => {
+
+  const onSubmit = async (data: PaymentFormData) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const landlordId = user?.id;
+
       // Resolve invoice_id if user typed an invoice number that matches an existing invoice
       let resolvedInvoiceId: string | null = data.invoice_id || null;
       if (!resolvedInvoiceId && data.invoice_number && selectedTenantId) {
@@ -73,11 +119,26 @@ const onSubmit = async (data: PaymentFormData) => {
         if (match?.id) resolvedInvoiceId = match.id;
       }
 
-      // Create the payment record (do NOT include invoice_number; avoid DB auto-link trigger recursion)
+      const paymentAmount = Number(data.amount);
+      const invoiceOutstanding = resolvedInvoiceId 
+        ? (filteredInvoices.find(inv => inv.id === resolvedInvoiceId)?.outstanding_amount || 0)
+        : 0;
+
+      // Determine allocation amount (can't allocate more than outstanding)
+      const allocationAmount = resolvedInvoiceId 
+        ? Math.min(paymentAmount, invoiceOutstanding)
+        : 0;
+      
+      // Calculate overpayment amount for credit
+      const overpaymentAmount = resolvedInvoiceId && paymentAmount > invoiceOutstanding 
+        ? paymentAmount - invoiceOutstanding 
+        : 0;
+
+      // Create the payment record
       const paymentData = {
         tenant_id: data.tenant_id,
         lease_id: data.lease_id,
-        amount: Number(data.amount),
+        amount: paymentAmount,
         payment_date: data.payment_date,
         payment_method: data.payment_method,
         payment_type: data.payment_type,
@@ -87,7 +148,6 @@ const onSubmit = async (data: PaymentFormData) => {
         invoice_id: resolvedInvoiceId
       } as const;
 
-      // RLS-safe insert: do not require returning row
       const { error: insertError } = await supabase
         .from("payments")
         .insert([paymentData]);
@@ -98,8 +158,8 @@ const onSubmit = async (data: PaymentFormData) => {
         if (!isNoReturn) throw insertError;
       }
 
-      // If invoice is resolved, create allocation by reliably fetching the just-inserted payment via unique reference
-      if (resolvedInvoiceId) {
+      // Create allocation for invoice payment
+      if (resolvedInvoiceId && allocationAmount > 0) {
         try {
           const { data: createdPayment, error: fetchErr } = await supabase
             .from("payments")
@@ -109,12 +169,44 @@ const onSubmit = async (data: PaymentFormData) => {
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
+          
           if (fetchErr) throw fetchErr;
+          
           if (createdPayment?.id) {
+            // Create allocation with the correct amount (not more than outstanding)
             const { error: allocationError } = await supabase
               .from("payment_allocations" as any)
-              .insert([{ payment_id: createdPayment.id, invoice_id: resolvedInvoiceId, amount: Number(data.amount) }]) as { error: any };
+              .insert([{ 
+                payment_id: createdPayment.id, 
+                invoice_id: resolvedInvoiceId, 
+                amount: allocationAmount 
+              }]) as { error: any };
+            
             if (allocationError) console.warn("Payment created but allocation failed:", allocationError);
+
+            // If there's an overpayment, create a tenant credit
+            if (overpaymentAmount > 0 && landlordId) {
+              const { error: creditError } = await supabase
+                .from("tenant_credits" as any)
+                .insert([{
+                  tenant_id: data.tenant_id,
+                  landlord_id: landlordId,
+                  amount: overpaymentAmount,
+                  balance: overpaymentAmount,
+                  description: `Overpayment from payment ref: ${data.payment_reference}`,
+                  source_type: 'overpayment',
+                  source_payment_id: createdPayment.id
+                }]) as { error: any };
+              
+              if (creditError) {
+                console.warn("Payment created but credit record failed:", creditError);
+              } else {
+                toast({
+                  title: "Credit Created",
+                  description: `${formatAmount(overpaymentAmount)} added to tenant credit balance`,
+                });
+              }
+            }
           } else {
             console.warn("Payment created but could not find it by reference for allocation");
           }
@@ -123,10 +215,10 @@ const onSubmit = async (data: PaymentFormData) => {
         }
       }
 
-      // Auto-reconcile for the tenant to allocate any remaining amount
+      // Auto-reconcile for the tenant
       if (data.tenant_id) {
         try {
-          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, { p_tenant_id: data.tenant_id }) as { data: any, error: any };
+          await supabase.rpc('reconcile_unallocated_payments_for_tenant' as any, { p_tenant_id: data.tenant_id });
         } catch (reconcileError) {
           console.warn("Payment created but reconciliation failed:", reconcileError);
         }
@@ -134,7 +226,9 @@ const onSubmit = async (data: PaymentFormData) => {
 
       toast({
         title: "Success",
-        description: "Payment recorded successfully",
+        description: isUnderpayment 
+          ? "Partial payment recorded successfully. Invoice marked as partially paid."
+          : "Payment recorded successfully",
       });
 
       reset();
@@ -159,14 +253,14 @@ const onSubmit = async (data: PaymentFormData) => {
           Record Payment
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Record New Payment</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <Label htmlFor="tenant_id">Tenant</Label>
-            <Select onValueChange={(value) => { setValue("tenant_id", value); trigger("tenant_id"); }}>
+            <Select onValueChange={(value) => { setValue("tenant_id", value); trigger("tenant_id"); setValue("invoice_id", ""); }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select tenant" />
               </SelectTrigger>
@@ -180,6 +274,21 @@ const onSubmit = async (data: PaymentFormData) => {
             </Select>
             {errors.tenant_id && <p className="text-sm text-destructive">Tenant is required</p>}
           </div>
+
+          {/* Tenant Credit Balance Display */}
+          {selectedTenantId && tenantCreditBalance > 0 && (
+            <Alert className="bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800">
+              <Wallet className="h-4 w-4 text-green-600" />
+              <AlertDescription className="flex items-center justify-between">
+                <span className="text-green-700 dark:text-green-400">
+                  Tenant has credit balance: <strong>{formatAmount(tenantCreditBalance)}</strong>
+                </span>
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  Available Credit
+                </Badge>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div>
             <Label htmlFor="lease_id">Lease</Label>
@@ -205,13 +314,24 @@ const onSubmit = async (data: PaymentFormData) => {
                 <SelectValue placeholder="Select invoice to allocate payment" />
               </SelectTrigger>
               <SelectContent>
-                {filteredInvoices.map(invoice => (
-                  <SelectItem key={invoice.id} value={invoice.id}>
-                    {invoice.invoice_number} - {formatAmount(invoice.outstanding_amount || invoice.amount)} outstanding
-                  </SelectItem>
-                ))}
+                {filteredInvoices.length === 0 ? (
+                  <div className="py-2 px-3 text-sm text-muted-foreground">
+                    No pending invoices for this tenant
+                  </div>
+                ) : (
+                  filteredInvoices.map(invoice => (
+                    <SelectItem key={invoice.id} value={invoice.id}>
+                      {invoice.invoice_number} - {formatAmount(invoice.outstanding_amount || invoice.amount)} outstanding
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {selectedInvoice && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Invoice total: {formatAmount(selectedInvoice.amount)} | Outstanding: {formatAmount(outstandingAmount)}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -220,6 +340,7 @@ const onSubmit = async (data: PaymentFormData) => {
               <Input
                 id="amount"
                 type="number"
+                step="0.01"
                 {...register("amount", { required: "Amount is required", min: { value: 0.01, message: "Amount must be greater than 0" } })}
                 placeholder="25000"
               />
@@ -235,6 +356,28 @@ const onSubmit = async (data: PaymentFormData) => {
               {errors.payment_date && <p className="text-sm text-destructive">{errors.payment_date.message}</p>}
             </div>
           </div>
+
+          {/* Payment Difference Alert */}
+          {selectedInvoice && paymentAmount > 0 && (
+            <>
+              {isOverpayment && (
+                <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
+                  <CreditCard className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-700 dark:text-blue-400">
+                    <strong>Overpayment detected:</strong> {formatAmount(paymentDifference)} will be added to tenant's credit balance for future invoices.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {isUnderpayment && (
+                <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-700 dark:text-amber-400">
+                    <strong>Partial payment:</strong> {formatAmount(Math.abs(paymentDifference))} will remain outstanding. Invoice will be marked as partially paid.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
