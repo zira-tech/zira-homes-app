@@ -230,14 +230,14 @@ const PaymentSettings = () => {
             </div>
           )}
 
-          {/* Bank Integration Verification */}
-          <div className="lg:col-span-2">
-            <BankVerificationSection onVerificationChange={loadData} />
-          </div>
-
-          {/* Jenga PAY Configuration (Equity Bank) */}
+          {/* Equity Bank - Jenga PAY Configuration */}
           <div className="lg:col-span-2">
             <JengaPayConfig />
+          </div>
+
+          {/* Other Bank Integrations (excludes Equity) */}
+          <div className="lg:col-span-2">
+            <BankVerificationSection onVerificationChange={loadData} />
           </div>
 
           {/* Approved Payment Methods */}

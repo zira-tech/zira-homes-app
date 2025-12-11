@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, CheckCircle, XCircle, Loader2, Shield, Info, Copy, AlertTriangle, ExternalLink, Key } from "lucide-react";
+import { Building2, CheckCircle, XCircle, Loader2, Shield, Info, Copy, AlertTriangle, ExternalLink, Key, Smartphone } from "lucide-react";
 
 export const JengaPayConfig: React.FC = () => {
   const { user } = useAuth();
@@ -249,13 +249,29 @@ export const JengaPayConfig: React.FC = () => {
           </div>
         )}
 
-        {/* Info Alert */}
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertTitle>About Jenga PAY</AlertTitle>
-          <AlertDescription>
-            Jenga PAY allows your tenants to pay rent via Equity Bank's paybill 247247. 
-            Payments are processed instantly and you'll receive instant payment notifications (IPN).
+        {/* Dual Payment Support Info */}
+        <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertTitle>Two Ways to Pay</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>Your tenants can pay using <strong>Equity Bank Paybill 247247</strong> in two ways:</p>
+            <div className="grid gap-2 mt-2">
+              <div className="flex items-start gap-2 p-2 bg-background/50 rounded">
+                <Smartphone className="h-4 w-4 mt-0.5 text-green-600" />
+                <div>
+                  <strong>STK Push (Instant Prompt)</strong>
+                  <p className="text-sm text-muted-foreground">You initiate payment from the app, tenant receives M-Pesa prompt</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2 p-2 bg-background/50 rounded">
+                <Building2 className="h-4 w-4 mt-0.5 text-green-600" />
+                <div>
+                  <strong>Direct Paybill Payment</strong>
+                  <p className="text-sm text-muted-foreground">Tenant pays directly to 247247 using their Invoice Number as account</p>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">Both methods trigger instant payment notifications (IPN) to automatically match payments.</p>
           </AlertDescription>
         </Alert>
 
