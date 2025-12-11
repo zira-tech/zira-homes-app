@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { 
   AlertCircle, 
@@ -22,50 +22,34 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { PaymentAllocationDialog } from "@/components/landlord/PaymentAllocationDialog";
-
-interface UnmatchedPayment {
-  id: string;
-  amount: number;
-  customer_name: string | null;
-  customer_mobile: string | null;
-  bill_number: string | null;
-  transaction_reference: string;
-  transaction_date: string | null;
-  created_at: string;
-  status: string;
-  processed: boolean;
-  landlord_id: string | null;
-}
+import { PaymentProviderBadge } from "@/components/landlord/PaymentProviderBadge";
+import { 
+  fetchUnmatchedPayments, 
+  UnifiedUnmatchedPayment, 
+  PaymentSource 
+} from "@/utils/unmatchedPaymentsQuery";
 
 export default function UnmatchedPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [payments, setPayments] = useState<UnmatchedPayment[]>([]);
+  const [payments, setPayments] = useState<UnifiedUnmatchedPayment[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedPayment, setSelectedPayment] = useState<UnmatchedPayment | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<PaymentSource>('all');
+  const [selectedPayment, setSelectedPayment] = useState<UnifiedUnmatchedPayment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     loadUnmatchedPayments();
-  }, [user]);
+  }, [user, sourceFilter]);
 
   const loadUnmatchedPayments = async () => {
     if (!user) return;
     
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('jenga_ipn_callbacks')
-        .select('*')
-        .eq('landlord_id', user.id)
-        .eq('status', 'SUCCESS')
-        .is('invoice_id', null)
-        .eq('processed', false)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setPayments(data || []);
+      const data = await fetchUnmatchedPayments(user.id, sourceFilter);
+      setPayments(data);
     } catch (error) {
       console.error('Error loading unmatched payments:', error);
       toast({
@@ -78,7 +62,7 @@ export default function UnmatchedPayments() {
     }
   };
 
-  const handleAllocate = (payment: UnmatchedPayment) => {
+  const handleAllocate = (payment: UnifiedUnmatchedPayment) => {
     setSelectedPayment(payment);
     setDialogOpen(true);
   };
@@ -98,7 +82,7 @@ export default function UnmatchedPayments() {
     return (
       payment.customer_name?.toLowerCase().includes(searchLower) ||
       payment.customer_mobile?.includes(searchTerm) ||
-      payment.bill_number?.toLowerCase().includes(searchLower) ||
+      payment.reference?.toLowerCase().includes(searchLower) ||
       payment.transaction_reference.toLowerCase().includes(searchLower) ||
       payment.amount.toString().includes(searchTerm)
     );
@@ -112,13 +96,24 @@ export default function UnmatchedPayments() {
     }).format(amount);
   };
 
+  // Count payments by source
+  const getCounts = () => {
+    const all = payments.length;
+    const jenga = payments.filter(p => p.source === 'jenga_pay').length;
+    const kcb = payments.filter(p => p.source === 'kcb_buni' || p.source === 'bank').length;
+    const mpesa = payments.filter(p => p.source === 'mpesa').length;
+    return { all, jenga, kcb, mpesa };
+  };
+
+  const counts = getCounts();
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Unmatched Payments</h1>
           <p className="text-muted-foreground">
-            Payments received via Jenga PAY that need manual allocation to invoices
+            Payments received via M-Pesa, Equity Bank, KCB, or other banks that need manual allocation
           </p>
         </div>
 
@@ -127,10 +122,32 @@ export default function UnmatchedPayments() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>How Payment Matching Works</AlertTitle>
           <AlertDescription>
-            Payments are matched automatically when tenants use the format <strong>[MerchantCode]-[UnitNumber]</strong> as 
-            the account number. If the format is incorrect or there are multiple pending invoices, payments appear here for manual allocation.
+            Payments are matched automatically when tenants use the correct account format. 
+            If the format is incorrect or there are multiple pending invoices, payments appear here for manual allocation.
           </AlertDescription>
         </Alert>
+
+        {/* Source Filter Tabs */}
+        <Tabs value={sourceFilter} onValueChange={(v) => setSourceFilter(v as PaymentSource)}>
+          <TabsList>
+            <TabsTrigger value="all" className="gap-2">
+              All
+              {counts.all > 0 && <Badge variant="secondary" className="ml-1">{counts.all}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="mpesa" className="gap-2">
+              M-Pesa
+              {counts.mpesa > 0 && <Badge variant="secondary" className="ml-1">{counts.mpesa}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="jenga_pay" className="gap-2">
+              Equity Bank
+              {counts.jenga > 0 && <Badge variant="secondary" className="ml-1">{counts.jenga}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="kcb_buni" className="gap-2">
+              KCB
+              {counts.kcb > 0 && <Badge variant="secondary" className="ml-1">{counts.kcb}</Badge>}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Search and Refresh */}
         <div className="flex gap-4">
@@ -155,8 +172,8 @@ export default function UnmatchedPayments() {
             <CardTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5" />
               Pending Allocations
-              {payments.length > 0 && (
-                <Badge variant="secondary">{payments.length}</Badge>
+              {filteredPayments.length > 0 && (
+                <Badge variant="secondary">{filteredPayments.length}</Badge>
               )}
             </CardTitle>
             <CardDescription>
@@ -182,12 +199,16 @@ export default function UnmatchedPayments() {
               <div className="space-y-4">
                 {filteredPayments.map((payment) => (
                   <div 
-                    key={payment.id} 
+                    key={`${payment.sourceTable}-${payment.id}`} 
                     className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <PaymentProviderBadge 
+                            source={payment.source} 
+                            bankCode={payment.bank_code}
+                          />
                           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                             <DollarSign className="h-3 w-3 mr-1" />
                             {formatCurrency(payment.amount)}
@@ -209,11 +230,11 @@ export default function UnmatchedPayments() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Receipt className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-mono text-xs">{payment.bill_number || 'No Bill #'}</span>
+                            <span className="font-mono text-xs">{payment.reference || 'No Ref'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-mono text-xs">{payment.transaction_reference}</span>
+                            <span className="font-mono text-xs truncate">{payment.transaction_reference}</span>
                           </div>
                         </div>
                       </div>

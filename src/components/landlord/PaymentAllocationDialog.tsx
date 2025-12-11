@@ -18,15 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Loader2, Receipt, User, Home, Calendar, DollarSign, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-interface Payment {
-  id: string;
-  amount: number;
-  customer_name: string | null;
-  customer_mobile: string | null;
-  bill_number: string | null;
-  transaction_reference: string;
-}
+import { PaymentProviderBadge } from "./PaymentProviderBadge";
+import { getPaymentMethodLabel, UnifiedUnmatchedPayment } from "@/utils/unmatchedPaymentsQuery";
 
 interface PendingInvoice {
   id: string;
@@ -43,7 +36,7 @@ interface PendingInvoice {
 interface PaymentAllocationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  payment: Payment | null;
+  payment: UnifiedUnmatchedPayment | null;
   onSuccess: () => void;
 }
 
@@ -135,6 +128,48 @@ export function PaymentAllocationDialog({
     }
   };
 
+  const updatePaymentSource = async (invoiceId: string) => {
+    if (!payment) return;
+    
+    const now = new Date().toISOString();
+    
+    switch (payment.sourceTable) {
+      case 'jenga_ipn_callbacks':
+        const { error: jengaError } = await supabase
+          .from('jenga_ipn_callbacks')
+          .update({
+            invoice_id: invoiceId,
+            processed: true,
+            processed_at: now
+          })
+          .eq('id', payment.id);
+        if (jengaError) throw jengaError;
+        break;
+        
+      case 'bank_callbacks':
+        const { error: bankError } = await supabase
+          .from('bank_callbacks')
+          .update({
+            invoice_id: invoiceId,
+            processed: true,
+            processed_at: now
+          })
+          .eq('id', payment.id);
+        if (bankError) throw bankError;
+        break;
+        
+      case 'mpesa_transactions':
+        const { error: mpesaError } = await supabase
+          .from('mpesa_transactions')
+          .update({
+            invoice_id: invoiceId
+          })
+          .eq('id', payment.id);
+        if (mpesaError) throw mpesaError;
+        break;
+    }
+  };
+
   const handleAllocate = async () => {
     if (!payment || !selectedInvoiceId) return;
 
@@ -154,7 +189,9 @@ export function PaymentAllocationDialog({
 
       if (invoiceError) throw invoiceError;
 
-      // 2. Create payment record
+      // 2. Create payment record with dynamic payment method
+      const paymentMethod = getPaymentMethodLabel(payment.source, payment.bank_code);
+      
       const { error: paymentError } = await supabase
         .from('payments')
         .insert({
@@ -163,27 +200,18 @@ export function PaymentAllocationDialog({
           invoice_id: selectedInvoiceId,
           amount: payment.amount,
           payment_date: new Date().toISOString().split('T')[0],
-          payment_method: 'Jenga PAY',
+          payment_method: paymentMethod,
           payment_reference: payment.transaction_reference,
           transaction_id: payment.transaction_reference,
           status: 'completed',
           payment_type: 'rent',
-          notes: `Manual allocation from Jenga PAY. Bill: ${payment.bill_number || 'N/A'}. Customer: ${payment.customer_name || 'Unknown'}`
+          notes: `Manual allocation from ${paymentMethod}. Ref: ${payment.reference || 'N/A'}. Customer: ${payment.customer_name || 'Unknown'}`
         });
 
       if (paymentError) throw paymentError;
 
-      // 3. Mark callback as processed
-      const { error: callbackError } = await supabase
-        .from('jenga_ipn_callbacks')
-        .update({
-          invoice_id: selectedInvoiceId,
-          processed: true,
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', payment.id);
-
-      if (callbackError) throw callbackError;
+      // 3. Mark source callback/transaction as processed
+      await updatePaymentSource(selectedInvoiceId);
 
       onSuccess();
     } catch (error: any) {
@@ -221,7 +249,10 @@ export function PaymentAllocationDialog({
         {/* Payment Summary */}
         <div className="p-4 bg-muted rounded-lg space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Payment Amount</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Payment Amount</span>
+              <PaymentProviderBadge source={payment.source} bankCode={payment.bank_code} />
+            </div>
             <Badge variant="default" className="text-lg px-3 py-1">
               {formatCurrency(payment.amount)}
             </Badge>
@@ -236,11 +267,11 @@ export function PaymentAllocationDialog({
               {payment.customer_mobile || 'N/A'}
             </div>
             <div>
-              <span className="text-muted-foreground">Bill Number:</span>{" "}
-              <span className="font-mono">{payment.bill_number || 'None'}</span>
+              <span className="text-muted-foreground">Reference:</span>{" "}
+              <span className="font-mono">{payment.reference || 'None'}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Reference:</span>{" "}
+              <span className="text-muted-foreground">Transaction:</span>{" "}
               <span className="font-mono text-xs">{payment.transaction_reference}</span>
             </div>
           </div>
