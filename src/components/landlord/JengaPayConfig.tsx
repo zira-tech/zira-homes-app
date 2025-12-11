@@ -267,13 +267,32 @@ export const JengaPayConfig: React.FC = () => {
                 <Building2 className="h-4 w-4 mt-0.5 text-green-600" />
                 <div>
                   <strong>Direct Paybill Payment</strong>
-                  <p className="text-sm text-muted-foreground">Tenant pays directly to 247247 using their Invoice Number as account</p>
+                  <p className="text-sm text-muted-foreground">Tenant pays to 247247 using <strong>{config.merchant_code || '[MerchantCode]'}-[UnitNumber]</strong> as account</p>
                 </div>
               </div>
             </div>
             <p className="text-sm text-muted-foreground mt-2">Both methods trigger instant payment notifications (IPN) to automatically match payments.</p>
           </AlertDescription>
         </Alert>
+
+        {/* Tenant Payment Instructions */}
+        {config.merchant_code && (
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertTitle>Tenant Payment Instructions</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p className="text-sm">Share these instructions with your tenants:</p>
+              <div className="p-3 bg-background rounded-lg border font-mono text-sm space-y-1">
+                <p><strong>Paybill:</strong> 247247</p>
+                <p><strong>Account Number:</strong> {config.merchant_code}-[Unit Number]</p>
+                <p className="text-muted-foreground text-xs">Example: {config.merchant_code}-A101</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Payments are matched by unit number. If a payment can't be matched automatically, it will appear in your <strong>Unmatched Payments</strong> queue for manual allocation.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* IPN Setup Section */}
         <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
@@ -315,8 +334,8 @@ export const JengaPayConfig: React.FC = () => {
             <Alert variant="default" className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800 dark:text-amber-200">
-                <strong>Important:</strong> When your tenants pay, they should use their <strong>Invoice Number</strong> as the Account/Bill Number. 
-                This ensures payments are automatically matched to the correct invoice.
+                <strong>Important:</strong> Tell your tenants to use <strong>[MerchantCode]-[UnitNumber]</strong> as the Account Number when paying.
+                Example: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">{config.merchant_code || 'ABC123'}-A101</code>
               </AlertDescription>
             </Alert>
           </div>

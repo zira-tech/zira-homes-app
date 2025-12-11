@@ -106,6 +106,7 @@ export const landlordNav: NavGroup[] = [
     items: [
       { title: "Billing Panel", url: "/billing", icon: CreditCard },
       { title: "Payment Settings", url: "/payment-settings", icon: Banknote },
+      { title: "Unmatched Payments", url: "/unmatched-payments", icon: CircleDollarSign },
       { title: "Sub Users", url: "/sub-users", icon: Users2 },
       { title: "Email Templates", url: "/billing/email-templates", icon: Mail },
       { title: "Message Templates", url: "/billing/message-templates", icon: MessageCircle },
