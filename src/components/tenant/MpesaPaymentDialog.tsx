@@ -32,12 +32,18 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState<number>(invoice?.amount || 0);
   const [loading, setLoading] = useState(false);
   const [landlordShortcode, setLandlordShortcode] = useState<string | null>(null);
   const [landlordTransactionType, setLandlordTransactionType] = useState<string | null>(null);
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
+  
+  // Reset payment amount when invoice changes
+  useEffect(() => {
+    setPaymentAmount(invoice?.amount || 0);
+  }, [invoice?.amount]);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get landlord M-Pesa config info when dialog opens
@@ -256,6 +262,16 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       return;
     }
 
+    // Validate payment amount
+    if (paymentAmount < 1) {
+      toast({
+        title: "Invalid Amount",
+        description: "Minimum payment amount is KES 1",
+        variant: "destructive",
+      });
+      return;
+    }
+
     console.log('✅ [M-Pesa Dialog] Validation passed, initiating STK push');
     setStatus('sending');
     setStatusMessage('Initiating payment request...');
@@ -301,7 +317,7 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
       
       const payload = {
         phone: phoneNumber,
-        amount: invoice.amount,
+        amount: paymentAmount,
         accountReference: invoice.invoice_number,
         transactionDesc: `Rent payment for ${invoice.invoice_number}`,
         invoiceId: invoice.id,
@@ -454,9 +470,40 @@ export const MpesaPaymentDialog: React.FC<MpesaPaymentDialogProps> = ({
                 <span className="text-sm font-medium">{invoice.invoice_number}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Amount:</span>
-                <span className="text-sm font-medium">KES {invoice.amount.toLocaleString()}</span>
+                <span className="text-sm text-muted-foreground">Invoice Amount:</span>
+                <span className="text-sm">KES {invoice.amount.toLocaleString()}</span>
               </div>
+              {status === 'idle' && (
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="dialogPaymentAmount" className="text-sm text-muted-foreground">Pay Amount:</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">KES</span>
+                    <Input
+                      id="dialogPaymentAmount"
+                      type="number"
+                      min="1"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(Math.max(1, Number(e.target.value)))}
+                      className="w-24 text-right font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+              {status === 'idle' && paymentAmount !== invoice.amount && (
+                <Alert variant="default" className={cn(
+                  "py-2 mt-2",
+                  paymentAmount < invoice.amount && "border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30",
+                  paymentAmount > invoice.amount && "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30"
+                )}>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {paymentAmount < invoice.amount 
+                      ? `Partial payment: KES ${(invoice.amount - paymentAmount).toLocaleString()} will remain outstanding`
+                      : `Overpayment: KES ${(paymentAmount - invoice.amount).toLocaleString()} will be credited to your account`
+                    }
+                  </AlertDescription>
+                </Alert>
+              )}
               {landlordShortcode && (
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">
