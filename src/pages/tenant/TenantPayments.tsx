@@ -150,7 +150,7 @@ export default function TenantPayments() {
           payments: typedResult.payments?.length || 0
         });
 
-        // Transform invoices to match expected structure with owner_id for PDF generation
+        // Transform invoices to match expected structure with owner_id and landlord info for PDF generation
         const invoices = (typedResult.invoices || []).map(invoice => ({
           ...invoice,
           lease_id: invoice.lease_id, // Preserve for landlord lookup
@@ -162,6 +162,13 @@ export default function TenantPayments() {
                 owner_id: invoice.owner_id // Include for PDF landlord billing data
               }
             }
+          },
+          // Include landlord info from RPC for tenant PDF generation (bypasses RLS)
+          landlordInfo: {
+            firstName: invoice.landlord_first_name,
+            lastName: invoice.landlord_last_name,
+            email: invoice.landlord_email,
+            phone: invoice.landlord_phone
           }
         }));
 
