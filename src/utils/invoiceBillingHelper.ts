@@ -25,13 +25,32 @@ export async function getLandlordBillingData(invoice: any): Promise<BillFromData
     // Debug logging to trace data availability
     console.log('🔍 getLandlordBillingData called with:', {
       invoiceId: invoice?.id,
+      hasLandlordInfo: !!invoice?.landlordInfo,
       hasOwnerIdInLeases: !!invoice?.leases?.units?.properties?.owner_id,
       ownerIdValue: invoice?.leases?.units?.properties?.owner_id,
       hasLeaseId: !!invoice?.lease_id,
       leaseIdValue: invoice?.lease_id
     });
     
-    // Try to get owner_id from invoice's lease -> unit -> property relationship
+    // PRIORITY 1: Check if landlord info is pre-fetched from RPC (tenant-side PDFs)
+    // This bypasses RLS issues since the RPC function uses SECURITY DEFINER
+    if (invoice?.landlordInfo?.firstName || invoice?.landlordInfo?.lastName || invoice?.landlordInfo?.email) {
+      const landlordName = [invoice.landlordInfo.firstName, invoice.landlordInfo.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || 'Property Manager';
+      
+      console.log('✅ Using pre-fetched landlord info from RPC:', landlordName);
+      
+      return {
+        name: landlordName,
+        address: 'Property Management Office',
+        phone: invoice.landlordInfo.phone || 'Phone not available',
+        email: invoice.landlordInfo.email || 'Email not available'
+      };
+    }
+    
+    // PRIORITY 2: Try to get owner_id from invoice's lease -> unit -> property relationship
     let ownerId: string | null = null;
     
     // Check if owner info is already in the invoice data
