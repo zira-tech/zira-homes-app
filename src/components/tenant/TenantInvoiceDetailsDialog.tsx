@@ -88,6 +88,12 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
       
       const renderer = new UnifiedPDFRenderer();
       
+      // Calculate payment breakdown for partially paid invoices
+      const amountPaid = invoice.outstanding_amount !== undefined 
+        ? invoice.amount - invoice.outstanding_amount 
+        : 0;
+      const outstandingAmount = invoice.outstanding_amount ?? invoice.amount;
+
       const documentData = {
         type: 'invoice' as const,
         title: `Invoice ${formatInvoiceNumber(invoice.invoice_number)}`,
@@ -102,6 +108,9 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
             }
           ],
           total: invoice.amount,
+          // Payment breakdown for partially paid invoices
+          amountPaid: amountPaid,
+          outstandingAmount: outstandingAmount,
           recipient: {
             name: billingData.billTo.name,
             address: billingData.billTo.address
