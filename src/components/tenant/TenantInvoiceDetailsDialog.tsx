@@ -3,10 +3,12 @@ import { formatAmount } from "@/utils/currency";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Download, FileText, Calendar, User, DollarSign, Smartphone, Building, Home } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Eye, Download, FileText, Calendar, User, DollarSign, Smartphone, Building, Home, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatInvoiceNumber, getInvoiceDescription } from "@/utils/invoiceFormat";
 import { fmtCurrency, fmtDate } from "@/lib/format";
+import { isInvoicePayable, getInvoiceStatusLabel } from "@/utils/invoiceStatusUtils";
 
 interface Invoice {
   id: string;
@@ -19,6 +21,7 @@ interface Invoice {
   status: string;
   description: string | null;
   created_at: string;
+  outstanding_amount?: number;
   leases?: {
     units?: {
       unit_number: string;
@@ -55,6 +58,8 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
     switch (status) {
       case "paid":
         return "bg-success text-success-foreground";
+      case "partially_paid":
+        return "bg-blue-500 text-white";
       case "pending":
         return "bg-warning text-warning-foreground";
       case "overdue":
@@ -113,7 +118,7 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
     }
   };
 
-  const isPayable = invoice.status === 'pending' || invoice.status === 'overdue';
+  const invoicePayable = isInvoicePayable(invoice.status);
 
   const defaultTrigger = (
     <Button variant="outline" size="sm">
@@ -146,7 +151,7 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
                 {formatInvoiceNumber(invoice.invoice_number)}
               </h3>
               <Badge className={getStatusColor(invoice.status)} variant="default">
-                {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                {getInvoiceStatusLabel(invoice.status)}
               </Badge>
             </div>
             
@@ -156,8 +161,17 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
                 <p className="text-sm font-medium">{getInvoiceDescription(invoice)}</p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">Amount Due</label>
-                <p className="text-2xl font-bold text-green-600">{fmtCurrency(invoice.amount)}</p>
+                <label className="text-sm font-medium text-muted-foreground">
+                  {invoice.status === 'partially_paid' ? 'Outstanding Balance' : 'Amount Due'}
+                </label>
+                <p className="text-2xl font-bold text-green-600">
+                  {fmtCurrency(invoice.outstanding_amount ?? invoice.amount)}
+                </p>
+                {invoice.status === 'partially_paid' && invoice.outstanding_amount !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    Original: {fmtCurrency(invoice.amount)} | Paid: {fmtCurrency(invoice.amount - invoice.outstanding_amount)}
+                  </p>
+                )}
               </div>
             </div>
             
@@ -178,6 +192,17 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
               </div>
             </div>
           </div>
+
+          {/* Partial Payment Alert */}
+          {invoice.status === 'partially_paid' && invoice.outstanding_amount !== undefined && (
+            <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700 dark:text-blue-300">
+                This invoice has been partially paid. {fmtCurrency(invoice.amount - invoice.outstanding_amount)} has been received, 
+                with {fmtCurrency(invoice.outstanding_amount)} still outstanding.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Property Information */}
           <div className="bg-muted/30 border border-muted p-6 rounded-xl space-y-4">
@@ -216,7 +241,7 @@ export function TenantInvoiceDetailsDialog({ invoice, trigger, onPayNow }: Tenan
                 <Download className="h-4 w-4 mr-2" />
                 Download Invoice PDF
               </Button>
-              {isPayable && onPayNow && (
+              {invoicePayable && onPayNow && (
                 <Button 
                   onClick={() => {
                     onPayNow(invoice);

@@ -453,10 +453,20 @@ serve(async (req) => {
             }
           }
         } else if (transaction.invoice_id) {
-          // Handle regular rent invoice payment
+          // Handle regular rent invoice payment with proper allocation-based handling
           const { data: invoice } = await supabase
             .from('invoices')
-            .select('*')
+            .select(`
+              *,
+              leases!inner(
+                unit:units!inner(
+                  property:properties!inner(
+                    owner_id,
+                    manager_id
+                  )
+                )
+              )
+            `)
             .eq('id', transaction.invoice_id)
             .single()
 
@@ -478,167 +488,222 @@ serve(async (req) => {
               return new Response('OK', { status: 200 })
             }
 
-            // Create payment record
-            const { error: paymentError } = await supabase
+            const paidAmount = amount || transaction.amount;
+            const invoiceAmount = invoice.amount;
+
+            // Check existing allocations for this invoice to calculate outstanding balance
+            const { data: existingAllocations } = await supabase
+              .from('payment_allocations')
+              .select('amount')
+              .eq('invoice_id', invoice.id);
+
+            const previouslyPaid = existingAllocations?.reduce((sum: number, a: any) => sum + Number(a.amount), 0) || 0;
+            const remainingBalance = Math.max(0, invoiceAmount - previouslyPaid);
+
+            // Determine how much of this payment goes to the invoice vs overpayment
+            const allocationAmount = Math.min(paidAmount, remainingBalance);
+            const overpaymentAmount = Math.max(0, paidAmount - remainingBalance);
+
+            console.log('Payment allocation calculation:', {
+              paidAmount,
+              invoiceAmount,
+              previouslyPaid,
+              remainingBalance,
+              allocationAmount,
+              overpaymentAmount
+            });
+
+            // Create payment record with actual paid amount
+            const { data: createdPayment, error: paymentError } = await supabase
               .from('payments')
               .insert({
                 tenant_id: invoice.tenant_id,
                 lease_id: invoice.lease_id,
                 invoice_id: invoice.id,
-                amount: amount || transaction.amount,
+                amount: paidAmount,
                 payment_method: 'M-Pesa',
                 payment_date: new Date().toISOString().split('T')[0],
                 transaction_id: transactionId,
                 payment_reference: CheckoutRequestID,
                 payment_type: 'rent',
                 status: 'completed',
-                notes: `M-Pesa payment via STK Push. Receipt: ${transactionId}`
+                notes: `M-Pesa payment via STK Push. Receipt: ${transactionId}` + 
+                       (overpaymentAmount > 0 ? `. KES ${overpaymentAmount} credited to account.` : '') +
+                       (allocationAmount < paidAmount && allocationAmount < invoiceAmount ? `. Partial payment of KES ${allocationAmount} applied.` : '')
               })
+              .select()
+              .single()
 
             if (paymentError) {
               console.error('Error creating payment record:', paymentError)
-            } else {
-              // Update invoice status to paid
-              const { error: invoiceError } = await supabase
-                .from('invoices')
-                .update({
-                  status: 'paid',
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', invoice.id)
+            } else if (createdPayment) {
+              console.log('Payment record created:', createdPayment.id);
 
-              if (invoiceError) {
-                console.error('Error updating invoice status:', invoiceError)
-              } else {
-                console.log(`Invoice ${invoice.id} marked as paid`)
-                
-                // ✅ AUTO-GENERATE SERVICE CHARGE INVOICE FOR LANDLORD
+              // Create payment allocation - the trigger will automatically update invoice status
+              if (allocationAmount > 0) {
+                const { error: allocationError } = await supabase
+                  .from('payment_allocations')
+                  .insert({
+                    payment_id: createdPayment.id,
+                    invoice_id: invoice.id,
+                    amount: allocationAmount
+                  });
+
+                if (allocationError) {
+                  console.error('Error creating payment allocation:', allocationError);
+                } else {
+                  console.log(`Created allocation of KES ${allocationAmount} for invoice ${invoice.id}`);
+                }
+              }
+
+              // Handle overpayment - create tenant credit
+              const landlordId = invoice.leases?.unit?.property?.owner_id || 
+                                invoice.leases?.unit?.property?.manager_id;
+
+              if (overpaymentAmount > 0 && landlordId) {
+                const { error: creditError } = await supabase
+                  .from('tenant_credits')
+                  .insert({
+                    tenant_id: invoice.tenant_id,
+                    landlord_id: landlordId,
+                    amount: overpaymentAmount,
+                    balance: overpaymentAmount,
+                    description: `Overpayment from M-Pesa. Receipt: ${transactionId}`,
+                    source_type: 'overpayment',
+                    source_payment_id: createdPayment.id
+                  });
+
+                if (creditError) {
+                  console.error('Error creating tenant credit:', creditError);
+                } else {
+                  console.log(`Created tenant credit of KES ${overpaymentAmount}`);
+                }
+              }
+
+              // Calculate final status for SMS message
+              const totalPaid = previouslyPaid + allocationAmount;
+              const isFullyPaid = totalPaid >= invoiceAmount;
+              const outstandingBalance = Math.max(0, invoiceAmount - totalPaid);
+
+              // ✅ AUTO-GENERATE SERVICE CHARGE INVOICE FOR LANDLORD
+              if (landlordId) {
                 try {
                   console.log('Starting automatic service charge invoice generation for rent payment...');
                   
-                  // Get landlord ID from the property ownership
-                  const { data: leaseData } = await supabase
-                    .from('leases')
-                    .select(`
-                      unit:units!inner(
-                        property:properties!inner(
-                          owner_id,
-                          manager_id
-                        )
-                      )
-                    `)
-                    .eq('id', invoice.lease_id)
+                  // Get current month's billing period
+                  const now = new Date();
+                  const billingPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                  const billingPeriodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                  
+                  // Check if service charge invoice already exists for this period
+                  const { data: existingServiceInvoice } = await supabase
+                    .from('service_charge_invoices')
+                    .select('id, total_amount, rent_collected')
+                    .eq('landlord_id', landlordId)
+                    .eq('billing_period_start', billingPeriodStart)
+                    .eq('billing_period_end', billingPeriodEnd)
                     .single();
 
-                  const landlordId = leaseData?.unit?.property?.owner_id || leaseData?.unit?.property?.manager_id;
-                  
-                  if (landlordId) {
-                    console.log('Found landlord ID:', landlordId);
+                  if (existingServiceInvoice) {
+                    console.log('Service charge invoice already exists, updating with new rent collection...');
                     
-                    // Get current month's billing period
-                    const now = new Date();
-                    const billingPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                    const billingPeriodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                    // Update existing invoice with the new rent collection (only allocation amount, not overpayment)
+                    const updatedRentCollected = existingServiceInvoice.rent_collected + allocationAmount;
                     
-                    // Check if service charge invoice already exists for this period
-                    const { data: existingServiceInvoice } = await supabase
-                      .from('service_charge_invoices')
-                      .select('id, total_amount, rent_collected')
+                    // Get landlord's billing plan to recalculate service charge
+                    const { data: subscription } = await supabase
+                      .from('landlord_subscriptions')
+                      .select('*, billing_plan:billing_plans(*)')
                       .eq('landlord_id', landlordId)
-                      .eq('billing_period_start', billingPeriodStart)
-                      .eq('billing_period_end', billingPeriodEnd)
                       .single();
 
-                    if (existingServiceInvoice) {
-                      console.log('Service charge invoice already exists, updating with new rent collection...');
+                    if (subscription?.billing_plan) {
+                      const plan = subscription.billing_plan;
+                      let newServiceChargeAmount = 0;
                       
-                      // Update existing invoice with the new rent collection
-                      const updatedRentCollected = existingServiceInvoice.rent_collected + (Number(amount) || Number(transaction.amount));
-                      
-                      // Get landlord's billing plan to recalculate service charge
-                      const { data: subscription } = await supabase
-                        .from('landlord_subscriptions')
-                        .select('*, billing_plan:billing_plans(*)')
-                        .eq('landlord_id', landlordId)
-                        .single();
-
-                      if (subscription?.billing_plan) {
-                        const plan = subscription.billing_plan;
-                        let newServiceChargeAmount = 0;
-                        
-                        if (plan.billing_model === 'percentage' && plan.percentage_rate) {
-                          newServiceChargeAmount = (updatedRentCollected * plan.percentage_rate) / 100;
-                        }
-
-                        // Update the existing invoice
-                        await supabase
-                          .from('service_charge_invoices')
-                          .update({
-                            rent_collected: updatedRentCollected,
-                            service_charge_amount: newServiceChargeAmount,
-                            total_amount: newServiceChargeAmount, // Simplified - add SMS/other charges if needed
-                            updated_at: new Date().toISOString()
-                          })
-                          .eq('id', existingServiceInvoice.id);
-
-                        console.log('Updated existing service charge invoice with new rent collection');
+                      if (plan.billing_model === 'percentage' && plan.percentage_rate) {
+                        newServiceChargeAmount = (updatedRentCollected * plan.percentage_rate) / 100;
                       }
-                    } else {
-                      console.log('No existing service charge invoice found, generating new one...');
-                      
-                      // Generate new service charge invoice via edge function
-                      const serviceInvoiceResponse = await supabase.functions.invoke('generate-service-invoice', {
-                        body: {
-                          landlord_id: landlordId,
-                          billing_period_start: billingPeriodStart,
-                          billing_period_end: billingPeriodEnd
-                        }
-                      });
 
-                      if (serviceInvoiceResponse.error) {
-                        console.error('Failed to generate service charge invoice:', serviceInvoiceResponse.error);
-                      } else {
-                        console.log('Successfully generated service charge invoice for landlord:', landlordId);
-                      }
+                      // Update the existing invoice
+                      await supabase
+                        .from('service_charge_invoices')
+                        .update({
+                          rent_collected: updatedRentCollected,
+                          service_charge_amount: newServiceChargeAmount,
+                          total_amount: newServiceChargeAmount,
+                          updated_at: new Date().toISOString()
+                        })
+                        .eq('id', existingServiceInvoice.id);
+
+                      console.log('Updated existing service charge invoice with new rent collection');
                     }
                   } else {
-                    console.log('Could not find landlord ID for automatic service charge invoice generation');
+                    console.log('No existing service charge invoice found, generating new one...');
+                    
+                    // Generate new service charge invoice via edge function
+                    const serviceInvoiceResponse = await supabase.functions.invoke('generate-service-invoice', {
+                      body: {
+                        landlord_id: landlordId,
+                        billing_period_start: billingPeriodStart,
+                        billing_period_end: billingPeriodEnd
+                      }
+                    });
+
+                    if (serviceInvoiceResponse.error) {
+                      console.error('Failed to generate service charge invoice:', serviceInvoiceResponse.error);
+                    } else {
+                      console.log('Successfully generated service charge invoice for landlord:', landlordId);
+                    }
                   }
                 } catch (serviceInvoiceError) {
                   console.error('Error in automatic service charge invoice generation:', serviceInvoiceError);
                   // Don't fail the main payment process if service invoice generation fails
                 }
-                
-                // Send SMS receipt confirmation
-                try {
-                  // Get tenant details for SMS
-                  const { data: tenant } = await supabase
-                    .from('tenants')
-                    .select('phone, first_name, last_name')
-                    .eq('id', invoice.tenant_id)
-                    .single()
+              }
+              
+              // Send SMS receipt confirmation with accurate status
+              try {
+                // Get tenant details for SMS
+                const { data: tenant } = await supabase
+                  .from('tenants')
+                  .select('phone, first_name, last_name')
+                  .eq('id', invoice.tenant_id)
+                  .single()
 
-                  if (tenant?.phone) {
-                    // Send SMS confirmation using the send-sms function (without hardcoded config)
-                    const smsResponse = await supabase.functions.invoke('send-sms', {
-                      body: {
-                        phone_number: tenant.phone,
-                        message: `Payment of KES ${amount || transaction.amount} received. Thank you! - Zira Homes. Receipt: ${transactionId}`
-                      }
-                    })
-
-                    if (smsResponse.error) {
-                      console.error('Error sending SMS receipt confirmation:', smsResponse.error)
-                    } else {
-                      console.log('SMS receipt confirmation sent to:', tenant.phone)
-                    }
+                if (tenant?.phone) {
+                  let smsMessage = `Payment of KES ${paidAmount} received. `;
+                  
+                  if (isFullyPaid) {
+                    smsMessage += `Invoice ${invoice.invoice_number} fully paid. `;
                   } else {
-                    console.log('No phone number found for tenant, skipping SMS')
+                    smsMessage += `Outstanding balance: KES ${outstandingBalance}. `;
                   }
-                } catch (smsError) {
-                  console.error('Error in SMS receipt confirmation process:', smsError)
-                  // Don't fail the payment process if SMS fails
+                  
+                  if (overpaymentAmount > 0) {
+                    smsMessage += `KES ${overpaymentAmount} credited to your account. `;
+                  }
+                  
+                  smsMessage += `Receipt: ${transactionId} - Zira Homes`;
+
+                  const smsResponse = await supabase.functions.invoke('send-sms', {
+                    body: {
+                      phone_number: tenant.phone,
+                      message: smsMessage
+                    }
+                  })
+
+                  if (smsResponse.error) {
+                    console.error('Error sending SMS receipt confirmation:', smsResponse.error)
+                  } else {
+                    console.log('SMS receipt confirmation sent to:', tenant.phone)
+                  }
+                } else {
+                  console.log('No phone number found for tenant, skipping SMS')
                 }
+              } catch (smsError) {
+                console.error('Error in SMS receipt confirmation process:', smsError)
+                // Don't fail the payment process if SMS fails
               }
             }
           }
