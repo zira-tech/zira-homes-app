@@ -212,36 +212,67 @@ const Payments = () => {
       // Fetch invoices with pending, overdue, or partially_paid status
       const { data: invoicesData, error: invoicesError } = await supabase
         .from("invoices")
-        .select(`
-          id, invoice_number, tenant_id, lease_id, amount, status, due_date,
-          leases:lease_id(units:unit_id(unit_number, properties:property_id(name)))
-        `)
+        .select("id, invoice_number, tenant_id, lease_id, amount, status, due_date")
         .in('status', ['pending', 'overdue', 'partially_paid']);
       
       if (invoicesError) throw invoicesError;
+      if (!invoicesData || invoicesData.length === 0) {
+        setInvoices([]);
+        return;
+      }
 
-      // Fetch all allocations for these invoices
-      const invoiceIds = invoicesData?.map(inv => inv.id) || [];
+      // Fetch related data separately (leases, units, properties)
+      const leaseIds = [...new Set(invoicesData.map(inv => inv.lease_id).filter(Boolean))];
+      const [leasesResult, unitsResult, propertiesResult] = await Promise.all([
+        supabase.from("leases").select("id, unit_id").in('id', leaseIds),
+        supabase.from("units").select("id, unit_number, property_id"),
+        supabase.from("properties").select("id, name")
+      ]);
+
+      // Create lookup maps
+      const leaseMap = new Map(leasesResult.data?.map(l => [l.id, l]) || []);
+      const unitMap = new Map(unitsResult.data?.map(u => [u.id, u]) || []);
+      const propertyMap = new Map(propertiesResult.data?.map(p => [p.id, p]) || []);
+
+      // Fetch allocations for calculating outstanding amounts
+      const invoiceIds = invoicesData.map(inv => inv.id);
       const { data: allocationsData } = await supabase
         .from('payment_allocations')
         .select('invoice_id, amount')
         .in('invoice_id', invoiceIds);
 
-      // Calculate outstanding amount for each invoice
+      // Calculate allocated amounts per invoice
       const allocationMap = new Map<string, number>();
       allocationsData?.forEach(alloc => {
         const current = allocationMap.get(alloc.invoice_id) || 0;
         allocationMap.set(alloc.invoice_id, current + Number(alloc.amount));
       });
 
-      const invoicesWithOutstanding = invoicesData?.map(inv => ({
-        ...inv,
-        outstanding_amount: Number(inv.amount) - (allocationMap.get(inv.id) || 0)
-      })).filter(inv => inv.outstanding_amount > 0) || [];
+      // Join data and calculate outstanding amounts
+      const invoicesWithData = invoicesData.map(inv => {
+        const lease = leaseMap.get(inv.lease_id);
+        const unit = lease ? unitMap.get(lease.unit_id) : null;
+        const property = unit ? propertyMap.get(unit.property_id) : null;
+        const allocatedAmount = allocationMap.get(inv.id) || 0;
+        
+        return {
+          ...inv,
+          outstanding_amount: Number(inv.amount) - allocatedAmount,
+          leases: {
+            units: {
+              unit_number: unit?.unit_number || '',
+              properties: {
+                name: property?.name || ''
+              }
+            }
+          }
+        };
+      }).filter(inv => inv.outstanding_amount > 0);
 
-      setInvoices(invoicesWithOutstanding);
+      setInvoices(invoicesWithData);
     } catch (error) {
       console.error("Error fetching invoices:", error);
+      setInvoices([]);
     }
   };
 
