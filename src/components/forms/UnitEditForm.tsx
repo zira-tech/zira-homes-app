@@ -15,6 +15,8 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { isCommercialUnit } from "@/utils/unitSpecifications";
+import { useAuth } from "@/hooks/useAuth";
+import { checkDuplicateUnitNumber } from "@/utils/unitValidation";
 
 const unitSchema = z.object({
   unit_number: z.string().min(1, "Unit number is required"),
@@ -49,6 +51,7 @@ interface UnitEditFormProps {
 
 export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuth();
   const [unitSpecifications, setUnitSpecifications] = useState<Record<string, any>>(() => {
     // Initialize with existing unit data
     const specs: Record<string, any> = {};
@@ -85,6 +88,22 @@ export function UnitEditForm({ unit, onSave, onCancel }: UnitEditFormProps) {
   const onSubmit = async (data: UnitFormData) => {
     setIsLoading(true);
     try {
+      // Check for duplicate unit number if it changed
+      if (user?.id && data.unit_number !== unit.unit_number) {
+        const duplicateCheck = await checkDuplicateUnitNumber(
+          data.unit_number,
+          user.id,
+          unit.id // Exclude current unit
+        );
+        if (duplicateCheck.isDuplicate) {
+          toast.error(
+            `Unit "${data.unit_number}" already exists in "${duplicateCheck.existingProperty}". Unit numbers must be unique across all your properties.`
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Handle status updates: 
       // - Set to 'maintenance' when explicitly requested
       // - Set to 'vacant' when returning from maintenance (DB will update to 'occupied' if active lease exists)

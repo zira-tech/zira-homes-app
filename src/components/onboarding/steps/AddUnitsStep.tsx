@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import { UnitTypeSelect } from "@/components/ui/unit-type-select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { checkDuplicateUnitNumbers } from "@/utils/unitValidation";
 
 interface Unit {
   unit_number: string;
@@ -85,7 +85,7 @@ export function AddUnitsStep({ step, onNext }: AddUnitsStepProps) {
   };
 
   const handleSave = async () => {
-    if (!selectedPropertyId) return;
+    if (!selectedPropertyId || !user) return;
 
     try {
       setLoading(true);
@@ -106,6 +106,23 @@ export function AddUnitsStep({ step, onNext }: AddUnitsStepProps) {
         toast({
           title: "No Units to Add",
           description: "Please fill in at least one unit with number, type, and rent amount.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check for duplicate unit numbers across all landlord properties
+      const unitNumbers = unitsToInsert.map(u => u.unit_number);
+      const duplicateChecks = await checkDuplicateUnitNumbers(unitNumbers, user.id);
+      
+      const duplicates = Array.from(duplicateChecks.entries())
+        .filter(([, result]) => result.isDuplicate)
+        .map(([num, result]) => `"${num}" (in ${result.existingProperty})`);
+
+      if (duplicates.length > 0) {
+        toast({
+          title: "Duplicate Unit Numbers",
+          description: `The following unit numbers already exist: ${duplicates.join(", ")}. Unit numbers must be unique across all your properties.`,
           variant: "destructive",
         });
         return;

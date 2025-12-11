@@ -14,6 +14,8 @@ import { propertySchema, unitSchema, validateAndSanitizeFormData } from "@/utils
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/useAuth";
+import { checkDuplicateUnitNumbers } from "@/utils/unitValidation";
 
 interface PropertyFormData {
   name: string;
@@ -50,6 +52,7 @@ export function PropertyUnitsWizard({ onPropertyAdded }: PropertyUnitsWizardProp
   const [units, setUnits] = useState<UnitFormData[]>([]);
   const [editingUnit, setEditingUnit] = useState<number | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
   
   const propertyForm = useForm<PropertyFormData>();
   const unitForm = useForm<UnitFormData>();
@@ -147,6 +150,26 @@ export function PropertyUnitsWizard({ onPropertyAdded }: PropertyUnitsWizardProp
 
     setLoading(true);
     try {
+      // Check for duplicate unit numbers across all landlord properties before creating
+      if (user?.id && units.length > 0) {
+        const unitNumbers = units.map(u => u.unit_number);
+        const duplicateChecks = await checkDuplicateUnitNumbers(unitNumbers, user.id);
+        
+        const duplicates = Array.from(duplicateChecks.entries())
+          .filter(([, result]) => result.isDuplicate)
+          .map(([num, result]) => `"${num}" (in ${result.existingProperty})`);
+
+        if (duplicates.length > 0) {
+          toast({
+            title: "Duplicate Unit Numbers",
+            description: `The following unit numbers already exist: ${duplicates.join(", ")}`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
       // Insert property first
       const { data: property, error: propertyError } = await supabase
         .from("properties")

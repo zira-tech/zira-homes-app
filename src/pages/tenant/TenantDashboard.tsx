@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { format, differenceInDays, isAfter } from "date-fns";
 import { TenantQuickActions } from "@/components/tenant/TenantQuickActions";
+import { BankPaymentGuide } from "@/components/tenant/BankPaymentGuide";
 import { useTenantContacts } from "@/hooks/useTenantContacts";
 import { useNavigate } from "react-router-dom";
 import { isInvoicePayable, getInvoiceCardClass } from "@/utils/invoiceStatusUtils";
@@ -328,6 +329,9 @@ export default function TenantDashboard() {
         <TenantQuickActions 
           currentInvoice={currentInvoice}
         />
+
+        {/* Payment Instructions */}
+        <BankPaymentGuide variant="collapsible" defaultOpen={false} />
 
         {/* Main Content Grid */}
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-1">

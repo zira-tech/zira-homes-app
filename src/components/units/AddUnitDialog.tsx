@@ -14,6 +14,8 @@ import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { isCommercialUnit } from "@/utils/unitSpecifications";
 import { UnitCapGate } from "./UnitCapGate";
+import { useAuth } from "@/hooks/useAuth";
+import { checkDuplicateUnitNumber } from "@/utils/unitValidation";
 
 interface Property {
   id: string;
@@ -45,6 +47,7 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [unitSpecifications, setUnitSpecifications] = useState<Record<string, any>>({});
   const { toast } = useToast();
+  const { user } = useAuth();
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<UnitFormData>();
 
   const watchedPropertyId = watch("property_id");
@@ -118,6 +121,19 @@ export function AddUnitDialog({ onUnitAdded }: AddUnitDialogProps) {
       if (!data.unit_type) {
         toast({ title: 'Unit type required', description: 'Please select a unit type.', variant: 'destructive' });
         return;
+      }
+
+      // Check for duplicate unit number across all landlord properties
+      if (user?.id) {
+        const duplicateCheck = await checkDuplicateUnitNumber(data.unit_number, user.id);
+        if (duplicateCheck.isDuplicate) {
+          toast({
+            title: 'Duplicate Unit Number',
+            description: `Unit "${data.unit_number}" already exists in "${duplicateCheck.existingProperty}". Unit numbers must be unique across all your properties for payment matching.`,
+            variant: 'destructive',
+          });
+          return;
+        }
       }
 
       // Build payload restricted to columns that exist in the units table schema

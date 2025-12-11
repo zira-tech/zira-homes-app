@@ -3,6 +3,7 @@ import { BulkUploadBase, ValidationError } from "./BulkUploadBase";
 import { BulkUploadFieldGuide, FieldInfo } from "./BulkUploadFieldGuide";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { checkDuplicateUnitNumbers } from "@/utils/unitValidation";
 
 const VALID_UNIT_TYPES = ["Studio", "Bedsitter", "1BR", "2BR", "3BR", "4BR", "5BR", "Penthouse", "Duplex", "Shop", "Office"];
 
@@ -59,7 +60,7 @@ export function BulkUploadUnits() {
 
   const tips = [
     "Property Name must match exactly an existing property you own or manage",
-    "Unit Numbers must be unique within the system",
+    "Unit Numbers must be unique across ALL your properties (not just per property) for payment matching",
     "Unit Type must match one of the valid values shown (case-sensitive)",
     "Use commas to separate multiple amenities",
     "All monetary values should be in KES without currency symbols"
@@ -95,18 +96,23 @@ export function BulkUploadUnits() {
       console.error("Error fetching available properties:", error);
     }
 
-    // Check existing unit numbers
-    const existingUnitNumbers = new Set<string>();
-    try {
-      const { data: units } = await supabase
-        .from("units")
-        .select("unit_number");
-      
-      if (units) {
-        units.forEach(unit => existingUnitNumbers.add(unit.unit_number.toLowerCase()));
+    // Check existing unit numbers across all landlord properties (global uniqueness)
+    const existingUnitNumbers = new Map<string, string>();
+    if (user?.id) {
+      try {
+        const duplicateChecks = await checkDuplicateUnitNumbers(
+          data.map(row => String(row["Unit Number"] || "").trim()),
+          user.id
+        );
+        
+        duplicateChecks.forEach((result, unitNum) => {
+          if (result.isDuplicate) {
+            existingUnitNumbers.set(unitNum, result.existingProperty || "existing property");
+          }
+        });
+      } catch (error) {
+        console.error("Error checking existing unit numbers:", error);
       }
-    } catch (error) {
-      console.error("Error fetching existing unit numbers:", error);
     }
 
     data.forEach((row, index) => {
@@ -136,10 +142,11 @@ export function BulkUploadUnits() {
         }
 
         if (existingUnitNumbers.has(unitNumber)) {
+          const existingProperty = existingUnitNumbers.get(unitNumber);
           errors.push({
             row: index,
             field: "Unit Number",
-            message: "Unit number already exists in database"
+            message: `Unit number already exists in "${existingProperty}". Unit numbers must be unique across all your properties.`
           });
         }
       }

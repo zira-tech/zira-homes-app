@@ -31,6 +31,7 @@ import {
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { TenantPaymentSettings } from "@/components/tenant/TenantPaymentSettings";
+import { BankPaymentGuide } from "@/components/tenant/BankPaymentGuide";
 import { MpesaErrorBoundary } from "@/components/mpesa/MpesaErrorBoundary";
 import { formatInvoiceNumber, formatPaymentReference, formatReceiptNumber, getInvoiceDescription, linkPaymentToInvoice } from "@/utils/invoiceFormat";
 import { fmtCurrency, fmtDate } from "@/lib/format";
@@ -594,6 +595,11 @@ export default function TenantPayments() {
             <p className="text-muted-foreground">Manage your rent payments and view invoice history</p>
           </div>
         </div>
+      </div>
+
+      {/* Payment Instructions Guide */}
+      <div className="mb-6">
+        <BankPaymentGuide variant="collapsible" defaultOpen={false} />
       </div>
 
       {/* Outstanding Balance Alert */}
