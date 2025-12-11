@@ -6,6 +6,7 @@ import { PaymentSettingsForm } from "@/components/landlord/PaymentSettingsForm";
 import { MpesaCredentialsSection } from "@/components/landlord/MpesaCredentialsSection";
 import { BankVerificationSection } from "@/components/landlord/BankVerificationSection";
 import { JengaPayConfig } from "@/components/landlord/JengaPayConfig";
+import { KCBBuniConfig } from "@/components/landlord/KCBBuniConfig";
 import { CreditCard, Check, Shield, Settings, Smartphone, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -235,7 +236,12 @@ const PaymentSettings = () => {
             <JengaPayConfig />
           </div>
 
-          {/* Other Bank Integrations (excludes Equity) */}
+          {/* KCB Bank - Buni Configuration */}
+          <div className="lg:col-span-2">
+            <KCBBuniConfig />
+          </div>
+
+          {/* Other Bank Integrations (excludes Equity and KCB) */}
           <div className="lg:col-span-2">
             <BankVerificationSection onVerificationChange={loadData} />
           </div>

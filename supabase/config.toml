@@ -119,3 +119,9 @@ verify_jwt = false
 
 [functions.jenga-stk-push]
 verify_jwt = true
+
+[functions.kcb-stk-push]
+verify_jwt = true
+
+[functions.kcb-ipn-callback]
+verify_jwt = false
