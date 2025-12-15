@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TablePaginator } from "@/components/ui/table-paginator";
+import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Plus, Eye, Shield, Users, Building, Edit3, CreditCard, MapPin } from "lucide-react";
+import { Search, Plus, Eye, Shield, Users, Building, Edit3, CreditCard, MapPin, X } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { format } from "date-fns";
 
 interface LandlordFormData {
   first_name: string;
@@ -47,6 +51,8 @@ export default function LandlordManagement() {
   const [stakeholders, setStakeholders] = useState<PropertyStakeholder[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingLandlord, setAddingLandlord] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -58,6 +64,9 @@ export default function LandlordManagement() {
   const { toast } = useToast();
   const { register, handleSubmit, reset, formState: { errors } } = useForm<LandlordFormData>();
   const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, setValue, formState: { errors: editErrors } } = useForm<LandlordFormData>();
+  
+  // Pagination
+  const { page, pageSize, setPage, setPageSize } = useUrlPageParam({ defaultPage: 1, pageSize: 10 });
 
   useEffect(() => {
     fetchStakeholders();
@@ -114,6 +123,11 @@ export default function LandlordManagement() {
             billing_plan: subscriptionResult.data?.billing_plan?.name || 'None'
           };
         })
+      );
+
+      // Sort by created_at descending (newest first)
+      stakeholdersWithCounts.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
       setStakeholders(stakeholdersWithCounts);
@@ -242,11 +256,43 @@ export default function LandlordManagement() {
     }
   };
 
-  const filteredStakeholders = stakeholders.filter(stakeholder =>
-    `${stakeholder.first_name} ${stakeholder.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    stakeholder.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    stakeholder.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter and paginate stakeholders
+  const filteredStakeholders = useMemo(() => {
+    return stakeholders.filter(stakeholder => {
+      // Search filter
+      const matchesSearch = !searchTerm || 
+        `${stakeholder.first_name} ${stakeholder.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        stakeholder.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        stakeholder.role.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Role filter
+      const matchesRole = roleFilter === "all" || stakeholder.role === roleFilter;
+      
+      // Status filter
+      const matchesStatus = statusFilter === "all" || stakeholder.subscription_status === statusFilter;
+      
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [stakeholders, searchTerm, roleFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filteredStakeholders.length / pageSize);
+  const paginatedStakeholders = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredStakeholders.slice(start, start + pageSize);
+  }, [filteredStakeholders, page, pageSize]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, roleFilter, statusFilter]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+  };
+
+  const hasActiveFilters = searchTerm || roleFilter !== "all" || statusFilter !== "all";
 
   return (
     <DashboardLayout>
@@ -377,16 +423,58 @@ export default function LandlordManagement() {
           </Card>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, or role..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-card border-border focus:border-accent focus:ring-accent"
-          />
+        {/* Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, email, or role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-card border-border focus:border-accent focus:ring-accent"
+            />
+          </div>
+          
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-full md:w-[180px] bg-card border-border">
+              <SelectValue placeholder="Filter by Role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="Landlord">Landlord</SelectItem>
+              <SelectItem value="Manager">Manager</SelectItem>
+              <SelectItem value="Agent">Agent</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full md:w-[180px] bg-card border-border">
+              <SelectValue placeholder="Filter by Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="trial">Trial</SelectItem>
+              <SelectItem value="trial_expired">Trial Expired</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
+              <SelectItem value="not_subscribed">Not Subscribed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" onClick={clearFilters} className="flex items-center gap-2">
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          )}
         </div>
+
+        {/* Results summary */}
+        {hasActiveFilters && (
+          <div className="text-sm text-muted-foreground">
+            Showing {filteredStakeholders.length} of {stakeholders.length} stakeholders
+          </div>
+        )}
 
         {/* Landlords List */}
         <Card className="bg-card">
@@ -398,15 +486,15 @@ export default function LandlordManagement() {
               <div className="text-center py-8">
                 <div className="animate-pulse text-muted-foreground">Loading stakeholders...</div>
               </div>
-            ) : filteredStakeholders.length === 0 ? (
+            ) : paginatedStakeholders.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-muted-foreground">
-                  {searchTerm ? "No stakeholders found matching your search" : "No stakeholders found"}
+                  {hasActiveFilters ? "No stakeholders found matching your filters" : "No stakeholders found"}
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredStakeholders.map((stakeholder) => (
+                {paginatedStakeholders.map((stakeholder) => (
                   <div key={stakeholder.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
@@ -476,7 +564,7 @@ export default function LandlordManagement() {
                        </div>
                      </div>
                      <div className="mt-3 text-xs text-muted-foreground flex justify-between">
-                       <span>Joined: {new Date(stakeholder.created_at).toLocaleDateString()}</span>
+                       <span>Joined: {format(new Date(stakeholder.created_at), 'MMM dd, yyyy')}</span>
                        <Badge 
                          className={
                            stakeholder.subscription_status === 'active' ? 'bg-green-100 text-green-800' :
@@ -493,6 +581,17 @@ export default function LandlordManagement() {
             )}
           </CardContent>
         </Card>
+
+        {/* Pagination */}
+        <TablePaginator
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={filteredStakeholders.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          showPageSizeSelector={true}
+        />
 
         {/* View Stakeholder Dialog */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -528,7 +627,7 @@ export default function LandlordManagement() {
                       </div>
                       <div>
                         <Label className="text-sm text-muted-foreground">Member Since</Label>
-                        <p className="font-medium">{new Date(selectedStakeholder.created_at).toLocaleDateString()}</p>
+                        <p className="font-medium">{format(new Date(selectedStakeholder.created_at), 'MMM dd, yyyy')}</p>
                       </div>
                     </div>
                   </div>
@@ -708,7 +807,7 @@ export default function LandlordManagement() {
                                 {property.total_units} Units
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                Added: {new Date(property.created_at).toLocaleDateString()}
+                                Added: {format(new Date(property.created_at), 'MMM dd, yyyy')}
                               </div>
                             </div>
                           </div>

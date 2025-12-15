@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TablePaginator } from "@/components/ui/table-paginator";
 import { Switch } from "@/components/ui/switch";
 import { useUrlPageParam } from "@/hooks/useUrlPageParam";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Users, 
   Calendar, 
@@ -28,7 +29,9 @@ import {
   XCircle,
   Edit,
   Save,
-  RefreshCw
+  RefreshCw,
+  Search,
+  X
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -93,6 +96,11 @@ const TrialManagement = () => {
   const [totalUsers, setTotalUsers] = useState(0);
   const [savingSettings, setSavingSettings] = useState(false);
   const [policyHistory, setPolicyHistory] = useState<PolicyHistoryEntry[]>([]);
+  
+  // Filters for trial users
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [daysFilter, setDaysFilter] = useState<string>("all");
   
   // URL-based pagination for trial users
   const { page, pageSize, setPage } = useUrlPageParam({ 
@@ -227,7 +235,7 @@ const TrialManagement = () => {
         .from('landlord_subscriptions')
         .select('landlord_id, status, trial_start_date, trial_end_date', { count: 'exact' })
         .in('status', ['trial', 'trial_expired', 'suspended'])
-        .order('trial_end_date', { ascending: true })
+        .order('trial_start_date', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (subsError) throw subsError;
@@ -532,10 +540,62 @@ const TrialManagement = () => {
               <CardHeader>
                 <CardTitle>Trial Users Overview</CardTitle>
                 <CardDescription>
-                  Monitor all users in trial, grace period, or suspended status
+                  Monitor all users in trial, grace period, or suspended status (sorted by newest first)
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or email..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                      <SelectValue placeholder="Filter by Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="trial">Active Trial</SelectItem>
+                      <SelectItem value="trial_expired">Grace Period</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={daysFilter} onValueChange={setDaysFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]">
+                      <SelectValue placeholder="Filter by Days" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="expiring_soon">Expiring ≤7 days</SelectItem>
+                      <SelectItem value="expiring_month">Expiring ≤30 days</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {(searchQuery || statusFilter !== "all" || daysFilter !== "all") && (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => {
+                        setSearchQuery("");
+                        setStatusFilter("all");
+                        setDaysFilter("all");
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -548,7 +608,29 @@ const TrialManagement = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {trialUsers.map((user) => (
+                    {trialUsers
+                      .filter(user => {
+                        // Search filter
+                        const matchesSearch = !searchQuery || 
+                          `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          user.email.toLowerCase().includes(searchQuery.toLowerCase());
+                        
+                        // Status filter
+                        const matchesStatus = statusFilter === "all" || user.status === statusFilter;
+                        
+                        // Days filter
+                        let matchesDays = true;
+                        if (daysFilter === "expiring_soon") {
+                          matchesDays = user.days_remaining > 0 && user.days_remaining <= 7;
+                        } else if (daysFilter === "expiring_month") {
+                          matchesDays = user.days_remaining > 0 && user.days_remaining <= 30;
+                        } else if (daysFilter === "expired") {
+                          matchesDays = user.days_remaining <= 0;
+                        }
+                        
+                        return matchesSearch && matchesStatus && matchesDays;
+                      })
+                      .map((user) => (
                       <TableRow key={user.landlord_id}>
                         <TableCell>
                           <div>
