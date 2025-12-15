@@ -11,7 +11,8 @@ import { useUrlPageParam } from "@/hooks/useUrlPageParam";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Plus, Users, Shield, UserCheck, Settings, Eye } from "lucide-react";
+import { Plus, Users, Shield, UserCheck, Settings, Eye, Calendar } from "lucide-react";
+import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 
 interface UserProfile {
@@ -320,6 +321,7 @@ const UserManagement = () => {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead>Joined Date</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -333,7 +335,7 @@ const UserManagement = () => {
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4">
+                  <TableCell colSpan={6} className="text-center py-4">
                     No team members found
                   </TableCell>
                 </TableRow>
@@ -348,6 +350,12 @@ const UserManagement = () => {
                     </TableCell>
                     <TableCell>{user.email || "No email"}</TableCell>
                     <TableCell>{user.phone || "No phone"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(user.created_at), 'MMM dd, yyyy')}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge className={getRoleBadgeColor(getUserRole(user))}>
                         {getUserRole(user)}
