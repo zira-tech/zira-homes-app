@@ -13,6 +13,7 @@ import NotFound from "@/pages/NotFound";
 // Import existing pages
 import Auth from "@/pages/Auth";
 import Index from "@/pages/Index";
+import LandingPage from "@/pages/LandingPage";
 
 // Lazy load tenant pages for better performance
 const TenantDashboard = React.lazy(() => import("@/pages/tenant/TenantDashboard"));
@@ -95,6 +96,7 @@ export const AppRoutes = () => {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/home" element={<LandingPage />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/test-sms" element={
         <React.Suspense fallback={<LoadingSpinner />}>
