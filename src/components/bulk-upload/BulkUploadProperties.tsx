@@ -49,14 +49,14 @@ export function BulkUploadProperties() {
     { name: "Country", required: false, description: "Country (defaults to Kenya)", format: "Text" },
     { name: "Property Type", required: true, description: "Type of property", validValues: VALID_PROPERTY_TYPES },
     { name: "Total Units", required: false, description: "Expected number of units", format: "Positive number" },
-    { name: "Manager Email", required: false, description: "Email of manager (must be existing user with Manager/Agent role)", format: "email@example.com" },
+    { name: "Manager Email", required: false, description: "Email of manager (must be an existing user in the system)", format: "email@example.com" },
     { name: "Amenities", required: false, description: "Property amenities", format: "Comma-separated list" },
     { name: "Description", required: false, description: "Property description", format: "Text" }
   ];
 
   const tips = [
     "Property Names must be unique - duplicates will be rejected",
-    "Manager Email must belong to an existing user with Landlord, Manager, or Agent role",
+    "Manager Email must belong to an existing user in the system",
     "Use commas to separate multiple amenities (e.g., 'Pool,Gym,Parking')",
     "Property Type must match exactly one of the valid values shown above"
   ];
@@ -79,13 +79,12 @@ export function BulkUploadProperties() {
       console.error("Error fetching existing property names:", error);
     }
 
-    // Get available manager emails (users with Landlord, Manager, or Agent roles)
+    // Get available manager emails (any existing user can be a manager)
     let availableManagers: string[] = [];
     try {
       const { data: managers } = await supabase
         .from("profiles")
-        .select("email, user_roles!inner(role)")
-        .in("user_roles.role", ["Landlord", "Manager", "Agent"]);
+        .select("id, email");
 
       if (managers) {
         availableManagers = managers.map(m => m.email.toLowerCase());
@@ -144,7 +143,7 @@ export function BulkUploadProperties() {
           errors.push({
             row: index,
             field: "Manager Email",
-            message: "Manager email not found or user doesn't have Manager/Agent/Landlord role"
+            message: "Manager email not found. Email must belong to an existing user."
           });
         }
       }
