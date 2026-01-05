@@ -211,20 +211,26 @@ export function BulkUploadProperties() {
         );
       }
 
-      const properties = data.map(row => ({
-        name: String(row["Property Name"]).trim(),
-        address: String(row["Address"]).trim(),
-        city: String(row["City"]).trim(),
-        state: String(row["State"]).trim(),
-        zip_code: String(row["Zip Code"] || '').trim(),
-        country: String(row["Country"] || 'Kenya').trim(),
-        property_type: String(row["Property Type"]).trim(),
-        total_units: row["Total Units"] ? Number(row["Total Units"]) : 0,
-        owner_id: user?.id,
-        manager_id: row["Manager Email"] ? managerMap.get(String(row["Manager Email"]).toLowerCase().trim()) : null,
-        amenities: row["Amenities"] ? String(row["Amenities"]).split(',').map(a => a.trim()) : null,
-        description: row["Description"] ? String(row["Description"]) : null
-      }));
+      // Build properties with ONLY valid columns - strip any extra keys from parsed data
+      const properties = data.map(row => {
+        // Handle numeric fields that may have commas (e.g., "1,000")
+        const totalUnitsRaw = String(row["Total Units"] || '0').replace(/,/g, '');
+        
+        return {
+          name: String(row["Property Name"]).trim(),
+          address: String(row["Address"]).trim(),
+          city: String(row["City"]).trim(),
+          state: String(row["State"]).trim(),
+          zip_code: String(row["Zip Code"] || '').trim(),
+          country: String(row["Country"] || 'Kenya').trim(),
+          property_type: String(row["Property Type"]).trim(),
+          total_units: totalUnitsRaw ? Number(totalUnitsRaw) : 0,
+          owner_id: user?.id,
+          manager_id: row["Manager Email"] ? managerMap.get(String(row["Manager Email"]).toLowerCase().trim()) : null,
+          amenities: row["Amenities"] ? String(row["Amenities"]).split(',').map(a => a.trim()) : null,
+          description: row["Description"] ? String(row["Description"]) : null
+        };
+      });
 
       const { error: propertiesError } = await supabase
         .from("properties")
