@@ -18,7 +18,6 @@ export function BulkUploadUnits() {
       "Monthly Rent": "25000",
       "Security Deposit": "50000", 
       "Garbage Deposit": "1000",
-      "Floor": "1",
       "Square Feet": "650",
       "Bedrooms": "1",
       "Bathrooms": "1",
@@ -32,7 +31,6 @@ export function BulkUploadUnits() {
       "Monthly Rent": "35000",
       "Security Deposit": "70000",
       "Garbage Deposit": "1500",
-      "Floor": "2",
       "Square Feet": "850",
       "Bedrooms": "2",
       "Bathrooms": "2",
@@ -50,7 +48,6 @@ export function BulkUploadUnits() {
     { name: "Monthly Rent", required: true, description: "Monthly rent amount in KES", format: "Positive number (e.g., 25000)" },
     { name: "Security Deposit", required: false, description: "Security deposit amount in KES", format: "Non-negative number" },
     { name: "Garbage Deposit", required: false, description: "Garbage deposit amount in KES", format: "Non-negative number" },
-    { name: "Floor", required: false, description: "Floor number where the unit is located", format: "Number (e.g., 1, 2, 3)" },
     { name: "Square Feet", required: false, description: "Unit size in square feet", format: "Positive number" },
     { name: "Bedrooms", required: false, description: "Number of bedrooms", format: "Number (e.g., 1, 2, 3)" },
     { name: "Bathrooms", required: false, description: "Number of bathrooms", format: "Number (e.g., 1, 2)" },
@@ -217,7 +214,7 @@ export function BulkUploadUnits() {
       }
 
       // Validate numeric fields
-      const numericFields = ["Floor", "Square Feet", "Bedrooms", "Bathrooms"];
+      const numericFields = ["Square Feet", "Bedrooms", "Bathrooms"];
       numericFields.forEach(field => {
         if (row[field] && String(row[field]).trim() !== '') {
           const value = Number(row[field]);
@@ -255,11 +252,10 @@ export function BulkUploadUnits() {
         unit_number: String(row["Unit Number"]).trim(),
         property_id: propertyMap.get(String(row["Property Name"]).trim().toLowerCase()),
         unit_type: String(row["Unit Type"]).trim(),
-        rent_amount: Number(row["Monthly Rent"]),
-        security_deposit: row["Security Deposit"] && String(row["Security Deposit"]).trim() !== '' ? Number(row["Security Deposit"]) : null,
-        garbage_deposit: row["Garbage Deposit"] && String(row["Garbage Deposit"]).trim() !== '' ? Number(row["Garbage Deposit"]) : null,
-        floor_number: row["Floor"] && String(row["Floor"]).trim() !== '' ? Number(row["Floor"]) : null,
-        square_feet: row["Square Feet"] && String(row["Square Feet"]).trim() !== '' ? Number(row["Square Feet"]) : null,
+        rent_amount: Number(String(row["Monthly Rent"]).replace(/,/g, '')),
+        security_deposit: row["Security Deposit"] && String(row["Security Deposit"]).trim() !== '' ? Number(String(row["Security Deposit"]).replace(/,/g, '')) : null,
+        garbage_deposit: row["Garbage Deposit"] && String(row["Garbage Deposit"]).trim() !== '' ? Number(String(row["Garbage Deposit"]).replace(/,/g, '')) : null,
+        square_feet: row["Square Feet"] && String(row["Square Feet"]).trim() !== '' ? Number(String(row["Square Feet"]).replace(/,/g, '')) : null,
         bedrooms: row["Bedrooms"] && String(row["Bedrooms"]).trim() !== '' ? Number(row["Bedrooms"]) : null,
         bathrooms: row["Bathrooms"] && String(row["Bathrooms"]).trim() !== '' ? Number(row["Bathrooms"]) : null,
         amenities: row["Amenities"] ? String(row["Amenities"]).split(',').map(a => a.trim()) : null,
