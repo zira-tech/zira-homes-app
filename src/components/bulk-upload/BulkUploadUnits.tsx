@@ -263,9 +263,16 @@ export function BulkUploadUnits() {
         status: 'vacant'
       }));
 
+      // Defensive: ensure no stale/unknown columns (e.g., floor_number) are ever sent.
+      const sanitizedUnits = units.map((u) => {
+        const copy: any = { ...u };
+        delete copy.floor_number;
+        return copy;
+      });
+
       const { error: unitsError } = await supabase
         .from("units")
-        .insert(units);
+        .insert(sanitizedUnits as any);
 
       if (unitsError) {
         throw new Error(`Failed to create units: ${unitsError.message}`);
