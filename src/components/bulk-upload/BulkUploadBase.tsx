@@ -87,7 +87,54 @@ export function BulkUploadBase({
         const workbook = XLSX.read(arrayBuffer, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        data = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Parse as array of arrays to handle multi-row headers
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (rawData.length > 0) {
+          // Detect if first row contains indicator markers like "(REQUIRED)" or "(Optional)"
+          const firstRow = rawData[0] || [];
+          const isIndicatorRow = firstRow.some((cell: any) => 
+            String(cell || '').includes('(REQUIRED)') || String(cell || '').includes('(Optional)')
+          );
+          
+          let headerRowIndex = 0;
+          let dataStartIndex = 1;
+          
+          if (isIndicatorRow && rawData.length > 1) {
+            // First row is indicators, second row is headers
+            headerRowIndex = 1;
+            dataStartIndex = 2;
+            
+            // Check if third row looks like format hints (contains "Valid:" or "e.g." patterns)
+            if (rawData.length > 2) {
+              const thirdRow = rawData[2] || [];
+              const isFormatRow = thirdRow.some((cell: any) => {
+                const cellStr = String(cell || '');
+                return cellStr.includes('Valid:') || cellStr.includes('e.g.') || 
+                       cellStr.includes('format') || cellStr.includes('Positive number');
+              });
+              
+              if (isFormatRow) {
+                dataStartIndex = 3;
+              }
+            }
+          }
+          
+          const headers = (rawData[headerRowIndex] || []).map((h: any) => String(h || '').trim());
+          
+          // Convert remaining rows to objects using detected headers
+          data = rawData.slice(dataStartIndex).map((row: any[]) => {
+            const obj: Record<string, any> = {};
+            headers.forEach((header, index) => {
+              if (header) {
+                obj[header] = row[index] ?? '';
+              }
+            });
+            return obj;
+          });
+        }
+        
         processUploadedData(data);
       }
     } catch (error) {
