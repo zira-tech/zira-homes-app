@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Check, Sparkles, Building2, Crown, Zap } from "lucide-react";
+import { Check, Sparkles, Building2, Crown, Zap, Calculator } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLandingSettings } from "@/hooks/useLandingSettings";
 
 interface BillingPlan {
   id: string;
@@ -74,7 +75,7 @@ function formatPrice(plan: BillingPlan): string {
   return `KES ${plan.price.toLocaleString()}`;
 }
 
-function getPriceSubtext(plan: BillingPlan): string {
+function getPriceSubtext(plan: BillingPlan, trialDays: number): string {
   if (plan.is_custom) {
     return "Contact us for pricing";
   }
@@ -88,7 +89,7 @@ function getPriceSubtext(plan: BillingPlan): string {
   }
   
   if (plan.price === 0) {
-    return "14 days trial";
+    return `${trialDays} days trial`;
   }
   
   return `/ ${plan.billing_cycle}`;
@@ -112,6 +113,7 @@ function getDisplayFeatures(features: any): string[] {
 }
 
 export function PricingSection() {
+  const { trialDays } = useLandingSettings();
   const { data: plans, isLoading, error } = useQuery({
     queryKey: ['landing-billing-plans'],
     queryFn: async () => {
@@ -124,23 +126,32 @@ export function PricingSection() {
       if (error) throw error;
       return (data as BillingPlan[]).filter(p => !p.name.toLowerCase().includes('free trial'));
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
   return (
     <section id="pricing" className="py-20 bg-secondary/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <span className="inline-block px-4 py-1 rounded-full bg-success/10 text-success text-sm font-medium mb-4">
             Pricing
           </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-muted-foreground mb-6">
             Choose the plan that fits your portfolio. Start with a free trial and upgrade anytime.
           </p>
+          
+          {/* Small Landlord Callout */}
+          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-accent/10 border border-accent/20">
+            <Calculator className="w-5 h-5 text-accent" />
+            <div className="text-left">
+              <p className="text-sm font-medium text-foreground">Even with just 1 unit? Pay only KES 100/month</p>
+              <p className="text-xs text-muted-foreground">Example: 5 units = KES 500/month • 10 SMS per unit included</p>
+            </div>
+          </div>
         </div>
 
         {/* Loading State */}
@@ -221,7 +232,7 @@ export function PricingSection() {
                       </span>
                     </div>
                     <span className="text-sm text-muted-foreground">
-                      {getPriceSubtext(plan)}
+                      {getPriceSubtext(plan, trialDays)}
                     </span>
                   </div>
                   
@@ -249,11 +260,11 @@ export function PricingSection() {
                         <span className="text-sm text-foreground">{feature}</span>
                       </li>
                     ))}
-                    {plan.sms_credits_included && plan.sms_credits_included > 0 && (
+                    {plan.max_units && plan.max_units > 0 && (
                       <li className="flex items-start gap-2">
                         <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                         <span className="text-sm text-foreground">
-                          {plan.sms_credits_included} SMS Credits/month
+                          10 SMS per unit included
                         </span>
                       </li>
                     )}
@@ -282,7 +293,7 @@ export function PricingSection() {
         
         {/* Bottom note */}
         <p className="text-center text-sm text-muted-foreground mt-8">
-          All plans include a 14-day free trial. No credit card required.
+          All plans include a {trialDays}-day free trial. No credit card required.
         </p>
       </div>
     </section>
