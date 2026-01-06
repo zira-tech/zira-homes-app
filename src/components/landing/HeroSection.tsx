@@ -1,8 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Play, Building2, Users, CreditCard } from "lucide-react";
+import { useLandingSettings } from "@/hooks/useLandingSettings";
+import heroImage from "@/assets/hero-landlord.png";
 
 export function HeroSection() {
+  const { trialDays } = useLandingSettings();
+
   return (
     <section className="relative min-h-screen flex items-center pt-16 overflow-hidden">
       {/* Background gradient */}
@@ -19,7 +23,7 @@ export function HeroSection() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              Trusted by 500+ Property Managers in Kenya
+              Trusted by 100+ Property Managers in Kenya
             </div>
             
             {/* Headline */}
@@ -52,7 +56,7 @@ export function HeroSection() {
             <div className="flex flex-col sm:flex-row gap-4">
               <Link to="/auth">
                 <Button size="lg" className="w-full sm:w-auto bg-accent text-accent-foreground hover:bg-accent/90 text-lg px-8 py-6">
-                  Start Free 14-Day Trial
+                  Start Free {trialDays}-Day Trial
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </Link>
@@ -68,24 +72,33 @@ export function HeroSection() {
             </p>
           </div>
           
-          {/* Right Content - Stats Cards */}
+          {/* Right Content - Hero Image & Stats Cards */}
           <div className="relative lg:pl-8">
+            {/* Hero Image */}
+            <div className="mb-6 rounded-2xl overflow-hidden shadow-2xl border border-border">
+              <img 
+                src={heroImage} 
+                alt="Happy landlord managing properties on tablet" 
+                className="w-full h-auto object-cover"
+              />
+            </div>
+            
             <div className="grid grid-cols-2 gap-4">
               {/* Stats Card 1 */}
               <div className="bg-card rounded-2xl p-6 shadow-lg border border-border">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Building2 className="w-6 h-6 text-primary" />
                 </div>
-                <div className="text-3xl font-bold text-foreground">10,000+</div>
+                <div className="text-3xl font-bold text-foreground">500+</div>
                 <div className="text-sm text-muted-foreground">Properties Managed</div>
               </div>
               
               {/* Stats Card 2 */}
-              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border mt-8">
+              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border">
                 <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center mb-4">
                   <Users className="w-6 h-6 text-success" />
                 </div>
-                <div className="text-3xl font-bold text-foreground">25,000+</div>
+                <div className="text-3xl font-bold text-foreground">10,000+</div>
                 <div className="text-sm text-muted-foreground">Happy Tenants</div>
               </div>
               
@@ -94,12 +107,12 @@ export function HeroSection() {
                 <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
                   <CreditCard className="w-6 h-6 text-accent" />
                 </div>
-                <div className="text-3xl font-bold text-foreground">KES 2B+</div>
+                <div className="text-3xl font-bold text-foreground">KES 150M+</div>
                 <div className="text-sm text-muted-foreground">Rent Collected</div>
               </div>
               
               {/* Stats Card 4 - Floating review */}
-              <div className="bg-primary rounded-2xl p-6 shadow-lg mt-8">
+              <div className="bg-primary rounded-2xl p-6 shadow-lg">
                 <div className="flex gap-1 mb-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <svg key={star} className="w-4 h-4 text-warning fill-current" viewBox="0 0 20 20">
