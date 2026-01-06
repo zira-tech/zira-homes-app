@@ -1,4 +1,5 @@
 import { Quote } from "lucide-react";
+import { PartnerLogosSection } from "./PartnerLogosSection";
 
 const testimonials = [
   {
@@ -79,23 +80,8 @@ export function TestimonialsSection() {
           ))}
         </div>
 
-        {/* Trust Logos */}
-        <div className="mt-16 text-center">
-          <p className="text-sm text-muted-foreground mb-6">
-            Trusted by leading property management companies
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 opacity-50">
-            {/* Placeholder for company logos */}
-            {["Company 1", "Company 2", "Company 3", "Company 4"].map((company, i) => (
-              <div 
-                key={i}
-                className="h-8 px-6 bg-muted rounded flex items-center justify-center text-muted-foreground text-sm font-medium"
-              >
-                {company}
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Partner Logos - Now managed via admin panel */}
+        <PartnerLogosSection />
       </div>
     </section>
   );
