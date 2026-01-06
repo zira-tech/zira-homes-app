@@ -83,49 +83,20 @@ export function HeroSection() {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              {/* Stats Card 1 */}
-              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <Building2 className="w-6 h-6 text-primary" />
-                </div>
-                <div className="text-3xl font-bold text-foreground">500+</div>
-                <div className="text-sm text-muted-foreground">Properties Managed</div>
+            {/* Review Card */}
+            <div className="bg-primary rounded-2xl p-6 shadow-lg max-w-sm">
+              <div className="flex gap-1 mb-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg key={star} className="w-4 h-4 text-warning fill-current" viewBox="0 0 20 20">
+                    <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
+                  </svg>
+                ))}
               </div>
-              
-              {/* Stats Card 2 */}
-              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border">
-                <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center mb-4">
-                  <Users className="w-6 h-6 text-success" />
-                </div>
-                <div className="text-3xl font-bold text-foreground">10,000+</div>
-                <div className="text-sm text-muted-foreground">Happy Tenants</div>
-              </div>
-              
-              {/* Stats Card 3 */}
-              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border">
-                <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
-                  <CreditCard className="w-6 h-6 text-accent" />
-                </div>
-                <div className="text-3xl font-bold text-foreground">KES 150M+</div>
-                <div className="text-sm text-muted-foreground">Total Rent Collected</div>
-              </div>
-              
-              {/* Stats Card 4 - Floating review */}
-              <div className="bg-primary rounded-2xl p-6 shadow-lg">
-                <div className="flex gap-1 mb-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <svg key={star} className="w-4 h-4 text-warning fill-current" viewBox="0 0 20 20">
-                      <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-                    </svg>
-                  ))}
-                </div>
-                <p className="text-primary-foreground text-sm italic mb-3">
-                  "Zira Homes reduced my rent collection time by 80%!"
-                </p>
-                <div className="text-primary-foreground/80 text-xs">
-                  — James K., Property Manager
-                </div>
+              <p className="text-primary-foreground text-sm italic mb-3">
+                "Zira Homes reduced my rent collection time by 80%!"
+              </p>
+              <div className="text-primary-foreground/80 text-xs">
+                — James K., Property Manager
               </div>
             </div>
           </div>
