@@ -83,20 +83,24 @@ export function HeroSection() {
               />
             </div>
             
-            {/* Review Card */}
-            <div className="bg-primary rounded-2xl p-6 shadow-lg max-w-sm">
-              <div className="flex gap-1 mb-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <svg key={star} className="w-4 h-4 text-warning fill-current" viewBox="0 0 20 20">
-                    <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-                  </svg>
-                ))}
+            {/* Metrics Row */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+                <Building2 className="w-6 h-6 text-primary mx-auto mb-2" />
+                <div className="text-2xl font-bold text-foreground">500+</div>
+                <div className="text-xs text-muted-foreground">Properties</div>
               </div>
-              <p className="text-primary-foreground text-sm italic mb-3">
-                "Zira Homes reduced my rent collection time by 80%!"
-              </p>
-              <div className="text-primary-foreground/80 text-xs">
-                — James K., Property Manager
+              
+              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+                <Users className="w-6 h-6 text-success mx-auto mb-2" />
+                <div className="text-2xl font-bold text-foreground">10,000+</div>
+                <div className="text-xs text-muted-foreground">Tenants</div>
+              </div>
+              
+              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+                <CreditCard className="w-6 h-6 text-accent mx-auto mb-2" />
+                <div className="text-2xl font-bold text-foreground">KES 150M+</div>
+                <div className="text-xs text-muted-foreground">Rent/Month</div>
               </div>
             </div>
           </div>
