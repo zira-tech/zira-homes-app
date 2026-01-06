@@ -30,8 +30,8 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
   // Helper to check if we're in actual tenant area (not /tenants which is for landlords)
   const isTenantArea = location.pathname === "/tenant" || location.pathname.startsWith("/tenant/");
   
-  // Redirect from "/" based on effectiveRole (the currently selected/active role)
-  if (location.pathname === "/") {
+  // Redirect from "/dashboard" based on effectiveRole (the currently selected/active role)
+  if (location.pathname === "/dashboard") {
     if (effectiveRole === "tenant") {
       return <Navigate to="/tenant" replace />;
     }
@@ -48,12 +48,12 @@ export const RoleBasedRoute = ({ children }: RoleBasedRouteProps) => {
 
   // Block non-tenant users from accessing tenant routes (unless they have tenant role)
   if (isTenantArea && !assignedRoles.includes("tenant")) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Block non-admin users from accessing admin routes
   if (location.pathname.startsWith("/admin") && effectiveRole !== "admin") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

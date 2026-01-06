@@ -24,7 +24,7 @@ export const AdminOnlyRoute = ({ children }: AdminOnlyRouteProps) => {
   }
 
   if (effectiveRole !== "admin") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
