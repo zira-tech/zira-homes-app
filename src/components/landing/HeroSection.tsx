@@ -108,7 +108,7 @@ export function HeroSection() {
                   <CreditCard className="w-6 h-6 text-accent" />
                 </div>
                 <div className="text-3xl font-bold text-foreground">KES 150M+</div>
-                <div className="text-sm text-muted-foreground">Rent Collected</div>
+                <div className="text-sm text-muted-foreground">Total Rent Collected</div>
               </div>
               
               {/* Stats Card 4 - Floating review */}
