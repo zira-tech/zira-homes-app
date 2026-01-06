@@ -4,15 +4,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useLandingSettings } from "@/hooks/useLandingSettings";
 
-const faqs = [
+const getfaqs = (trialDays: number) => [
   {
     question: "How does the M-Pesa integration work?",
     answer: "Once you set up your M-Pesa Paybill or Till Number in the system, tenants can pay rent directly through M-Pesa. Payments are automatically matched to the correct tenant and invoice using the account reference. You'll see payments reflected in real-time on your dashboard."
   },
   {
     question: "Is there a free trial?",
-    answer: "Yes! All plans come with a 14-day free trial. No credit card required. You get full access to all features during the trial period so you can fully evaluate the platform."
+    answer: `Yes! All plans come with a ${trialDays}-day free trial. No credit card required. You get full access to all features during the trial period so you can fully evaluate the platform.`
   },
   {
     question: "Can tenants see their own invoices and payment history?",
@@ -41,6 +42,9 @@ const faqs = [
 ];
 
 export function FAQSection() {
+  const { trialDays } = useLandingSettings();
+  const faqs = getfaqs(trialDays);
+  
   return (
     <section id="faq" className="py-20 bg-secondary/50">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
