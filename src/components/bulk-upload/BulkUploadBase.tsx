@@ -106,13 +106,20 @@ export function BulkUploadBase({
             headerRowIndex = 1;
             dataStartIndex = 2;
             
-            // Check if third row looks like format hints (contains "Valid:" or "e.g." patterns)
+            // Check if third row looks like format hints/guide row
+            // These typically contain patterns like: "Valid:", "e.g.", "Must match", "Positive number", 
+            // "Non-negative", "format", "Number (e.g.", "Text", "Comma-separated"
             if (rawData.length > 2) {
               const thirdRow = rawData[2] || [];
+              const formatPatterns = [
+                'Valid:', 'e.g.', 'e.g,', 'format', 'Positive number', 'Non-negative',
+                'Must match', 'Number (', 'Text', 'Comma-separated', 'email@', 
+                'max', 'characters', 'exactly', 'existing'
+              ];
+              
               const isFormatRow = thirdRow.some((cell: any) => {
-                const cellStr = String(cell || '');
-                return cellStr.includes('Valid:') || cellStr.includes('e.g.') || 
-                       cellStr.includes('format') || cellStr.includes('Positive number');
+                const cellStr = String(cell || '').toLowerCase();
+                return formatPatterns.some(pattern => cellStr.includes(pattern.toLowerCase()));
               });
               
               if (isFormatRow) {
