@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Play, Building2, Users, CreditCard } from "lucide-react";
 import { useLandingSettings } from "@/hooks/useLandingSettings";
-import heroImage from "@/assets/hero-landlord.png";
+import heroImage from "@/assets/hero-landlord-new.png";
 
 export function HeroSection() {
   const { trialDays } = useLandingSettings();
