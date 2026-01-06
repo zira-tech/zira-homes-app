@@ -46,8 +46,8 @@ export function LandingFooter() {
               </div>
               <div className="flex items-center gap-3 text-background/70">
                 <Phone className="w-5 h-5" />
-                <a href="tel:+254700000000" className="hover:text-background transition-colors">
-                  +254 700 000 000
+                <a href="tel:+254757878023" className="hover:text-background transition-colors">
+                  +254 757 878 023
                 </a>
               </div>
               <div className="flex items-center gap-3 text-background/70">
