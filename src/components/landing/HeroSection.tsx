@@ -72,10 +72,10 @@ export function HeroSection() {
             </p>
           </div>
           
-          {/* Right Content - Hero Image & Stats Cards */}
-          <div className="relative lg:pl-8">
+          {/* Right Content - Hero Image & Metrics */}
+          <div className="relative lg:pl-8 space-y-6">
             {/* Hero Image */}
-            <div className="mb-6 rounded-2xl overflow-hidden shadow-2xl border border-border">
+            <div className="rounded-2xl overflow-hidden shadow-2xl border border-border">
               <img 
                 src={heroImage} 
                 alt="Happy landlord managing properties on tablet" 
@@ -83,8 +83,8 @@ export function HeroSection() {
               />
             </div>
             
-            {/* Metrics Row */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Metrics Row - Single Row of 3 Cards */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
                 <Building2 className="w-6 h-6 text-primary mx-auto mb-2" />
                 <div className="text-2xl font-bold text-foreground">500+</div>
