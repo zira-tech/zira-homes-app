@@ -97,6 +97,7 @@ export const AppRoutes = () => {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/home" element={<LandingPage />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/test-sms" element={
@@ -130,7 +131,7 @@ export const AppRoutes = () => {
 
       {/* Landlord routes */}
       <Route
-        path="/*"
+        path="/dashboard/*"
         element={
           <RequireAuth>
             <RoleBasedRoute>
@@ -138,7 +139,7 @@ export const AppRoutes = () => {
                 <Routes>
                 <Route path="/" element={<Index />} />
                 {/* Redirect from /agent/dashboard to main dashboard */}
-                <Route path="/agent/dashboard" element={<Navigate to="/" replace />} />
+                <Route path="/agent/dashboard" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/properties" element={
                   <PermissionGuard permission="manage_properties">
                     <Properties />
