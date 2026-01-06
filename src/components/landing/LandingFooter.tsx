@@ -40,8 +40,8 @@ export function LandingFooter() {
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-background/70">
                 <Mail className="w-5 h-5" />
-                <a href="mailto:support@zirahomes.com" className="hover:text-background transition-colors">
-                  support@zirahomes.com
+                <a href="mailto:support@ziratech.com" className="hover:text-background transition-colors">
+                  support@ziratech.com
                 </a>
               </div>
               <div className="flex items-center gap-3 text-background/70">
