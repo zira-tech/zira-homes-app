@@ -236,21 +236,6 @@ export function PricingSection() {
                     </span>
                   </div>
                   
-                  {/* Limits */}
-                  {(plan.max_properties || plan.max_units) && (
-                    <div className="flex gap-4 mb-6 text-sm">
-                      {plan.max_properties && (
-                        <div className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{plan.max_properties}</span> Properties
-                        </div>
-                      )}
-                      {plan.max_units && (
-                        <div className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{plan.max_units === 999999 ? 'Unlimited' : plan.max_units}</span> Units
-                        </div>
-                      )}
-                    </div>
-                  )}
                   
                   {/* Features */}
                   <ul className="space-y-3 mb-6">
