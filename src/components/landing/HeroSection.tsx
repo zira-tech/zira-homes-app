@@ -72,35 +72,38 @@ export function HeroSection() {
             </p>
           </div>
           
-          {/* Right Content - Hero Image & Metrics */}
-          <div className="relative lg:pl-8 space-y-6">
-            {/* Hero Image */}
-            <div className="rounded-2xl overflow-hidden shadow-2xl border border-border">
+          {/* Right Content */}
+          <div className="relative lg:pl-8 flex flex-col gap-6">
+            {/* Hero Image Container */}
+            <div className="rounded-2xl overflow-hidden shadow-2xl border">
               <img 
                 src={heroImage} 
-                alt="Happy landlord managing properties on tablet" 
+                alt="Property management dashboard" 
                 className="w-full h-auto object-cover"
               />
             </div>
             
-            {/* Metrics Row - Single Row of 3 Cards */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+            {/* Stats Row - 3 Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Card 1: 500+ Properties */}
+              <div className="bg-card rounded-xl p-4 shadow-lg border text-center">
                 <Building2 className="w-6 h-6 text-primary mx-auto mb-2" />
-                <div className="text-2xl font-bold text-foreground">500+</div>
-                <div className="text-xs text-muted-foreground">Properties</div>
+                <p className="text-2xl font-bold text-foreground">500+</p>
+                <p className="text-xs text-muted-foreground">Properties</p>
               </div>
               
-              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+              {/* Card 2: 10,000+ Tenants */}
+              <div className="bg-card rounded-xl p-4 shadow-lg border text-center">
                 <Users className="w-6 h-6 text-success mx-auto mb-2" />
-                <div className="text-2xl font-bold text-foreground">10,000+</div>
-                <div className="text-xs text-muted-foreground">Tenants</div>
+                <p className="text-2xl font-bold text-foreground">10,000+</p>
+                <p className="text-xs text-muted-foreground">Tenants</p>
               </div>
               
-              <div className="bg-card rounded-xl p-4 shadow-lg border border-border text-center">
+              {/* Card 3: KES 150M+ Rent/Month */}
+              <div className="bg-card rounded-xl p-4 shadow-lg border text-center">
                 <CreditCard className="w-6 h-6 text-accent mx-auto mb-2" />
-                <div className="text-2xl font-bold text-foreground">KES 150M+</div>
-                <div className="text-xs text-muted-foreground">Rent/Month</div>
+                <p className="text-2xl font-bold text-foreground">KES 150M+</p>
+                <p className="text-xs text-muted-foreground">Rent/Month</p>
               </div>
             </div>
           </div>
