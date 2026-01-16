@@ -10,9 +10,9 @@ const STEP_CONFIG: Record<
   GettingStartedStep,
   { label: string; route: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  add_property: { label: "Add your first property", route: "/properties", icon: Building2 },
-  add_units: { label: "Create units", route: "/units", icon: LayoutGrid },
-  add_tenants: { label: "Add tenants", route: "/tenants", icon: Users },
+  add_property: { label: "Add your first property", route: "/dashboard/properties", icon: Building2 },
+  add_units: { label: "Create units", route: "/dashboard/units", icon: LayoutGrid },
+  add_tenants: { label: "Add tenants", route: "/dashboard/tenants", icon: Users },
 };
 
 export function GettingStartedWidget() {
