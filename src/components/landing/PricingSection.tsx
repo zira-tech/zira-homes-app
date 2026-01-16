@@ -424,7 +424,7 @@ export function PricingSection() {
         <div className="mt-12 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-success/10 text-success text-sm font-medium mb-4">
             <TrendingUp className="w-4 h-4" />
-            Up to 600% cheaper than EazzyRent and competitors
+            Up to 600% cheaper than leading competitors
           </div>
         </div>
         
