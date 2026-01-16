@@ -3,10 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Star, Crown, Zap, Shield, LayoutGrid, TableProperties } from "lucide-react";
+import { Check, Star, Crown, Zap, Shield, LayoutGrid, TableProperties, Building, TrendingUp, Rocket, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useTrialManagement } from "@/hooks/useTrialManagement";
 import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/context/RoleContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { UpgradeConfirmationModal } from "@/components/upgrade/UpgradeConfirmationModal";
@@ -30,6 +31,10 @@ interface BillingPlan {
   popular?: boolean;
   is_custom?: boolean;
   contact_link?: string;
+  is_popular?: boolean;
+  plan_category?: string;
+  display_order?: number;
+  max_units_display?: string;
 }
 
 interface CurrentSubscription {
@@ -62,6 +67,7 @@ const FEATURE_DISPLAY_MAP: Record<string, string> = {
 
 export function Upgrade() {
   const { user } = useAuth();
+  const { accountType } = useRole();
   const { trialStatus, trialDaysRemaining } = useTrialManagement();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -73,7 +79,7 @@ export function Upgrade() {
   useEffect(() => {
     fetchActiveBillingPlans();
     fetchCurrentSubscription();
-  }, []);
+  }, [accountType]);
 
   const fetchCurrentSubscription = async () => {
     if (!user) return;
@@ -106,26 +112,32 @@ export function Upgrade() {
   const fetchActiveBillingPlans = async () => {
     try {
       setLoading(true);
-      console.log('🔍 Upgrade: Fetching active billing plans...');
+      console.log('🔍 Upgrade: Fetching active billing plans for account type:', accountType);
+      
+      // Determine which plan categories to fetch based on account type
+      const planCategories = accountType === 'agency' 
+        ? ['agency', 'both'] 
+        : ['landlord', 'both'];
       
       const { data, error } = await supabase
         .from('billing_plans')
-        .select('*, is_custom, contact_link')
+        .select('*, is_custom, contact_link, is_popular, plan_category, display_order, max_units_display')
         .eq('is_active', true)
         .neq('name', 'Free Trial') // Exclude trial plans from upgrade options
-        .order('price', { ascending: true });
+        .in('plan_category', planCategories)
+        .order('display_order', { ascending: true });
 
-      console.log('📊 Upgrade: Query result:', { data, error });
+      console.log('📊 Upgrade: Query result:', { data, error, planCategories });
 
       if (error) throw error;
 
       // Process the plans and add display properties
-      const processedPlans = (data || []).map((plan, index) => ({
+      const processedPlans = (data || []).map((plan) => ({
         ...plan,
         features: Array.isArray(plan.features) ? (plan.features as string[]) : 
                  typeof plan.features === 'string' ? [plan.features] : [],
-        popular: index === 1, // Mark second plan as popular
-        recommended: plan.name.toLowerCase().includes('professional')
+        popular: plan.is_popular || false,
+        recommended: plan.is_popular
       }));
 
       console.log('✅ Upgrade: Processed plans:', processedPlans);
@@ -286,12 +298,21 @@ export function Upgrade() {
   };
 
   const getPlanIcon = (planName: string) => {
-    switch (planName.toLowerCase()) {
-      case 'starter': return <Zap className="h-5 w-5" />;
-      case 'professional': return <Star className="h-5 w-5" />;
-      case 'enterprise': return <Crown className="h-5 w-5" />;
-      default: return <Check className="h-5 w-5" />;
-    }
+    const name = planName.toLowerCase();
+    // Landlord plans
+    if (name === 'micro') return <Building className="h-5 w-5" />;
+    if (name === 'standard') return <Star className="h-5 w-5" />;
+    if (name === 'premium') return <Crown className="h-5 w-5" />;
+    if (name.includes('enterprise')) return <Crown className="h-5 w-5 text-amber-500" />;
+    // Agency plans
+    if (name === 'startup') return <Rocket className="h-5 w-5" />;
+    if (name === 'growth') return <TrendingUp className="h-5 w-5" />;
+    if (name === 'scale') return <Zap className="h-5 w-5" />;
+    if (name === 'corporate') return <Users className="h-5 w-5 text-amber-500" />;
+    // Legacy/fallback
+    if (name === 'starter') return <Zap className="h-5 w-5" />;
+    if (name === 'professional') return <Star className="h-5 w-5" />;
+    return <Check className="h-5 w-5" />;
   };
 
   return (
