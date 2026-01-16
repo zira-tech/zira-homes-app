@@ -111,9 +111,20 @@ export function LandingFooter() {
         
         {/* Bottom Bar */}
         <div className="border-t border-background/10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-background/70 text-sm">
-            © {new Date().getFullYear()} Zira Homes. All rights reserved.
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+            <p className="text-background/70 text-sm">
+              © {new Date().getFullYear()} Zira Homes. All rights reserved.
+            </p>
+            <span className="hidden sm:inline text-background/30">•</span>
+            <a 
+              href="https://www.zira-homes.com/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-background/70 text-sm hover:text-background transition-colors"
+            >
+              A product of Zira Technologies
+            </a>
+          </div>
           
           {/* Social Links */}
           <div className="flex items-center gap-4">
