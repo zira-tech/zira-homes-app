@@ -132,6 +132,7 @@ const Auth = () => {
     lastName: "",
     phone: "",
     role: "Landlord" as "Landlord" | "Tenant",
+    accountType: "landlord" as "landlord" | "agency",
   });
 
   const normalizePhoneForSignup = (phone: string): string | null => {
@@ -244,6 +245,7 @@ const Auth = () => {
         last_name: signupData.lastName.trim(),
         phone: normalizedPhone,
         role: signupData.role,
+        account_type: signupData.accountType,
       } as const;
 
       const { error } = await supabase.auth.signUp({
@@ -284,7 +286,7 @@ const Auth = () => {
       // Save email so user can resend confirmation later
       setLastSignupEmail(signupData.email);
 
-      setSuccess(`Account created for ${signupData.email}. Please check your inbox at ${signupData.email} for a confirmation email from noreply@mail.app.supabase.io. If you can't find it, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`);
+      setSuccess(`Account created for ${signupData.email}. Please check your inbox at ${signupData.email} for a confirmation email from support@ziratech.com. If you can't find it, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`);
       
       // Clear form fields but keep lastSignupEmail for resend
       setSignupData({
@@ -295,11 +297,12 @@ const Auth = () => {
         lastName: "",
         phone: "",
         role: "Landlord",
+        accountType: "landlord",
       });
 
       toast({
         title: "Account created!",
-        description: `Confirmation sent to ${signupData.email}. From noreply@mail.app.supabase.io. Check Inbox, Updates/Promotions, or Spam/Junk.`,
+        description: `Confirmation sent to ${signupData.email}. From support@ziratech.com. Check Inbox, Updates/Promotions, or Spam/Junk.`,
       });
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
@@ -397,7 +400,7 @@ const Auth = () => {
         return;
       }
       setLastSignupEmail(targetEmail);
-      const msg = `A new confirmation email was sent to ${targetEmail} from noreply@mail.app.supabase.io. If it's not in your Inbox, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`;
+      const msg = `A new confirmation email was sent to ${targetEmail} from support@ziratech.com. If it's not in your Inbox, check Updates/Promotions or Spam/Junk and mark it as 'Not spam'.`;
       setSuccess(msg);
       toast({ title: 'Confirmation resent', description: msg });
     } catch (err) {
@@ -652,25 +655,49 @@ const Auth = () => {
               {/* Signup Tab */}
               <TabsContent value="signup" className="space-y-5">
                 <form onSubmit={handleSignup} className="space-y-4">
-                  {/* User Role Selection */}
+                  {/* Account Type Selection */}
                   <div className="space-y-2">
                     <Label className="text-gray-700 font-medium">I am a...</Label>
                     <div className="grid grid-cols-1 gap-2">
                       <button
                         type="button"
-                        className="p-4 border-2 border-primary bg-primary/5 rounded-lg text-left"
+                        onClick={() => setSignupData({ ...signupData, accountType: "landlord" })}
+                        className={`p-4 border-2 rounded-lg text-left transition-all ${
+                          signupData.accountType === "landlord"
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
                       >
                         <div className="flex items-center gap-3">
-                          <Building2 className="w-5 h-5 text-primary" />
+                          <Building2 className={`w-5 h-5 ${signupData.accountType === "landlord" ? "text-primary" : "text-gray-400"}`} />
                           <div>
-                            <span className="text-sm font-medium">Property Owner / Manager</span>
-                            <p className="text-xs text-gray-500 mt-1">Manage properties, tenants, and collect rent</p>
+                            <span className="text-sm font-medium">Landlord / Property Owner</span>
+                            <p className="text-xs text-gray-500 mt-1">I manage my own properties</p>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSignupData({ ...signupData, accountType: "agency" })}
+                        className={`p-4 border-2 rounded-lg text-left transition-all ${
+                          signupData.accountType === "agency"
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Users className={`w-5 h-5 ${signupData.accountType === "agency" ? "text-primary" : "text-gray-400"}`} />
+                          <div>
+                            <span className="text-sm font-medium">Property Management Agency</span>
+                            <p className="text-xs text-gray-500 mt-1">I manage properties for multiple clients</p>
                           </div>
                         </div>
                       </button>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
-                      Note: All property management roles have been unified. You can delegate access to sub-users after signup.
+                      {signupData.accountType === "agency" 
+                        ? "Agencies get team management features and multi-client support."
+                        : "Landlords get streamlined tools for managing their own portfolio."}
                     </p>
                   </div>
 
@@ -825,7 +852,7 @@ const Auth = () => {
                       Didn't receive the email? Resend confirmation
                     </button>
                     <p className="mt-2 text-xs text-gray-500">
-                      Sender: noreply@mail.app.supabase.io
+                      Sender: support@ziratech.com
                     </p>
                   </div>
                 </form>
