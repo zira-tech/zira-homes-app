@@ -29,6 +29,14 @@ interface BillingPlan {
   is_custom: boolean;
   contact_link?: string;
   currency: string;
+  // New fields for landlord/agency categorization (optional for backward compatibility)
+  plan_category?: 'landlord' | 'agency' | 'both';
+  min_units?: number;
+  max_units_display?: string;
+  display_order?: number;
+  yearly_discount_percent?: number;
+  is_popular?: boolean;
+  competitive_note?: string;
 }
 
 interface EditBillingPlanDialogProps {
@@ -193,6 +201,23 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="plan-category">Plan Category</Label>
+                <Select 
+                  value={editedPlan.plan_category || 'both'} 
+                  onValueChange={(value: 'landlord' | 'agency' | 'both') => setEditedPlan({ ...editedPlan, plan_category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="landlord">Landlord Only</SelectItem>
+                    <SelectItem value="agency">Agency Only</SelectItem>
+                    <SelectItem value="both">Both (Landlord & Agency)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="plan-currency">Currency</Label>
                 <Select 
                   value={editedPlan.currency} 
@@ -226,6 +251,27 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
                 </Select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="display-order">Display Order</Label>
+                  <Input
+                    id="display-order"
+                    type="number"
+                    value={editedPlan.display_order || 0}
+                    onChange={(e) => setEditedPlan({ ...editedPlan, display_order: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="yearly-discount">Yearly Discount %</Label>
+                  <Input
+                    id="yearly-discount"
+                    type="number"
+                    value={editedPlan.yearly_discount_percent || 15}
+                    onChange={(e) => setEditedPlan({ ...editedPlan, yearly_discount_percent: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
                   id="plan-active"
@@ -233,6 +279,15 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
                   onCheckedChange={(checked) => setEditedPlan({ ...editedPlan, is_active: checked })}
                 />
                 <Label htmlFor="plan-active">Active Plan</Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="plan-popular"
+                  checked={editedPlan.is_popular || false}
+                  onCheckedChange={(checked) => setEditedPlan({ ...editedPlan, is_popular: checked })}
+                />
+                <Label htmlFor="plan-popular">Popular Plan (highlighted)</Label>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -255,6 +310,26 @@ export const EditBillingPlanDialog: React.FC<EditBillingPlanDialogProps> = ({
                   />
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="max-units-display">Unit Range Display (e.g., "1-20 units")</Label>
+                <Input
+                  id="max-units-display"
+                  placeholder="1-20 units"
+                  value={editedPlan.max_units_display || ''}
+                  onChange={(e) => setEditedPlan({ ...editedPlan, max_units_display: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="competitive-note">Competitive Note (badge text)</Label>
+                <Input
+                  id="competitive-note"
+                  placeholder="Up to 600% cheaper"
+                  value={editedPlan.competitive_note || ''}
+                  onChange={(e) => setEditedPlan({ ...editedPlan, competitive_note: e.target.value })}
+                />
+              </div>
             </CardContent>
           </Card>
 
