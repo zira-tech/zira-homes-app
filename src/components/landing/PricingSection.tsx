@@ -131,6 +131,10 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
   const features = getDisplayFeatures(plan.features);
   const isPopular = plan.is_popular;
   
+  // Get tier price (the base plan price) and per-unit price
+  const tierPrice = plan.price;
+  const perUnitPrice = plan.fixed_amount_per_unit;
+  
   return (
     <div 
       className={`relative bg-card rounded-2xl p-6 border transition-all duration-300 hover:shadow-lg flex flex-col ${
@@ -159,7 +163,7 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
       )}
       
       {/* Plan Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
           isPopular ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
         }`}>
@@ -184,20 +188,21 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
         </div>
       )}
       
-      {/* Price */}
+      {/* Tier Price - Primary Display */}
       <div className="mb-6">
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-bold text-foreground">
-            {formatPrice(plan)}
+            {plan.is_custom ? "Custom" : tierPrice === 0 ? "Free" : `KES ${tierPrice.toLocaleString()}`}
           </span>
+          {!plan.is_custom && tierPrice > 0 && (
+            <span className="text-sm text-muted-foreground">/ month</span>
+          )}
         </div>
-        <span className="text-sm text-muted-foreground">
-          {getPriceSubtext(plan, trialDays)}
-        </span>
-        {plan.billing_model === 'fixed_per_unit' && plan.price > 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Starting from KES {plan.price.toLocaleString()}/mo
-          </p>
+        {plan.is_custom && (
+          <span className="text-sm text-muted-foreground">Contact us for pricing</span>
+        )}
+        {tierPrice === 0 && !plan.is_custom && (
+          <span className="text-sm text-muted-foreground">{trialDays} days trial</span>
         )}
       </div>
       
@@ -217,7 +222,28 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
             </span>
           </li>
         )}
+        {plan.is_custom && plan.name.toLowerCase().includes('enterprise') && (
+          <li className="flex items-start gap-2">
+            <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-foreground">SMS credits negotiated</span>
+          </li>
+        )}
+        {plan.is_custom && plan.name.toLowerCase().includes('corporate') && (
+          <li className="flex items-start gap-2">
+            <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-foreground">SMS credits negotiated</span>
+          </li>
+        )}
       </ul>
+      
+      {/* Per Unit Price - Bottom Display */}
+      {perUnitPrice && perUnitPrice > 0 && !plan.is_custom && (
+        <div className="mb-4 pt-4 border-t border-border">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">KES {perUnitPrice}</span> per unit / month
+          </p>
+        </div>
+      )}
       
       {/* CTA Button */}
       <Link to="/auth" className="block mt-auto">
