@@ -90,7 +90,7 @@ const handler = async (req: Request): Promise<Response> => {
     };
 
     const emailResponse = await resend.emails.send({
-      from: `${Deno.env.get("RESEND_FROM_NAME") || "Property Manager"} <${Deno.env.get("RESEND_FROM_ADDRESS") || "notifications@yourdomain.com"}>`,
+      from: `${Deno.env.get("RESEND_FROM_NAME") || "Zira Homes"} <${Deno.env.get("RESEND_FROM_ADDRESS") || "support@ziratech.com"}>`,
       to: [to],
       subject: subject,
       html: `
@@ -179,7 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
               <h2 class="title">${title}</h2>
               <p class="message">${message}</p>
               
-              <a href="https://yourapp.com/notifications" class="button">
+              <a href="https://zira-homes-app.lovable.app/notifications" class="button">
                 View in Portal
               </a>
             </div>
