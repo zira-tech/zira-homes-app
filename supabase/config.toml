@@ -12,6 +12,18 @@ enabled = true
 port = 54322
 external_url = "https://kdpqimetajnhcqseajok.supabase.co"
 
+[auth.email]
+enabled = true
+sender_name = "Zira Technologies"
+
+[auth.email.smtp]
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "support@ziratech.com"
+sender_name = "Zira Technologies"
+
 [functions.create-admin-user]
 verify_jwt = true
 
@@ -125,3 +137,9 @@ verify_jwt = true
 
 [functions.kcb-ipn-callback]
 verify_jwt = false
+
+[functions.configure-smtp]
+verify_jwt = true
+
+[functions.send-notification-email]
+verify_jwt = true
