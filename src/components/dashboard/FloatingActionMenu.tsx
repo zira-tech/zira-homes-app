@@ -55,17 +55,19 @@ export function FloatingActionMenu() {
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
 
   // Don't show on certain pages
-  const hiddenPaths = ['/auth', '/tenant', '/admin'];
-  const shouldHide = hiddenPaths.some(path => location.pathname.startsWith(path));
+  const hiddenPaths = ['/auth', '/tenant', '/admin', '/'];
+  const shouldHide = hiddenPaths.some(path => 
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
+  );
 
   // Get current context for smart action filtering
   const getCurrentContext = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/dashboard') return 'dashboard';
-    if (path.startsWith('/properties')) return 'properties';
-    if (path.startsWith('/tenants')) return 'tenants';
-    if (path.startsWith('/invoices')) return 'invoices';
-    if (path.startsWith('/expenses')) return 'expenses';
+    if (path === '/dashboard') return 'dashboard';
+    if (path.startsWith('/dashboard/properties')) return 'properties';
+    if (path.startsWith('/dashboard/tenants')) return 'tenants';
+    if (path.startsWith('/dashboard/invoices')) return 'invoices';
+    if (path.startsWith('/dashboard/expenses')) return 'expenses';
     return 'dashboard';
   };
 
@@ -81,7 +83,7 @@ export function FloatingActionMenu() {
     
     switch (action) {
       case "navigate-properties":
-        navigate("/properties");
+        navigate("/dashboard/properties");
         break;
       case "open-tenant-dialog":
         setTenantDialogOpen(true);

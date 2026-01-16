@@ -3,28 +3,28 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
     },
     {
-      "source": "/supabase/(.*)",
-      "destination": "https://kdpqimetajnhcqseajok.supabase.co/$1"
+      "source": "/supabase/:path*",
+      "destination": "https://kdpqimetajnhcqseajok.supabase.co/:path*"
     },
     {
-      "source": "/((?!api|assets|static|lovable-uploads|.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|txt|pdf|zip|mp4|webm|ogg)).*)",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/:path*",
       "headers": [
         {
           "key": "X-Frame-Options",
           "value": "DENY"
         },
         {
-          "key": "X-Content-Type-Options", 
+          "key": "X-Content-Type-Options",
           "value": "nosniff"
         }
       ]

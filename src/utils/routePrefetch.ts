@@ -1,17 +1,17 @@
 // Route prefetch utilities for improved navigation performance
 
 const routeImportMap: Record<string, () => Promise<any>> = {
-  // Main routes
-  "/": () => import("@/pages/Index"),
-  "/properties": () => import("@/pages/Properties"),
-  "/units": () => import("@/pages/Units"),
-  "/tenants": () => import("@/pages/Tenants"),
-  "/leases": () => import("@/pages/Leases"),
-  "/invoices": () => import("@/pages/Invoices"),
-  "/payments": () => import("@/pages/Payments"),
-  "/maintenance": () => import("@/pages/MaintenanceRequestsLandlord"),
-  "/expenses": () => import("@/pages/Expenses"),
-  "/reports": () => import("@/pages/Reports"),
+  // Main landlord routes
+  "/dashboard": () => import("@/pages/Index"),
+  "/dashboard/properties": () => import("@/pages/Properties"),
+  "/dashboard/units": () => import("@/pages/Units"),
+  "/dashboard/tenants": () => import("@/pages/Tenants"),
+  "/dashboard/leases": () => import("@/pages/Leases"),
+  "/dashboard/invoices": () => import("@/pages/Invoices"),
+  "/dashboard/payments": () => import("@/pages/Payments"),
+  "/dashboard/maintenance": () => import("@/pages/MaintenanceRequestsLandlord"),
+  "/dashboard/expenses": () => import("@/pages/Expenses"),
+  "/dashboard/reports": () => import("@/pages/Reports"),
   
   // Tenant routes
   "/tenant": () => import("@/pages/tenant/TenantDashboard"),
@@ -32,9 +32,9 @@ const routeImportMap: Record<string, () => Promise<any>> = {
   "/admin/analytics": () => import("@/pages/admin/PlatformAnalytics"),
   
   // Settings and support
-  "/settings": () => import("@/pages/Settings"),
-  "/support": () => import("@/pages/Support"),
-  "/notifications": () => import("@/pages/Notifications"),
+  "/dashboard/settings": () => import("@/pages/Settings"),
+  "/dashboard/support": () => import("@/pages/Support"),
+  "/dashboard/notifications": () => import("@/pages/Notifications"),
 };
 
 const prefetchedRoutes = new Set<string>();
@@ -65,9 +65,9 @@ export const prefetchCommonRoutes = (userRole: string) => {
   const commonRoutes: Record<string, string[]> = {
     tenant: ["/tenant", "/tenant/payments", "/tenant/maintenance"],
     admin: ["/admin", "/admin/users", "/admin/support"],
-    landlord: ["/", "/properties", "/tenants", "/reports"],
-    manager: ["/", "/properties", "/tenants"],
-    agent: ["/", "/properties", "/tenants"],
+    landlord: ["/dashboard", "/dashboard/properties", "/dashboard/tenants", "/dashboard/reports"],
+    manager: ["/dashboard", "/dashboard/properties", "/dashboard/tenants"],
+    agent: ["/dashboard", "/dashboard/properties", "/dashboard/tenants"],
   };
 
   const routes = commonRoutes[userRole] || [];

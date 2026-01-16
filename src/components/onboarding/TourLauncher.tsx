@@ -24,31 +24,31 @@ const AVAILABLE_TOURS: TourOption[] = [
   {
     id: 'add_property_tour',
     name: 'Add Property',
-    page: '/properties',
+    page: '/dashboard/properties',
     description: 'Learn how to add and manage properties'
   },
   {
     id: 'add_tenant_tour',
     name: 'Add Tenant',
-    page: '/tenants',
+    page: '/dashboard/tenants',
     description: 'Learn how to invite and manage tenants'
   },
   {
     id: 'generate_report_tour',
     name: 'Generate Reports',
-    page: '/reports',
+    page: '/dashboard/reports',
     description: 'Learn how to create financial reports'
   },
   {
     id: 'bulk_upload_tour',
     name: 'Bulk Upload',
-    page: '/units',
+    page: '/dashboard/units',
     description: 'Learn how to bulk upload units and tenants'
   },
   {
     id: 'payment_settings_tour',
     name: 'Payment Settings',
-    page: '/landlord/payment-settings',
+    page: '/dashboard/payment-settings',
     description: 'Configure payment methods for your tenants'
   }
 ];
