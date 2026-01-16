@@ -31,6 +31,7 @@ interface BillingPlan {
   is_custom: boolean;
   contact_link?: string;
   currency: string;
+  plan_category: 'landlord' | 'agency' | 'both';
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +40,7 @@ export default function BillingPlanManager() {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'landlord' | 'agency' | 'both'>('all');
   const [editingPlan, setEditingPlan] = useState<BillingPlan | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, number>>({});
@@ -100,6 +102,7 @@ export default function BillingPlanManager() {
         is_custom: plan.is_custom || false,
         contact_link: plan.contact_link || undefined,
         currency: plan.currency || 'KES',
+        plan_category: (plan.plan_category as 'landlord' | 'agency' | 'both') || 'both',
         created_at: plan.created_at,
         updated_at: plan.updated_at
       }));
@@ -128,6 +131,7 @@ export default function BillingPlanManager() {
       is_active: true,
       is_custom: false,
       currency: 'KES',
+      plan_category: 'landlord',
       created_at: '',
       updated_at: ''
     };
@@ -235,10 +239,23 @@ export default function BillingPlanManager() {
     return <Settings className="h-5 w-5 text-gray-600" />;
   };
 
-  const filteredPlans = plans.filter(plan =>
-    plan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    plan.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getCategoryBadge = (category: 'landlord' | 'agency' | 'both') => {
+    switch (category) {
+      case 'landlord':
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Landlord</Badge>;
+      case 'agency':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Agency</Badge>;
+      case 'both':
+        return <Badge variant="secondary">Both</Badge>;
+    }
+  };
+
+  const filteredPlans = plans.filter(plan => {
+    const matchesSearch = plan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || plan.plan_category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   if (loading) {
     return (
@@ -275,7 +292,7 @@ export default function BillingPlanManager() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -286,8 +303,24 @@ export default function BillingPlanManager() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Total Plans:</span>
-            <Badge variant="secondary">{plans.length}</Badge>
+            <span className="text-sm text-muted-foreground">Category:</span>
+            <div className="flex gap-1">
+              {(['all', 'landlord', 'agency', 'both'] as const).map((cat) => (
+                <Button
+                  key={cat}
+                  variant={categoryFilter === cat ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCategoryFilter(cat)}
+                  className="capitalize"
+                >
+                  {cat === 'all' ? 'All' : cat}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Total:</span>
+            <Badge variant="secondary">{filteredPlans.length}/{plans.length}</Badge>
           </div>
         </div>
 
@@ -300,6 +333,7 @@ export default function BillingPlanManager() {
                   <div className="flex items-center gap-2">
                     {getPlanIcon(plan.name)}
                     <CardTitle className="text-lg">{plan.name}</CardTitle>
+                    {getCategoryBadge(plan.plan_category)}
                   </div>
                   <div className="flex items-center gap-1">
                     {!plan.is_active && <Badge variant="secondary">Inactive</Badge>}
