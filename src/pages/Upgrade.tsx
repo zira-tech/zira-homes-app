@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { UpgradeConfirmationModal } from "@/components/upgrade/UpgradeConfirmationModal";
 import { formatAmount, getGlobalCurrencySync } from "@/utils/currency";
 import { PlanComparisonTable } from "@/components/billing/PlanComparisonTable";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface BillingPlan {
   id: string;
@@ -35,6 +37,7 @@ interface BillingPlan {
   plan_category?: string;
   display_order?: number;
   max_units_display?: string;
+  yearly_discount_percent?: number;
 }
 
 interface CurrentSubscription {
@@ -75,6 +78,7 @@ export function Upgrade() {
   const [loading, setLoading] = useState(true);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
   useEffect(() => {
     fetchActiveBillingPlans();
@@ -121,7 +125,7 @@ export function Upgrade() {
       
       const { data, error } = await supabase
         .from('billing_plans')
-        .select('*, is_custom, contact_link, is_popular, plan_category, display_order, max_units_display')
+        .select('*, is_custom, contact_link, is_popular, plan_category, display_order, max_units_display, yearly_discount_percent')
         .eq('is_active', true)
         .neq('name', 'Free Trial') // Exclude trial plans from upgrade options
         .in('plan_category', planCategories)
@@ -137,7 +141,8 @@ export function Upgrade() {
         features: Array.isArray(plan.features) ? (plan.features as string[]) : 
                  typeof plan.features === 'string' ? [plan.features] : [],
         popular: plan.is_popular || false,
-        recommended: plan.is_popular
+        recommended: plan.is_popular,
+        yearly_discount_percent: plan.yearly_discount_percent || 15
       }));
 
       console.log('✅ Upgrade: Processed plans:', processedPlans);
@@ -345,6 +350,32 @@ export function Upgrade() {
           </div>
         ) : (
           <Tabs defaultValue="cards" className="mb-12">
+            {/* Billing Cycle Toggle */}
+            <div className="flex justify-center mb-6">
+              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-card border border-border">
+                <Label 
+                  htmlFor="upgrade-billing-toggle" 
+                  className={`text-sm font-medium cursor-pointer ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}
+                >
+                  Monthly
+                </Label>
+                <Switch
+                  id="upgrade-billing-toggle"
+                  checked={billingCycle === 'annual'}
+                  onCheckedChange={(checked) => setBillingCycle(checked ? 'annual' : 'monthly')}
+                />
+                <Label 
+                  htmlFor="upgrade-billing-toggle" 
+                  className={`text-sm font-medium cursor-pointer flex items-center gap-2 ${billingCycle === 'annual' ? 'text-foreground' : 'text-muted-foreground'}`}
+                >
+                  Annual
+                  <Badge variant="secondary" className="bg-success/10 text-success text-xs">
+                    Save 15%
+                  </Badge>
+                </Label>
+              </div>
+            </div>
+
             <div className="flex justify-center mb-6">
               <TabsList>
                 <TabsTrigger value="cards" className="gap-2">
@@ -402,31 +433,51 @@ export function Upgrade() {
                 <CardTitle className="text-2xl">{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="mt-4">
-                  {plan.is_custom ? (
-                    <div className="text-center">
-                      <span className="text-2xl font-bold text-muted-foreground">Custom pricing</span>
-                      <p className="text-sm text-muted-foreground mt-1">Contact us for pricing</p>
-                    </div>
-                  ) : plan.billing_model === 'percentage' ? (
-                    <div className="text-center">
-                      <span className="text-4xl font-bold">{plan.percentage_rate}%</span>
-                      <p className="text-sm text-muted-foreground mt-1">of rent collected</p>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-bold">
-                        {formatAmount(plan.price, plan.currency || getGlobalCurrencySync())}
-                      </span>
-                      <span className="text-muted-foreground">/{plan.billing_cycle}</span>
-                      {plan.currency && (
-                        <div className="mt-1">
-                          <Badge variant="secondary" className="text-xs">
-                            {plan.currency}
-                          </Badge>
+                  {(() => {
+                    const yearlyDiscount = plan.yearly_discount_percent || 15;
+                    const isAnnual = billingCycle === 'annual';
+                    const annualTotal = plan.price * 12 * (1 - yearlyDiscount / 100);
+                    const monthlyEquivalent = Math.round(annualTotal / 12);
+                    const displayPrice = isAnnual ? monthlyEquivalent : plan.price;
+                    const showAnnualPricing = !plan.is_custom && plan.billing_model !== 'percentage' && plan.price > 0;
+                    
+                    if (plan.is_custom) {
+                      return (
+                        <div className="text-center">
+                          <span className="text-2xl font-bold text-muted-foreground">Custom pricing</span>
+                          <p className="text-sm text-muted-foreground mt-1">Contact us for pricing</p>
                         </div>
-                      )}
-                    </>
-                  )}
+                      );
+                    }
+                    
+                    if (plan.billing_model === 'percentage') {
+                      return (
+                        <div className="text-center">
+                          <span className="text-4xl font-bold">{plan.percentage_rate}%</span>
+                          <p className="text-sm text-muted-foreground mt-1">of rent collected</p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <>
+                        <span className="text-4xl font-bold">
+                          {formatAmount(displayPrice, plan.currency || getGlobalCurrencySync())}
+                        </span>
+                        <span className="text-muted-foreground">/ month</span>
+                        {showAnnualPricing && isAnnual && (
+                          <div className="mt-2 space-y-0.5">
+                            <Badge variant="secondary" className="bg-success/10 text-success text-xs">
+                              Save {yearlyDiscount}%
+                            </Badge>
+                            <p className="text-xs text-muted-foreground">
+                              {formatAmount(Math.round(annualTotal), plan.currency || getGlobalCurrencySync())} billed annually
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </CardHeader>
 
