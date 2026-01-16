@@ -8,6 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLandingSettings } from "@/hooks/useLandingSettings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface BillingPlan {
   id: string;
@@ -126,7 +128,7 @@ function getDisplayFeatures(features: any): string[] {
   return [];
 }
 
-function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number }) {
+function PlanCard({ plan, trialDays, billingCycle }: { plan: BillingPlan; trialDays: number; billingCycle: 'monthly' | 'annual' }) {
   const Icon = getPlanIcon(plan.name, plan.plan_category || 'landlord');
   const features = getDisplayFeatures(plan.features);
   const isPopular = plan.is_popular;
@@ -134,6 +136,21 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
   // Get tier price (the base plan price) and per-unit price
   const tierPrice = plan.price;
   const perUnitPrice = plan.fixed_amount_per_unit;
+  const yearlyDiscount = plan.yearly_discount_percent || 15;
+  
+  // Calculate annual pricing
+  const isAnnual = billingCycle === 'annual';
+  const annualTotal = tierPrice * 12 * (1 - yearlyDiscount / 100);
+  const monthlyEquivalent = Math.round(annualTotal / 12);
+  const displayPrice = isAnnual ? monthlyEquivalent : tierPrice;
+  
+  // Annual per-unit pricing
+  const annualPerUnitTotal = perUnitPrice ? perUnitPrice * 12 * (1 - yearlyDiscount / 100) : 0;
+  const monthlyPerUnitEquivalent = perUnitPrice ? Math.round(annualPerUnitTotal / 12) : 0;
+  const displayPerUnitPrice = isAnnual ? monthlyPerUnitEquivalent : perUnitPrice;
+  
+  // Check if annual pricing applies (not for custom or percentage-based plans)
+  const showAnnualPricing = !plan.is_custom && plan.billing_model !== 'percentage' && tierPrice > 0;
   
   return (
     <div 
@@ -184,12 +201,21 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
       <div className="mb-6">
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-bold text-foreground">
-            {plan.is_custom ? "Custom" : tierPrice === 0 ? "Free" : `KES ${tierPrice.toLocaleString()}`}
+            {plan.is_custom ? "Custom" : tierPrice === 0 ? "Free" : `KES ${displayPrice.toLocaleString()}`}
           </span>
           {!plan.is_custom && tierPrice > 0 && (
             <span className="text-sm text-muted-foreground">/ month</span>
           )}
         </div>
+        {/* Annual billing subtext */}
+        {showAnnualPricing && isAnnual && (
+          <div className="mt-1 space-y-0.5">
+            <span className="text-sm text-success font-medium">Save {yearlyDiscount}%</span>
+            <p className="text-xs text-muted-foreground">
+              KES {Math.round(annualTotal).toLocaleString()} billed annually
+            </p>
+          </div>
+        )}
         {plan.is_custom && (
           <span className="text-sm text-muted-foreground">Contact us for pricing</span>
         )}
@@ -229,11 +255,16 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
       </ul>
       
       {/* Per Unit Price - Bottom Display */}
-      {perUnitPrice && perUnitPrice > 0 && !plan.is_custom && (
+      {displayPerUnitPrice && displayPerUnitPrice > 0 && !plan.is_custom && (
         <div className="mb-4 pt-4 border-t border-border">
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">KES {perUnitPrice}</span> per unit / month
+            <span className="font-medium text-foreground">KES {displayPerUnitPrice}</span> per unit / month
           </p>
+          {isAnnual && perUnitPrice && (
+            <p className="text-xs text-muted-foreground">
+              (was KES {perUnitPrice} per unit)
+            </p>
+          )}
         </div>
       )}
       
@@ -259,6 +290,7 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
 export function PricingSection() {
   const { trialDays } = useLandingSettings();
   const [activeTab, setActiveTab] = useState<string>("landlord");
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   
   const { data: plans, isLoading, error } = useQuery({
     queryKey: ['landing-billing-plans'],
@@ -301,6 +333,32 @@ export function PricingSection() {
           <p className="text-lg text-muted-foreground mb-6">
             Choose the plan that fits your portfolio. Up to 600% cheaper than competitors.
           </p>
+        </div>
+
+        {/* Billing Cycle Toggle */}
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-card border border-border">
+            <Label 
+              htmlFor="billing-toggle" 
+              className={`text-sm font-medium cursor-pointer ${billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              Monthly
+            </Label>
+            <Switch
+              id="billing-toggle"
+              checked={billingCycle === 'annual'}
+              onCheckedChange={(checked) => setBillingCycle(checked ? 'annual' : 'monthly')}
+            />
+            <Label 
+              htmlFor="billing-toggle" 
+              className={`text-sm font-medium cursor-pointer flex items-center gap-2 ${billingCycle === 'annual' ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              Annual
+              <Badge variant="secondary" className="bg-success/10 text-success text-xs">
+                Save 15%
+              </Badge>
+            </Label>
+          </div>
         </div>
 
         {/* Category Tabs */}
@@ -370,7 +428,7 @@ export function PricingSection() {
               {landlordPlans.length > 0 && (
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {landlordPlans.map((plan) => (
-                    <PlanCard key={plan.id} plan={plan} trialDays={trialDays} />
+                    <PlanCard key={plan.id} plan={plan} trialDays={trialDays} billingCycle={billingCycle} />
                   ))}
                 </div>
               )}
@@ -381,7 +439,7 @@ export function PricingSection() {
               {agencyPlans.length > 0 && (
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {agencyPlans.map((plan) => (
-                    <PlanCard key={plan.id} plan={plan} trialDays={trialDays} />
+                    <PlanCard key={plan.id} plan={plan} trialDays={trialDays} billingCycle={billingCycle} />
                   ))}
                 </div>
               )}
@@ -431,7 +489,7 @@ export function PricingSection() {
             {plans && plans.length > 0 && (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {plans.map((plan) => (
-                  <PlanCard key={plan.id} plan={plan} trialDays={trialDays} />
+                  <PlanCard key={plan.id} plan={plan} trialDays={trialDays} billingCycle={billingCycle} />
                 ))}
               </div>
             )}
