@@ -17,6 +17,7 @@ interface RoleContextType {
   subUserPermissions: Record<string, boolean> | null;
   landlordId?: string | null;
   isOnLandlordTrial?: boolean;
+  accountType?: 'landlord' | 'agency' | null;
   loading: boolean;
 }
 
@@ -42,6 +43,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   const [subUserPermissions, setSubUserPermissions] = useState<Record<string, boolean> | null>(null);
   const [landlordId, setLandlordId] = useState<string | null>(null);
   const [isOnLandlordTrial, setIsOnLandlordTrial] = useState(false);
+  const [accountType, setAccountType] = useState<'landlord' | 'agency' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -97,6 +99,9 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
           
           if (sub) {
             resolvedRole = 'landlord';
+            
+            // Set account type from subscription
+            setAccountType((sub as any).account_type || 'landlord');
             
             // Check if on trial
             if (sub.status === 'trial' && sub.trial_end_date) {
@@ -206,6 +211,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
     subUserPermissions,
     landlordId,
     isOnLandlordTrial,
+    accountType,
     loading,
   };
 

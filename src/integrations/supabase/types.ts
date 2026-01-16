@@ -340,65 +340,86 @@ export type Database = {
         Row: {
           billing_cycle: string
           billing_model: string | null
+          competitive_note: string | null
           contact_link: string | null
           created_at: string
           currency: string | null
           description: string | null
+          display_order: number | null
           features: Json | null
           fixed_amount_per_unit: number | null
           id: string
           is_active: boolean | null
           is_custom: boolean | null
+          is_popular: boolean | null
           max_properties: number | null
           max_units: number | null
+          max_units_display: string | null
+          min_units: number | null
           name: string
           percentage_rate: number | null
+          plan_category: string | null
           price: number
           sms_credits_included: number | null
           tier_pricing: Json | null
           updated_at: string
+          yearly_discount_percent: number | null
         }
         Insert: {
           billing_cycle: string
           billing_model?: string | null
+          competitive_note?: string | null
           contact_link?: string | null
           created_at?: string
           currency?: string | null
           description?: string | null
+          display_order?: number | null
           features?: Json | null
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
           is_custom?: boolean | null
+          is_popular?: boolean | null
           max_properties?: number | null
           max_units?: number | null
+          max_units_display?: string | null
+          min_units?: number | null
           name: string
           percentage_rate?: number | null
+          plan_category?: string | null
           price: number
           sms_credits_included?: number | null
           tier_pricing?: Json | null
           updated_at?: string
+          yearly_discount_percent?: number | null
         }
         Update: {
           billing_cycle?: string
           billing_model?: string | null
+          competitive_note?: string | null
           contact_link?: string | null
           created_at?: string
           currency?: string | null
           description?: string | null
+          display_order?: number | null
           features?: Json | null
           fixed_amount_per_unit?: number | null
           id?: string
           is_active?: boolean | null
           is_custom?: boolean | null
+          is_popular?: boolean | null
           max_properties?: number | null
           max_units?: number | null
+          max_units_display?: string | null
+          min_units?: number | null
           name?: string
           percentage_rate?: number | null
+          plan_category?: string | null
           price?: number
           sms_credits_included?: number | null
           tier_pricing?: Json | null
           updated_at?: string
+          yearly_discount_percent?: number | null
         }
         Relationships: []
       }
@@ -1517,6 +1538,7 @@ export type Database = {
       }
       landlord_subscriptions: {
         Row: {
+          account_type: string | null
           auto_renewal: boolean | null
           billing_plan_id: string | null
           created_at: string
@@ -1534,6 +1556,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_type?: string | null
           auto_renewal?: boolean | null
           billing_plan_id?: string | null
           created_at?: string
@@ -1551,6 +1574,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_type?: string | null
           auto_renewal?: boolean | null
           billing_plan_id?: string | null
           created_at?: string
