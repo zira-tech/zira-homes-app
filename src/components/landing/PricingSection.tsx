@@ -153,14 +153,6 @@ function PlanCard({ plan, trialDays }: { plan: BillingPlan; trialDays: number })
         </div>
       )}
       
-      {/* Competitive Note Badge */}
-      {plan.competitive_note && !isPopular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge variant="secondary" className="text-xs">
-            {plan.competitive_note}
-          </Badge>
-        </div>
-      )}
       
       {/* Plan Header */}
       <div className="mb-4">
