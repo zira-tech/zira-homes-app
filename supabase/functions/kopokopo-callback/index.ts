@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // 🔖 VERSION: 2025-11-12-v2.3 - Improved reconciliation + result_code: 0 for UI compat
-  console.log('🚀 kopokopo-callback VERSION: 2025-11-12-v2.3 (reference-based reconciliation + result_code for UI)');
+  // 🔖 VERSION: 2026-01-19-v3.0 - Added idempotency + SMS automation settings check
+  console.log('🚀 kopokopo-callback VERSION: 2026-01-19-v3.0 (idempotency + SMS settings)');
   
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -18,7 +18,6 @@ serve(async (req) => {
   try {
     console.log('=== KOPO KOPO CALLBACK RECEIVED ===');
     console.log('Request method:', req.method);
-    console.log('Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2));
 
     // Initialize Supabase client
     const supabase = createClient(
@@ -57,26 +56,115 @@ serve(async (req) => {
     const paymentType = metadata.payment_type || 'rent';
     const landlordId = metadata.landlord_id || '';
 
+    // Get a unique identifier for this callback - prioritize kopokopoReference
+    const callbackUniqueId = kopokopoReference || transactionId || reference;
+    
+    if (!callbackUniqueId) {
+      console.error('❌ No unique identifier found in callback');
+      return new Response(
+        JSON.stringify({ error: 'Missing unique identifier' }), 
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log('📊 Payment Details:');
+    console.log(`   Unique ID: ${callbackUniqueId}`);
     console.log(`   Status: ${status}`);
     console.log(`   Reference: ${reference}`);
+    console.log(`   Kopo Kopo Reference: ${kopokopoReference}`);
     console.log(`   Transaction ID: ${transactionId}`);
     console.log(`   Phone: ${phoneNumber}`);
     console.log(`   Amount: ${amount}`);
     console.log(`   Invoice ID: ${invoiceId}`);
     console.log(`   Payment Type: ${paymentType}`);
 
-    // Determine final status - support multiple success variations
+    // ============ IDEMPOTENCY CHECK ============
+    // Check if this callback was already processed
+    const { data: existingCallback } = await supabase
+      .from('kopokopo_processed_callbacks')
+      .select('id, processed_at')
+      .eq('kopo_reference', callbackUniqueId)
+      .maybeSingle();
+
+    if (existingCallback) {
+      console.log(`⚠️ IDEMPOTENCY: Callback ${callbackUniqueId} already processed at ${existingCallback.processed_at}`);
+      return new Response(
+        JSON.stringify({ 
+          status: 'ok', 
+          message: 'Already processed',
+          processed_at: existingCallback.processed_at 
+        }), 
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Also check if payment with this reference exists in payments table (notes field)
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('id, created_at, payment_reference')
+      .or(`notes.ilike.%${callbackUniqueId}%,payment_reference.eq.${transactionId}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingPayment) {
+      console.log(`⚠️ IDEMPOTENCY: Payment already exists for ${callbackUniqueId}:`, existingPayment.id);
+      
+      // Record this callback as processed to prevent future retries
+      await supabase
+        .from('kopokopo_processed_callbacks')
+        .insert({
+          kopo_reference: callbackUniqueId,
+          incoming_payment_id: transactionId,
+          invoice_id: invoiceId || null,
+          amount: amount,
+          phone_number: phoneNumber
+        });
+      
+      return new Response(
+        JSON.stringify({ 
+          status: 'ok', 
+          message: 'Payment already recorded',
+          payment_id: existingPayment.id 
+        }), 
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Record this callback BEFORE processing to prevent race conditions
+    const { error: recordError } = await supabase
+      .from('kopokopo_processed_callbacks')
+      .insert({
+        kopo_reference: callbackUniqueId,
+        incoming_payment_id: transactionId,
+        invoice_id: invoiceId || null,
+        amount: amount,
+        phone_number: phoneNumber
+      });
+
+    if (recordError) {
+      // If insert fails due to unique constraint, another request is processing
+      if (recordError.code === '23505') {
+        console.log(`⚠️ IDEMPOTENCY: Concurrent request detected for ${callbackUniqueId}`);
+        return new Response(
+          JSON.stringify({ status: 'ok', message: 'Already being processed' }), 
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      console.error('Error recording callback:', recordError);
+    }
+
+    console.log('✅ Callback recorded for idempotency tracking:', callbackUniqueId);
+
+    // Determine final status
     const statusLower = (status || '').toLowerCase();
     const successStatuses = ['success', 'successful', 'processed', 'completed', 'paid'];
     const isSuccess = successStatuses.includes(statusLower);
     
     const finalStatus = isSuccess ? 'completed' : 'failed';
-    const resultCode = isSuccess ? 0 : 1; // 0 for success (UI compatibility)
+    const resultCode = isSuccess ? 0 : 1;
     const resultDesc = isSuccess ? 'Payment successful' : (attributes.failure_reason || 'Payment failed');
 
     // Check if we should update existing transaction or insert new one
-    // Priority 1: Look for pending transaction by metadata.reference (most reliable)
     let existingTxn = null;
     
     if (reference) {
@@ -88,7 +176,6 @@ serve(async (req) => {
         .order('created_at', { ascending: false })
         .limit(10);
       
-      // Filter client-side for jsonb contains (more reliable)
       if (allPending && allPending.length > 0) {
         existingTxn = allPending.find(tx => 
           tx.metadata && tx.metadata.reference === reference
@@ -96,15 +183,12 @@ serve(async (req) => {
         
         if (existingTxn) {
           console.log('✅ Found pending transaction by reference match:', existingTxn.checkout_request_id);
-        } else {
-          console.log('No pending transaction matched reference:', reference);
         }
       }
     }
     
-    // Priority 2: Fallback to invoice_id if present
+    // Fallback to invoice_id
     if (!existingTxn && invoiceId) {
-      console.log('🔍 Fallback: Looking for pending transaction by invoice_id:', invoiceId);
       const { data } = await supabase
         .from('mpesa_transactions')
         .select('*')
@@ -119,88 +203,43 @@ serve(async (req) => {
         console.log('Found pending transaction by invoice_id:', existingTxn.checkout_request_id);
       }
     }
-    
-    // Priority 3: Fallback to phone + amount within last 5 minutes
-    if (!existingTxn && phoneNumber && amount) {
-      console.log('🔍 Fallback: Looking for pending transaction by phone and amount (recent)');
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data } = await supabase
-        .from('mpesa_transactions')
-        .select('*')
-        .eq('phone_number', phoneNumber)
-        .eq('amount', amount)
-        .eq('status', 'pending')
-        .gte('created_at', fiveMinutesAgo)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (data) {
-        existingTxn = data;
-        console.log('Found pending transaction by phone/amount:', existingTxn.checkout_request_id);
-      }
-    }
-    
-    // Check idempotency - if this exact transaction was already processed
-    if (!existingTxn && transactionId) {
-      const { data: completedTxn } = await supabase
-        .from('mpesa_transactions')
-        .select('*')
-        .eq('mpesa_receipt_number', transactionId)
-        .maybeSingle();
-      
-      if (completedTxn) {
-        console.log('⚠️ Transaction already processed:', transactionId);
-        return new Response(
-          JSON.stringify({ status: 'ok', message: 'Already processed' }), 
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
 
     if (existingTxn) {
-      // Update existing pending transaction
       console.log('✅ Updating existing pending transaction:', existingTxn.checkout_request_id);
       
-      // Use the invoice_id from the existing transaction if not in callback
       const effectiveInvoiceId = invoiceId || existingTxn.invoice_id;
-      if (effectiveInvoiceId) {
-        console.log('📋 Using invoice ID for reconciliation:', effectiveInvoiceId);
-        console.log('   - From callback metadata:', invoiceId || '(empty)');
-        console.log('   - From existing transaction:', existingTxn.invoice_id || '(empty)');
-      }
-  const { error: updateError } = await supabase
-    .from('mpesa_transactions')
-    .update({
-      result_code: resultCode,
-      result_desc: resultDesc,
-      mpesa_receipt_number: transactionId,
-      phone_number: phoneNumber || existingTxn.phone_number,
-      amount: amount || existingTxn.amount,
-      status: finalStatus,
-      provider: 'kopokopo',
-      metadata: {
-        ...existingTxn.metadata,
-        provider: 'kopokopo',
-        callback_reference: reference,
-        transaction_id: transactionId,
-        sender_first_name: senderFirstName,
-        sender_last_name: senderLastName,
-        raw_callback: callbackData,
-        reconciled: true
-      }
-    })
-    .eq('id', existingTxn.id);
+      
+      const { error: updateError } = await supabase
+        .from('mpesa_transactions')
+        .update({
+          result_code: resultCode,
+          result_desc: resultDesc,
+          mpesa_receipt_number: transactionId,
+          phone_number: phoneNumber || existingTxn.phone_number,
+          amount: amount || existingTxn.amount,
+          status: finalStatus,
+          provider: 'kopokopo',
+          metadata: {
+            ...existingTxn.metadata,
+            provider: 'kopokopo',
+            callback_reference: reference,
+            kopo_reference: kopokopoReference,
+            transaction_id: transactionId,
+            sender_first_name: senderFirstName,
+            sender_last_name: senderLastName,
+            reconciled: true
+          }
+        })
+        .eq('id', existingTxn.id);
 
       if (updateError) {
         console.error('❌ Failed to update transaction:', updateError);
       } else {
-        console.log('✅ Transaction updated to', finalStatus, 'with result_code:', resultCode);
+        console.log('✅ Transaction updated to', finalStatus);
       }
     } else {
-      // Insert new transaction record with unique checkout_request_id to avoid conflicts
-      console.log('⚠️  No existing pending transaction found, creating new record (last resort)');
+      // Insert new transaction record
+      console.log('⚠️  No existing pending transaction found, creating new record');
       const uniqueCheckoutId = `kk_cb_${transactionId || Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       
       const { error: transactionError } = await supabase
@@ -220,11 +259,11 @@ serve(async (req) => {
           metadata: {
             provider: 'kopokopo',
             reference: reference,
+            kopo_reference: kopokopoReference,
             transaction_id: transactionId,
             landlord_id: landlordId,
             sender_first_name: senderFirstName,
             sender_last_name: senderLastName,
-            raw_callback: callbackData,
             reconciled: false,
             note: 'Created from callback (no pending transaction found)'
           }
@@ -233,20 +272,12 @@ serve(async (req) => {
       if (transactionError) {
         console.error('❌ Failed to insert transaction:', transactionError);
       } else {
-        console.log('✅ Transaction record inserted with unique ID:', uniqueCheckoutId);
+        console.log('✅ Transaction record inserted');
       }
     }
 
     // If successful, update invoice and create payment record
-    // Use invoice ID from existing transaction if available
     const finalInvoiceId = existingTxn?.invoice_id || invoiceId;
-    
-    console.log('🔍 Reconciliation check:', {
-      finalStatus,
-      callbackInvoiceId: invoiceId || '(empty)',
-      existingTxnInvoiceId: existingTxn?.invoice_id || '(empty)',
-      finalInvoiceId: finalInvoiceId || '(empty)'
-    });
     
     if (finalStatus === 'completed' && finalInvoiceId) {
       console.log(`📝 Processing successful payment for invoice ${finalInvoiceId}`);
@@ -254,9 +285,7 @@ serve(async (req) => {
       // Update invoice status
       const { error: invoiceError } = await supabase
         .from('invoices')
-        .update({ 
-          status: 'paid'
-        })
+        .update({ status: 'paid' })
         .eq('id', finalInvoiceId);
 
       if (invoiceError) {
@@ -295,47 +324,65 @@ serve(async (req) => {
         console.log('✅ Payment record created');
       }
 
-      // Handle service charge invoice generation if applicable
-      if (paymentType === 'rent') {
-        console.log('🏢 Triggering service charge invoice generation...');
-        // This would be handled by the existing trigger or logic
+      // ============ CHECK SMS AUTOMATION SETTINGS ============
+      let shouldSendSms = true;
+      
+      try {
+        // Check global settings first, then landlord-specific
+        const { data: smsSettings } = await supabase
+          .from('sms_automation_settings')
+          .select('enabled')
+          .eq('automation_key', 'payment_receipt')
+          .or(`landlord_id.eq.${landlordId},landlord_id.is.null`)
+          .order('landlord_id', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (smsSettings && smsSettings.enabled === false) {
+          console.log('📴 SMS automation disabled for payment_receipt');
+          shouldSendSms = false;
+        } else {
+          console.log('📱 SMS automation enabled for payment_receipt');
+        }
+      } catch (settingsError) {
+        console.error('Error checking SMS settings:', settingsError);
+        // Default to sending SMS if settings check fails
       }
 
-      // Send SMS receipt confirmation to tenant
-      try {
-        const { data: invoice } = await supabase
-          .from('invoices')
-          .select('tenant_id')
-          .eq('id', finalInvoiceId)
-          .single();
-
-        if (invoice?.tenant_id) {
-          const { data: tenant } = await supabase
-            .from('tenants')
-            .select('phone, first_name, last_name')
-            .eq('id', invoice.tenant_id)
+      // Send SMS receipt confirmation to tenant (if enabled)
+      if (shouldSendSms) {
+        try {
+          const { data: invoiceData } = await supabase
+            .from('invoices')
+            .select('tenant_id')
+            .eq('id', finalInvoiceId)
             .single();
 
-          if (tenant?.phone) {
-            const smsResponse = await supabase.functions.invoke('send-sms', {
-              body: {
-                phone_number: tenant.phone,
-                message: `Payment of KES ${amount} received. Thank you! - Zira Homes. Receipt: ${kopokopoReference || transactionId.substring(0, 10)}`
-              }
-            });
+          if (invoiceData?.tenant_id) {
+            const { data: tenant } = await supabase
+              .from('tenants')
+              .select('phone, first_name, last_name')
+              .eq('id', invoiceData.tenant_id)
+              .single();
 
-            if (smsResponse.error) {
-              console.error('❌ Error sending SMS receipt confirmation:', smsResponse.error);
-            } else {
-              console.log('✅ SMS receipt confirmation sent to:', tenant.phone);
+            if (tenant?.phone) {
+              const smsResponse = await supabase.functions.invoke('send-sms', {
+                body: {
+                  phone_number: tenant.phone,
+                  message: `Payment of KES ${amount} received. Thank you! - Zira Homes. Receipt: ${kopokopoReference || transactionId.substring(0, 10)}`
+                }
+              });
+
+              if (smsResponse.error) {
+                console.error('❌ Error sending SMS receipt confirmation:', smsResponse.error);
+              } else {
+                console.log('✅ SMS receipt confirmation sent to:', tenant.phone);
+              }
             }
-          } else {
-            console.log('⚠️ No phone number found for tenant, skipping SMS');
           }
+        } catch (smsError) {
+          console.error('❌ Error in SMS receipt confirmation process:', smsError);
         }
-      } catch (smsError) {
-        console.error('❌ Error in SMS receipt confirmation process:', smsError);
-        // Don't fail the payment process if SMS fails
       }
     } else if (finalStatus === 'failed') {
       console.log('❌ Payment failed - no further action taken');
@@ -353,7 +400,6 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Kopo Kopo callback error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     return new Response(
       JSON.stringify({ 

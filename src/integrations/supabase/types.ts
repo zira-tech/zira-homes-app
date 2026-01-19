@@ -1269,6 +1269,44 @@ export type Database = {
           },
         ]
       }
+      kopokopo_processed_callbacks: {
+        Row: {
+          amount: number | null
+          id: string
+          incoming_payment_id: string | null
+          invoice_id: string | null
+          kopo_reference: string
+          phone_number: string | null
+          processed_at: string | null
+        }
+        Insert: {
+          amount?: number | null
+          id?: string
+          incoming_payment_id?: string | null
+          invoice_id?: string | null
+          kopo_reference: string
+          phone_number?: string | null
+          processed_at?: string | null
+        }
+        Update: {
+          amount?: number | null
+          id?: string
+          incoming_payment_id?: string | null
+          invoice_id?: string | null
+          kopo_reference?: string
+          phone_number?: string | null
+          processed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kopokopo_processed_callbacks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       landlord_bank_configs: {
         Row: {
           access_token_encrypted: string | null
@@ -3164,6 +3202,50 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      sms_automation_settings: {
+        Row: {
+          audience_type: string | null
+          automation_key: string
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          landlord_id: string | null
+          template: string | null
+          timing_days_before: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          audience_type?: string | null
+          automation_key: string
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          landlord_id?: string | null
+          template?: string | null
+          timing_days_before?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          audience_type?: string | null
+          automation_key?: string
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          landlord_id?: string | null
+          template?: string | null
+          timing_days_before?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_automation_settings_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "orphaned_users_monitor"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sms_bundles: {
         Row: {
